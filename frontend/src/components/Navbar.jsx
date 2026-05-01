@@ -1,0 +1,68 @@
+import React from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useAuthStore } from "../store";
+import { LogOut, Zap, Trophy, Smile, MessageSquare, User, LayoutDashboard } from "lucide-react";
+
+const links = [
+  { to: "/", label: "DASH", icon: LayoutDashboard, color: "bg-brutal-yellow" },
+  { to: "/leaderboard", label: "TOP DOGS", icon: Trophy, color: "bg-brutal-pink" },
+  { to: "/mood", label: "MOOD", icon: Smile, color: "bg-brutal-cyan" },
+  { to: "/funwall", label: "FUN WALL", icon: MessageSquare, color: "bg-brutal-green" },
+  { to: "/profile", label: "ME", icon: User, color: "bg-white" },
+];
+
+export const Navbar = () => {
+  const { user, logout } = useAuthStore();
+  const nav = useNavigate();
+  return (
+    <header
+      data-testid="navbar"
+      className="sticky top-0 z-40 border-b-[4px] border-black bg-white"
+    >
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-5 flex-wrap">
+        <motion.div
+          initial={{ rotate: -3 }}
+          animate={{ rotate: -2 }}
+          whileHover={{ rotate: 2, scale: 1.05 }}
+          className="bg-black text-brutal-yellow px-3 py-1.5 border-[3px] border-black shadow-brutal-sm font-display font-black text-lg md:text-xl uppercase tracking-tighter"
+        >
+          <Zap className="inline w-4 h-4 mr-1 -mt-1" /> BRUTAL WELLNESS
+        </motion.div>
+
+        <nav className="flex gap-2 flex-wrap" data-testid="nav-links">
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === "/"}
+              data-testid={`nav-${l.label.toLowerCase().replace(/\s+/g, "-")}`}
+              className={({ isActive }) =>
+                `flex items-center gap-1.5 font-black uppercase text-xs md:text-sm tracking-wider px-3 py-2 border-[3px] border-black rounded-[2px] transition-all ${
+                  isActive ? `${l.color} shadow-brutal-sm` : "bg-white hover:-translate-y-0.5"
+                }`
+              }
+            >
+              <l.icon className="w-4 h-4" /> {l.label}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="ml-auto flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2 bg-brutal-yellow border-[3px] border-black px-3 py-1.5 shadow-brutal-sm">
+            <span className="font-black text-xs uppercase">🔥 {user?.streak || 0}</span>
+            <span className="font-black text-xs uppercase border-l-2 border-black pl-2">⚡ {user?.points || 0}</span>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.95, x: 2, y: 2 }}
+            data-testid="logout-btn"
+            onClick={() => { logout(); nav("/login"); }}
+            className="bg-brutal-pink border-[3px] border-black px-3 py-2 shadow-brutal-sm font-black uppercase text-xs flex items-center gap-1"
+          >
+            <LogOut className="w-4 h-4" /> BOUNCE
+          </motion.button>
+        </div>
+      </div>
+    </header>
+  );
+};
