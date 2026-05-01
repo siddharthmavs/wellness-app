@@ -1,0 +1,142 @@
+{
+  "theme": "Light (Neo-Brutalist High Contrast)",
+  "archetype": "Neo-Brutalism (Custom mix of Archetype 4 Swiss High-Contrast & Archetype 6 Vibrant Play)",
+  "design_philosophy": "Indie game UI + meme page + productivity tool. Controlled chaos. No boring corporate vibes. High contrast, sticker-style UI, hard black borders, and punchy flat colors. Everything is pressable and tangible.",
+  "colors": {
+    "primary": {
+      "yellow": "#FFE600",
+      "cyan": "#00E5FF",
+      "pink": "#FF4D6D",
+      "green": "#00C853"
+    },
+    "base": {
+      "black": "#000000",
+      "white": "#FFFFFF",
+      "gray": "#E2E8F0"
+    },
+    "usage": {
+      "background": "#FFFFFF",
+      "text_primary": "#000000",
+      "accents": ["#FFE600", "#00E5FF", "#FF4D6D", "#00C853"]
+    }
+  },
+  "typography": {
+    "headings": {
+      "family": "'Space Grotesk', sans-serif",
+      "weight": "font-black",
+      "tracking": "tracking-tighter",
+      "styles": {
+        "h1": "text-5xl md:text-7xl uppercase",
+        "h2": "text-4xl md:text-5xl uppercase",
+        "h3": "text-2xl md:text-3xl font-bold"
+      }
+    },
+    "body": {
+      "family": "'Inter', sans-serif",
+      "weight": "font-medium",
+      "sizes": {
+        "default": "text-base md:text-lg",
+        "small": "text-sm font-bold uppercase tracking-wider"
+      }
+    }
+  },
+  "surfaces_and_borders": {
+    "borders": {
+      "default": "border-[3px] border-black md:border-[4px]",
+      "heavy": "border-[6px] border-black md:border-[8px]",
+      "radius": "rounded-none sm:rounded-[4px]"
+    },
+    "shadows": {
+      "sm": "shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
+      "md": "shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]",
+      "lg": "shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]",
+      "xl": "shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]",
+      "none": "shadow-none"
+    }
+  },
+  "motion_and_animations": {
+    "library": "framer-motion",
+    "global_transition": {
+      "type": "spring",
+      "stiffness": 400,
+      "damping": 17
+    },
+    "interactions": {
+      "hover_button": { "scale": 1.02, "rotate": -1 },
+      "tap_button": { "scale": 0.95, "y": 4, "x": 4, "boxShadow": "0px 0px 0px 0px rgba(0,0,0,1)" },
+      "hover_card": { "scale": 1.01, "rotate": 1, "y": -2 },
+      "entrance": { "initial": { "opacity": 0, "y": 20, "rotate": -2 }, "animate": { "opacity": 1, "y": 0, "rotate": 0 } }
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "Controlled Chaos / Asymmetric Bento Grid",
+    "gaps": "gap-6 md:gap-8",
+    "padding": "p-6 md:p-8",
+    "patterns": [
+      "Slightly rotate cards by 1 or -1 degrees to make them look like stickers.",
+      "Overlap elements using absolute positioning and high z-index with heavy borders.",
+      "Never center everything perfectly. Use negative space and jagged alignments to create tension."
+    ]
+  },
+  "components": {
+    "button": "font-black uppercase tracking-wider px-6 py-3 border-[3px] border-black bg-[#FFE600] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform active:shadow-none active:translate-x-[4px] active:translate-y-[4px]",
+    "card": "border-[4px] border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 flex flex-col",
+    "input": "border-[3px] border-black px-4 py-3 bg-white focus:outline-none focus:ring-4 focus:ring-[#00E5FF] focus:border-black font-medium",
+    "badge": "border-[2px] border-black px-3 py-1 bg-[#FF4D6D] text-white font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
+    "brutal_popup": "fixed inset-0 z-[100] bg-[#FF4D6D]/90 backdrop-blur-sm flex items-center justify-center p-6 border-[12px] border-black"
+  },
+  "microcopy": {
+    "water_reminder": "🚰 Hey legend, drink water",
+    "eye_care": "👀 Your eyes are tired bro. Look away.",
+    "posture_check": "🧍 You are becoming a chair. Stand up.",
+    "streak_warning": "🔥 5 Day Streak. Don't ruin it.",
+    "leaderboard": "🏆 Top Dogs",
+    "login_cta": "ENTER THE ZONE",
+    "ignore_btn": "NAH, IM BAD"
+  },
+  "media_and_images": {
+    "fun_wall_feed": [
+      {
+        "url": "https://images.unsplash.com/photo-1698078038619-7f94733f9413?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwxfHxmdW5ueSUyMG1lbWUlMjBvZmZpY2UlMjB3b3JrZXJ8ZW58MHx8fHwxNzc3NjI5NDEwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Funny office worker statue",
+        "category": "social_feed"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1753955671120-736d3a2eded2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHw0fHxmdW5ueSUyMG1lbWUlMjBvZmZpY2UlMjB3b3JrZXJ8ZW58MHx8fHwxNzc3NjI5NDEwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Bored office worker meme",
+        "category": "social_feed"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1558284924-48ee23778f83?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwzfHx0aXJlZCUyMGZhY2UlMjBleHByZXNzaW9ufGVufDB8fHx8MTc3NzYyOTQxOHww&ixlib=rb-4.1.0&q=85",
+        "description": "Tired worker expression",
+        "category": "social_feed"
+      }
+    ],
+    "avatars": [
+      {
+        "url": "https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Felix&backgroundColor=FFE600",
+        "description": "Bot avatar yellow",
+        "category": "avatar"
+      },
+      {
+        "url": "https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Aneka&backgroundColor=00E5FF",
+        "description": "Bot avatar cyan",
+        "category": "avatar"
+      },
+      {
+        "url": "https://api.dicebear.com/7.x/bottts-neutral/svg?seed=Jasper&backgroundColor=FF4D6D",
+        "description": "Bot avatar pink",
+        "category": "avatar"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Adhere strictly to the Neo-Brutalism theme. Use hard black shadows (e.g. shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]), bold borders, and vibrant colors (Yellow, Cyan, Pink, Green).",
+    "NO gradients, NO soft blurs. All shadows must be solid black.",
+    "Use Javascript (.js) and JSX (.jsx) for React components, DO NOT use TypeScript (.tsx).",
+    "All interactive elements and essential information MUST have 'data-testid' attributes in kebab-case based on their role (e.g., data-testid='drink-water-btn').",
+    "When customizing Shadcn components, strip out their default rounded corners, borders, and subtle shadows. Replace them with heavy border-[3px] border-black and hard black shadows.",
+    "Embrace the 'sticker' vibe by using framer-motion to slightly tilt (-1deg to 2deg) cards on load or hover, and create a heavy press effect on clicks (removing shadow and translating down/right).",
+    "Microcopy is not corporate. Use the fun, aggressive, playful tones provided in the microcopy section."
+  ]
+}
