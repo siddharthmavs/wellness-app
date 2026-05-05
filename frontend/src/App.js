@@ -12,10 +12,14 @@ import Leaderboard from "./pages/Leaderboard";
 import Mood from "./pages/Mood";
 import FunWall from "./pages/FunWall";
 import Profile from "./pages/Profile";
+import Shoutouts from "./pages/Shoutouts";
+import HelpBoard from "./pages/HelpBoard";
+import AdminDashboard from "./pages/AdminDashboard";
 
-const PrivateLayout = ({ children }) => {
-  const { token } = useAuthStore();
+const PrivateLayout = ({ children, adminOnly = false }) => {
+  const { token, user } = useAuthStore();
   if (!token) return <Navigate to="/login" replace />;
+  if (adminOnly && user?.role !== "admin") return <Navigate to="/" replace />;
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -49,7 +53,10 @@ function App() {
           <Route path="/leaderboard" element={<PrivateLayout><Leaderboard /></PrivateLayout>} />
           <Route path="/mood" element={<PrivateLayout><Mood /></PrivateLayout>} />
           <Route path="/funwall" element={<PrivateLayout><FunWall /></PrivateLayout>} />
+          <Route path="/shoutouts" element={<PrivateLayout><Shoutouts /></PrivateLayout>} />
+          <Route path="/help" element={<PrivateLayout><HelpBoard /></PrivateLayout>} />
           <Route path="/profile" element={<PrivateLayout><Profile /></PrivateLayout>} />
+          <Route path="/admin" element={<PrivateLayout adminOnly><AdminDashboard /></PrivateLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

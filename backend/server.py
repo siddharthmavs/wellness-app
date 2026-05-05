@@ -60,6 +60,11 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         raise HTTPException(401, "User not found")
     return user
 
+async def require_admin(user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin only")
+    return user
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -113,6 +118,8 @@ async def register(body: RegisterReq):
         "wellness_score": 50,
         "badges": [],
         "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={body.name}&backgroundColor={random.choice(avatar_colors)}",
+        "role": "employee",
+        "dnd": False,
         "created_at": now_iso(),
         "last_activity": now_iso(),
     }
@@ -155,17 +162,23 @@ async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
     new_level = 1 + new_points // 200
     new_score = min(100, user.get("wellness_score", 50) + 2)
 
-    # streak: if last_activity was yesterday-ish, increment
+    # streak: increment on first activity of a new calendar day; reset if > 36h gap
     streak = user.get("streak", 0)
     last = user.get("last_activity")
+    today = datetime.now(timezone.utc).date()
     if last:
         try:
             last_dt = datetime.fromisoformat(last)
-            delta = (datetime.now(timezone.utc) - last_dt).total_seconds()
-            if delta < 3600 * 30 and delta > 60:  # < 30h and > 1min
-                streak = max(streak, 1)
-            if delta > 3600 * 36:
+            delta_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
+            last_date = last_dt.date()
+            if delta_hours > 36:
                 streak = 1
+            elif last_date < today:
+                # new day, continue streak
+                streak = max(streak, 0) + 1
+            else:
+                # same day, keep
+                streak = max(streak, 1)
         except Exception:
             streak = max(streak, 1)
     else:
@@ -369,17 +382,16 @@ async def ai_mood_insight(body: AIInsightReq, user=Depends(get_current_user)):
 # ---------- Seed ----------
 @api.post("/seed")
 async def seed_data():
-    # Only seed if no users except maybe existing
-    count = await db.users.count_documents({})
-    if count >= 5:
-        return {"seeded": False, "reason": "already seeded"}
+    # idempotent — only inserts missing demo users/posts
+    existing_count = await db.users.count_documents({})
 
     demo_users = [
-        {"name": "Alex Chaos", "email": "alex@demo.com", "password": "demo1234", "department": "Engineering", "points": 1250, "color": "FFE600"},
-        {"name": "Jamie Vibe", "email": "jamie@demo.com", "password": "demo1234", "department": "Design", "points": 980, "color": "00E5FF"},
-        {"name": "Sam Hustle", "email": "sam@demo.com", "password": "demo1234", "department": "Marketing", "points": 1420, "color": "FF4D6D"},
-        {"name": "Riley Zen", "email": "riley@demo.com", "password": "demo1234", "department": "HR", "points": 750, "color": "00C853"},
-        {"name": "Casey Boss", "email": "casey@demo.com", "password": "demo1234", "department": "Product", "points": 1680, "color": "FFE600"},
+        {"name": "Admin Boss", "email": "admin@demo.com", "password": "demo1234", "department": "Management", "points": 500, "color": "000000", "role": "admin"},
+        {"name": "Alex Chaos", "email": "alex@demo.com", "password": "demo1234", "department": "Engineering", "points": 1250, "color": "FFE600", "role": "employee"},
+        {"name": "Jamie Vibe", "email": "jamie@demo.com", "password": "demo1234", "department": "Design", "points": 980, "color": "00E5FF", "role": "employee"},
+        {"name": "Sam Hustle", "email": "sam@demo.com", "password": "demo1234", "department": "Marketing", "points": 1420, "color": "FF4D6D", "role": "team_lead"},
+        {"name": "Riley Zen", "email": "riley@demo.com", "password": "demo1234", "department": "HR", "points": 750, "color": "00C853", "role": "employee"},
+        {"name": "Casey Boss", "email": "casey@demo.com", "password": "demo1234", "department": "Product", "points": 1680, "color": "FFE600", "role": "team_lead"},
     ]
     for du in demo_users:
         if await db.users.find_one({"email": du["email"]}):
@@ -397,11 +409,17 @@ async def seed_data():
             "wellness_score": random.randint(60, 95),
             "badges": random.sample([b["id"] for b in BADGES], k=random.randint(1, 3)),
             "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={du['name']}&backgroundColor={du['color']}",
+            "role": du.get("role", "employee"),
+            "dnd": False,
             "created_at": now_iso(),
             "last_activity": now_iso(),
         })
 
-    # Seed posts
+    # Seed posts only if no posts yet
+    existing_posts = await db.posts.count_documents({})
+    if existing_posts > 0:
+        return {"seeded": True, "users_inserted": "idempotent", "posts": 0}
+
     demo_posts = [
         {"user_name": "Alex Chaos", "content": "When Monday hits and the coffee hasn't ☕", "image": ""},
         {"user_name": "Jamie Vibe", "content": "Legit feel like I merged with my chair 🧍‍♂️ stand up y'all", "image": ""},
@@ -428,6 +446,428 @@ async def seed_data():
 
     return {"seeded": True, "users": len(demo_users), "posts": len(demo_posts)}
 
+# ---------- Fun Wall emoji reactions ----------
+class ReactReq(BaseModel):
+    emoji: str  # one of 😂 ❤️ 👏 🔥
+
+ALLOWED_REACTIONS = ["😂", "❤️", "👏", "🔥"]
+
+@api.post("/posts/{post_id}/react")
+async def react_post(post_id: str, body: ReactReq, user=Depends(get_current_user)):
+    if body.emoji not in ALLOWED_REACTIONS:
+        raise HTTPException(400, "Invalid emoji")
+    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(404, "Post not found")
+    reactions = post.get("reactions", {})
+    # toggle
+    for e, users in list(reactions.items()):
+        if user["id"] in users and e != body.emoji:
+            reactions[e] = [u for u in users if u != user["id"]]
+    arr = reactions.get(body.emoji, [])
+    if user["id"] in arr:
+        arr.remove(user["id"])
+    else:
+        arr.append(user["id"])
+    reactions[body.emoji] = arr
+    await db.posts.update_one({"id": post_id}, {"$set": {"reactions": reactions}})
+    return {"reactions": reactions}
+
+# ---------- User profile updates (DND, bio) ----------
+class UserPatch(BaseModel):
+    dnd: Optional[bool] = None
+    bio: Optional[str] = None
+
+@api.patch("/users/me")
+async def update_me(body: UserPatch, user=Depends(get_current_user)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+    return updated
+
+# ---------- Shoutouts ----------
+SHOUTOUT_CATEGORIES = ["Helpfulness", "Teamwork", "Problem Solving", "Going Extra Mile", "Just Because"]
+
+class ShoutoutReq(BaseModel):
+    recipient_ids: List[str]
+    category: str
+    message: str
+
+@api.post("/shoutouts")
+async def create_shoutout(body: ShoutoutReq, user=Depends(get_current_user)):
+    if body.category not in SHOUTOUT_CATEGORIES:
+        raise HTTPException(400, "Invalid category")
+    if not body.recipient_ids:
+        raise HTTPException(400, "Pick at least one recipient")
+    # fetch recipient names
+    recipients = await db.users.find({"id": {"$in": body.recipient_ids}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1}).to_list(50)
+    shout = {
+        "id": str(uuid.uuid4()),
+        "sender_id": user["id"],
+        "sender_name": user["name"],
+        "sender_avatar": user.get("avatar", ""),
+        "recipients": recipients,
+        "category": body.category,
+        "message": body.message[:280],
+        "reactions": {},
+        "created_at": now_iso(),
+    }
+    await db.shoutouts.insert_one(shout)
+    shout.pop("_id", None)
+    # points
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 5}})
+    for rid in body.recipient_ids:
+        await db.users.update_one({"id": rid}, {"$inc": {"points": 10}})
+    return shout
+
+@api.get("/shoutouts")
+async def list_shoutouts():
+    items = await db.shoutouts.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return items
+
+@api.get("/shoutouts/digest")
+async def shoutouts_digest():
+    # top 3 receivers this week
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    items = await db.shoutouts.find({"created_at": {"$gte": since}}, {"_id": 0}).to_list(500)
+    counts = {}
+    for s in items:
+        for r in s.get("recipients", []):
+            counts[r["id"]] = counts.get(r["id"], 0) + 1
+    top_ids = sorted(counts.keys(), key=lambda k: -counts[k])[:3]
+    top = []
+    for uid in top_ids:
+        u = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
+        if u:
+            u["shoutouts_received"] = counts[uid]
+            top.append(u)
+    return top
+
+@api.post("/shoutouts/{sid}/react")
+async def react_shout(sid: str, body: ReactReq, user=Depends(get_current_user)):
+    if body.emoji not in ALLOWED_REACTIONS:
+        raise HTTPException(400, "Invalid emoji")
+    s = await db.shoutouts.find_one({"id": sid}, {"_id": 0})
+    if not s:
+        raise HTTPException(404, "Not found")
+    reactions = s.get("reactions", {})
+    arr = reactions.get(body.emoji, [])
+    if user["id"] in arr:
+        arr.remove(user["id"])
+    else:
+        arr.append(user["id"])
+    reactions[body.emoji] = arr
+    await db.shoutouts.update_one({"id": sid}, {"$set": {"reactions": reactions}})
+    return {"reactions": reactions}
+
+# ---------- Help Board ----------
+HELP_CATEGORIES = ["Housing", "Travel", "Buy-Sell", "Recommendations", "General"]
+
+class HelpPostReq(BaseModel):
+    category: str
+    title: str
+    content: str
+    image: Optional[str] = None
+
+@api.post("/help")
+async def create_help(body: HelpPostReq, user=Depends(get_current_user)):
+    if body.category not in HELP_CATEGORIES:
+        raise HTTPException(400, "Invalid category")
+    post = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "user_avatar": user.get("avatar", ""),
+        "category": body.category,
+        "title": body.title[:120],
+        "content": body.content,
+        "image": body.image or "",
+        "likes": [],
+        "comments": [],
+        "created_at": now_iso(),
+    }
+    await db.help_posts.insert_one(post)
+    post.pop("_id", None)
+    return post
+
+@api.get("/help")
+async def list_help(category: Optional[str] = None):
+    q = {}
+    if category and category != "All":
+        q["category"] = category
+    items = await db.help_posts.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+@api.post("/help/{pid}/like")
+async def like_help(pid: str, user=Depends(get_current_user)):
+    p = await db.help_posts.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Not found")
+    likes = p.get("likes", [])
+    if user["id"] in likes:
+        likes.remove(user["id"])
+    else:
+        likes.append(user["id"])
+    await db.help_posts.update_one({"id": pid}, {"$set": {"likes": likes}})
+    return {"likes": likes}
+
+@api.post("/help/{pid}/comment")
+async def comment_help(pid: str, body: CommentReq, user=Depends(get_current_user)):
+    p = await db.help_posts.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Not found")
+    c = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "user_avatar": user.get("avatar", ""),
+        "content": body.content,
+        "created_at": now_iso(),
+    }
+    comments = p.get("comments", []) + [c]
+    await db.help_posts.update_one({"id": pid}, {"$set": {"comments": comments}})
+    return c
+
+# ---------- Feedback ----------
+FEEDBACK_CATEGORIES = ["Wellness", "Social", "Technical", "General"]
+
+class FeedbackReq(BaseModel):
+    category: str
+    message: str
+    anonymous: Optional[bool] = False
+
+@api.post("/feedback")
+async def create_feedback(body: FeedbackReq, user=Depends(get_current_user)):
+    if body.category not in FEEDBACK_CATEGORIES:
+        raise HTTPException(400, "Invalid category")
+    fb = {
+        "id": str(uuid.uuid4()),
+        "user_id": None if body.anonymous else user["id"],
+        "user_name": "Anonymous" if body.anonymous else user["name"],
+        "category": body.category,
+        "message": body.message,
+        "status": "Received",
+        "anonymous": bool(body.anonymous),
+        "created_at": now_iso(),
+    }
+    await db.feedback.insert_one(fb)
+    fb.pop("_id", None)
+    return fb
+
+@api.get("/feedback")
+async def list_feedback(admin=Depends(require_admin)):
+    items = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+# ---------- Team leaderboard ----------
+@api.get("/leaderboard/teams")
+async def team_leaderboard():
+    pipeline = [
+        {"$group": {"_id": "$department", "points": {"$sum": "$points"}, "members": {"$sum": 1}, "avg_score": {"$avg": "$wellness_score"}}},
+        {"$sort": {"points": -1}},
+    ]
+    rows = await db.users.aggregate(pipeline).to_list(50)
+    return [{"team": r["_id"], "points": r["points"], "members": r["members"], "avg_wellness": round(r.get("avg_score", 0) or 0, 1)} for r in rows]
+
+# ---------- Weekly insights ----------
+@api.get("/insights/weekly")
+async def weekly_insights(user=Depends(get_current_user)):
+    now = datetime.now(timezone.utc)
+    this_start = (now - timedelta(days=7)).isoformat()
+    last_start = (now - timedelta(days=14)).isoformat()
+
+    async def count(coll, q):
+        return await coll.count_documents(q)
+
+    uid = user["id"]
+    # Activities
+    water_this = await count(db.activities, {"user_id": uid, "type": "water", "created_at": {"$gte": this_start}})
+    water_last = await count(db.activities, {"user_id": uid, "type": "water", "created_at": {"$gte": last_start, "$lt": this_start}})
+    eye_this = await count(db.activities, {"user_id": uid, "type": "eye_care", "created_at": {"$gte": this_start}})
+    eye_last = await count(db.activities, {"user_id": uid, "type": "eye_care", "created_at": {"$gte": last_start, "$lt": this_start}})
+    stand_this = await count(db.activities, {"user_id": uid, "type": "stand", "created_at": {"$gte": this_start}})
+
+    pts_pipeline = [
+        {"$match": {"user_id": uid, "created_at": {"$gte": this_start}}},
+        {"$group": {"_id": None, "total": {"$sum": "$points"}}},
+    ]
+    pts_agg = await db.activities.aggregate(pts_pipeline).to_list(1)
+    pts_this = (pts_agg[0]["total"] if pts_agg else 0)
+
+    # Moods this week
+    moods = await db.moods.find({"user_id": uid, "created_at": {"$gte": this_start}}, {"_id": 0}).to_list(50)
+    mood_counts = {}
+    for m in moods:
+        mood_counts[m["label"]] = mood_counts.get(m["label"], 0) + 1
+    top_mood = max(mood_counts.items(), key=lambda x: x[1])[0] if mood_counts else "—"
+
+    def pct_change(a, b):
+        if b == 0:
+            return 100 if a > 0 else 0
+        return round(((a - b) / b) * 100)
+
+    messages = [
+        "Fantastic week! Keep it going, champ. 🔥",
+        "Solid grind this week. Brain thanks you. 🧠",
+        "Vibes were immaculate. Don't stop now. 💪",
+        "Okay-ish week. Let's crush it next one. 🚀",
+    ]
+    water_change = pct_change(water_this, water_last)
+    score_weighted = water_this + eye_this + stand_this
+    idx = min(3, max(0, 3 - score_weighted // 3))
+    message = messages[idx]
+
+    return {
+        "range": {"from": this_start, "to": now.isoformat()},
+        "water": {"this": water_this, "last": water_last, "change_pct": water_change},
+        "eye_care": {"this": eye_this, "last": eye_last, "change_pct": pct_change(eye_this, eye_last)},
+        "stand": {"this": stand_this},
+        "points_earned": pts_this,
+        "top_mood": top_mood,
+        "streak": user.get("streak", 0),
+        "wellness_score": user.get("wellness_score", 50),
+        "message": message,
+    }
+
+# ---------- Admin routes ----------
+@api.get("/admin/users")
+async def admin_users(admin=Depends(require_admin)):
+    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(500)
+    return users
+
+class AdminUserPatch(BaseModel):
+    role: Optional[str] = None
+    department: Optional[str] = None
+    points: Optional[int] = None
+
+@api.patch("/admin/users/{uid}")
+async def admin_update_user(uid: str, body: AdminUserPatch, admin=Depends(require_admin)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        await db.users.update_one({"id": uid}, {"$set": updates})
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
+    return u
+
+@api.delete("/admin/users/{uid}")
+async def admin_delete_user(uid: str, admin=Depends(require_admin)):
+    if uid == admin["id"]:
+        raise HTTPException(400, "Cannot delete self")
+    await db.users.delete_one({"id": uid})
+    return {"deleted": True}
+
+class ChallengeCreate(BaseModel):
+    title: str
+    reward: int
+    target: int
+    type: str
+    scope: Optional[str] = "daily"  # daily|weekly
+
+@api.post("/admin/challenges")
+async def admin_create_challenge(body: ChallengeCreate, admin=Depends(require_admin)):
+    ch = {
+        "id": str(uuid.uuid4()),
+        "title": body.title,
+        "reward": body.reward,
+        "target": body.target,
+        "type": body.type,
+        "scope": body.scope,
+        "created_at": now_iso(),
+    }
+    await db.challenges_custom.insert_one(ch)
+    ch.pop("_id", None)
+    return ch
+
+@api.get("/admin/challenges")
+async def admin_list_challenges(admin=Depends(require_admin)):
+    items = await db.challenges_custom.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return items
+
+@api.delete("/admin/challenges/{cid}")
+async def admin_del_challenge(cid: str, admin=Depends(require_admin)):
+    await db.challenges_custom.delete_one({"id": cid})
+    return {"deleted": True}
+
+class ReminderConfig(BaseModel):
+    water_interval_min: int = 60
+    eye_care_interval_min: int = 20
+    stand_interval_min: int = 90
+    enabled: bool = True
+
+@api.get("/admin/reminders")
+async def get_reminder_config(admin=Depends(require_admin)):
+    cfg = await db.config.find_one({"key": "reminders"}, {"_id": 0})
+    if not cfg:
+        cfg = {"key": "reminders", **ReminderConfig().model_dump()}
+        await db.config.insert_one(cfg)
+        cfg.pop("_id", None)
+    return cfg
+
+@api.put("/admin/reminders")
+async def set_reminder_config(body: ReminderConfig, admin=Depends(require_admin)):
+    await db.config.update_one(
+        {"key": "reminders"},
+        {"$set": {"key": "reminders", **body.model_dump()}},
+        upsert=True,
+    )
+    return body.model_dump()
+
+@api.get("/admin/analytics")
+async def admin_analytics(admin=Depends(require_admin)):
+    now = datetime.now(timezone.utc)
+    today_iso = now.date().isoformat()
+    week_iso = (now - timedelta(days=7)).isoformat()
+    month_iso = (now - timedelta(days=30)).isoformat()
+
+    total_users = await db.users.count_documents({})
+    dau = len(await db.activities.distinct("user_id", {"created_at": {"$gte": today_iso}}))
+    wau = len(await db.activities.distinct("user_id", {"created_at": {"$gte": week_iso}}))
+    mau = len(await db.activities.distinct("user_id", {"created_at": {"$gte": month_iso}}))
+
+    # mood heatmap this week
+    moods = await db.moods.find({"created_at": {"$gte": week_iso}}, {"_id": 0}).to_list(1000)
+    mood_counts = {}
+    for m in moods:
+        mood_counts[m["label"]] = mood_counts.get(m["label"], 0) + 1
+    mood_chart = [{"label": k, "count": v} for k, v in mood_counts.items()]
+
+    # activities per type this week
+    act_pipeline = [
+        {"$match": {"created_at": {"$gte": week_iso}}},
+        {"$group": {"_id": "$type", "count": {"$sum": 1}}},
+    ]
+    acts = await db.activities.aggregate(act_pipeline).to_list(50)
+    act_chart = [{"type": a["_id"], "count": a["count"]} for a in acts]
+
+    # posts, shoutouts, feedback counts
+    posts = await db.posts.count_documents({})
+    shouts = await db.shoutouts.count_documents({})
+    fb = await db.feedback.count_documents({})
+    help_p = await db.help_posts.count_documents({})
+
+    # 7-day activity trend
+    trend = []
+    for i in range(6, -1, -1):
+        d = (now - timedelta(days=i)).date().isoformat()
+        d_next = (now - timedelta(days=i - 1)).date().isoformat()
+        cnt = await db.activities.count_documents({"created_at": {"$gte": d, "$lt": d_next}})
+        trend.append({"day": d[-5:], "count": cnt})
+
+    return {
+        "total_users": total_users,
+        "dau": dau, "wau": wau, "mau": mau,
+        "mood_chart": mood_chart,
+        "activity_chart": act_chart,
+        "counts": {"posts": posts, "shoutouts": shouts, "feedback": fb, "help_posts": help_p},
+        "trend": trend,
+    }
+
+# ---------- Users lookup (for shoutout picker etc) ----------
+@api.get("/users")
+async def list_users(user=Depends(get_current_user)):
+    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("name", 1).to_list(500)
+    return users
+
 @api.get("/")
 async def root():
     return {"message": "Brutal Wellness API", "status": "alive"}
@@ -444,14 +884,18 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def on_startup():
-    # auto-seed if empty
+    # Migrate: ensure all users have role & dnd fields
     try:
+        await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "employee", "dnd": False}})
+        # Ensure demo users (including admin) exist — idempotent
         count = await db.users.count_documents({})
+        await seed_data()
         if count == 0:
-            await seed_data()
-            logger.info("Auto-seeded demo data")
+            logger.info("Auto-seeded demo data from empty DB")
+        else:
+            logger.info("Ensured demo users present")
     except Exception as e:
-        logger.exception(f"Seed failed: {e}")
+        logger.exception(f"Startup migration failed: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

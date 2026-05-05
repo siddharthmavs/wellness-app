@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { BrutalButton, BrutalCard, BrutalBadge } from "../components/brutal";
 import { EyeCareTimer } from "../components/EyeCareTimer";
 import { WellnessPopup } from "../components/WellnessPopup";
+import WeeklyInsightsCard from "../components/WeeklyInsightsCard";
 import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -128,9 +129,10 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Bottom row: Eye care + Challenges + AI insight */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Bottom row: Eye care + Insights + Challenges + AI insight */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <EyeCareTimer onBreakComplete={() => doAction("eye_care")} />
+        <WeeklyInsightsCard />
 
         <div className="bg-white border-[4px] border-black shadow-brutal-lg rounded-[4px] p-5" data-testid="challenges-card">
           <h3 className="font-display font-black uppercase text-xl mb-3">🎯 Today's Challenges</h3>

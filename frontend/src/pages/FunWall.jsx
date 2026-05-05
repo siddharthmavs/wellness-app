@@ -6,6 +6,8 @@ import { Heart, MessageCircle, ImagePlus } from "lucide-react";
 import { useAuthStore } from "../store";
 import { toast } from "sonner";
 
+const REACTS = ["😂", "❤️", "👏", "🔥"];
+
 export default function FunWall() {
   const { user } = useAuthStore();
   const [posts, setPosts] = useState([]);
@@ -41,6 +43,11 @@ export default function FunWall() {
 
   const like = async (id) => {
     await api.post(`/posts/${id}/like`);
+    load();
+  };
+
+  const react = async (id, emoji) => {
+    await api.post(`/posts/${id}/react`, { emoji });
     load();
   };
 
@@ -111,7 +118,7 @@ export default function FunWall() {
             <div className="font-semibold text-lg mb-3">{p.content}</div>
             {p.image && <img src={p.image} alt="" className="w-full border-[3px] border-black rounded-[2px] mb-3" />}
 
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 data-testid={`like-${p.id}`}
@@ -122,6 +129,22 @@ export default function FunWall() {
               </motion.button>
               <div className="flex items-center gap-1 font-black text-xs uppercase">
                 <MessageCircle className="w-4 h-4" /> {p.comments?.length || 0}
+              </div>
+              <div className="flex gap-1.5 ml-1" data-testid={`reactions-${p.id}`}>
+                {REACTS.map((e) => {
+                  const arr = p.reactions?.[e] || [];
+                  const mine = arr.includes(user?.id);
+                  return (
+                    <button
+                      key={e}
+                      data-testid={`react-${p.id}-${e}`}
+                      onClick={() => react(p.id, e)}
+                      className={`border-[2px] border-black px-2 py-1 shadow-brutal-sm font-black text-xs ${mine ? "bg-brutal-yellow" : "bg-white"}`}
+                    >
+                      {e}{arr.length > 0 ? ` ${arr.length}` : ""}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
