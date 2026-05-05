@@ -45,10 +45,19 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 - Wellness Recap autopost (admin endpoint posts top streakers + team-of-week to Fun Wall)
 - Navbar with primary links + MORE dropdown for full feature access
 
+### Chunk 4 (Polish)
+- 🌙 Dark mode toggle (Zustand persist, full Neo-Brutal dark inversion: dark zinc surfaces, white borders/shadows, accent cards keep their pop)
+- 📱 Mobile bottom-nav (5 primary routes, visible <md breakpoint)
+- 💀 Skeleton loaders + 🌫️ illustrated empty states (deployed across Fun Wall, Mood, Leaderboard, Shoutouts, Help Board)
+- @ mention autocomplete on Fun Wall posts + comments (with arrow/enter keyboard nav, styled mention-pill rendering)
+- 🚀 Productivity rating in Mood tracker (High/Med/Low, persisted + shown on history)
+- 🎁 Surprise Reward issuance from admin (coupon w/ code, bonus points, shoutout) + claim flow on profile
+
 ## Test iterations
 - iteration_1: backend 96%, frontend 85% (Chunk 1, fixed streak bug)
 - iteration_2: backend 100%, frontend 100% (Chunk 2)
 - iteration_3: backend 96%, frontend 100% (Chunk 3, fixed seed role-update bug)
+- iteration_4: backend 100%, frontend 100% (Chunk 4 polish)
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py
