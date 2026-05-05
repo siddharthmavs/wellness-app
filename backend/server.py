@@ -862,6 +862,515 @@ async def admin_analytics(admin=Depends(require_admin)):
         "trend": trend,
     }
 
+# ---------- Music ----------
+PLAYLISTS = {
+    "focus": {
+        "id": "focus",
+        "name": "🧠 Focus Mode",
+        "color": "#00E5FF",
+        "tracks": [
+            {"id": "f1", "title": "Lofi Brain", "artist": "Beats Inc", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", "duration": 372},
+            {"id": "f2", "title": "Deep Work", "artist": "Studio One", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", "duration": 425},
+            {"id": "f3", "title": "Code Flow", "artist": "DevBeats", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", "duration": 410},
+        ],
+    },
+    "relax": {
+        "id": "relax",
+        "name": "🌊 Relax Vibes",
+        "color": "#00C853",
+        "tracks": [
+            {"id": "r1", "title": "Slow Sunday", "artist": "Chillax", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", "duration": 235},
+            {"id": "r2", "title": "Cloud Drift", "artist": "Ambient FM", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", "duration": 318},
+            {"id": "r3", "title": "Ocean Mind", "artist": "Soft Loops", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", "duration": 290},
+        ],
+    },
+    "energy": {
+        "id": "energy",
+        "name": "⚡ Energy Boost",
+        "color": "#FF4D6D",
+        "tracks": [
+            {"id": "e1", "title": "Power Hour", "artist": "PumpUp", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", "duration": 198},
+            {"id": "e2", "title": "Wake The Heck Up", "artist": "Loud Kid", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", "duration": 244},
+            {"id": "e3", "title": "Lift Off", "artist": "Rocket", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", "duration": 280},
+        ],
+    },
+}
+
+@api.get("/music/playlists")
+async def music_playlists():
+    return list(PLAYLISTS.values())
+
+# ---------- Polls ----------
+class PollCreate(BaseModel):
+    question: str
+    options: List[str]
+    expires_in_days: Optional[int] = 7
+
+@api.post("/polls")
+async def create_poll(body: PollCreate, user=Depends(get_current_user)):
+    if user.get("role") not in ("admin", "team_lead"):
+        raise HTTPException(403, "Lead/admin only")
+    if len(body.options) < 2 or len(body.options) > 5:
+        raise HTTPException(400, "Need 2-5 options")
+    poll = {
+        "id": str(uuid.uuid4()),
+        "question": body.question,
+        "options": [{"text": o, "votes": []} for o in body.options],
+        "creator_id": user["id"],
+        "creator_name": user["name"],
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=body.expires_in_days or 7)).isoformat(),
+        "created_at": now_iso(),
+    }
+    await db.polls.insert_one(poll)
+    poll.pop("_id", None)
+    return poll
+
+@api.get("/polls")
+async def list_polls():
+    items = await db.polls.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return items
+
+@api.post("/polls/{pid}/vote")
+async def vote_poll(pid: str, body: dict, user=Depends(get_current_user)):
+    option_idx = body.get("option_idx")
+    if option_idx is None:
+        raise HTTPException(400, "option_idx required")
+    poll = await db.polls.find_one({"id": pid}, {"_id": 0})
+    if not poll:
+        raise HTTPException(404, "Not found")
+    options = poll.get("options", [])
+    # remove user's prior vote
+    for o in options:
+        if user["id"] in o.get("votes", []):
+            o["votes"].remove(user["id"])
+    if 0 <= option_idx < len(options):
+        options[option_idx].setdefault("votes", []).append(user["id"])
+    await db.polls.update_one({"id": pid}, {"$set": {"options": options}})
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 2}})
+    return {"options": options}
+
+# ---------- Events (birthdays/anniversaries) ----------
+class EventCreate(BaseModel):
+    type: str  # birthday | anniversary
+    user_id: str
+    date: str  # YYYY-MM-DD (recurs annually)
+    note: Optional[str] = ""
+
+@api.post("/events")
+async def create_event(body: EventCreate, admin=Depends(require_admin)):
+    ev = {"id": str(uuid.uuid4()), **body.model_dump(), "created_at": now_iso()}
+    await db.events.insert_one(ev)
+    ev.pop("_id", None)
+    return ev
+
+@api.get("/events")
+async def list_events():
+    items = await db.events.find({}, {"_id": 0}).to_list(500)
+    # Resolve user names
+    for e in items:
+        u = await db.users.find_one({"id": e["user_id"]}, {"_id": 0, "name": 1, "avatar": 1, "department": 1})
+        if u:
+            e["user_name"] = u.get("name")
+            e["user_avatar"] = u.get("avatar")
+            e["department"] = u.get("department")
+    return items
+
+@api.get("/events/today")
+async def events_today():
+    today = datetime.now(timezone.utc).date()
+    md = today.strftime("%m-%d")
+    items = await db.events.find({}, {"_id": 0}).to_list(500)
+    out = []
+    for e in items:
+        if e.get("date", "")[5:10] == md:
+            u = await db.users.find_one({"id": e["user_id"]}, {"_id": 0, "name": 1, "avatar": 1, "department": 1})
+            if u:
+                out.append({**e, "user_name": u["name"], "user_avatar": u["avatar"], "department": u.get("department")})
+    return out
+
+# ---------- Did You Know? (daily fact) ----------
+FACTS_BANK = [
+    {"id": "f001", "category": "AI & ML", "fact": "GPT-3 was trained on ~570GB of text — that's about a million books.", "color": "#FFE600"},
+    {"id": "f002", "category": "Web Dev", "fact": "JavaScript was created in just 10 days by Brendan Eich in 1995.", "color": "#00E5FF"},
+    {"id": "f003", "category": "Cybersecurity", "fact": "Over 30,000 websites get hacked daily — most via outdated plugins.", "color": "#FF4D6D"},
+    {"id": "f004", "category": "Science", "fact": "A teaspoon of neutron star material weighs about 6 billion tons.", "color": "#00C853"},
+    {"id": "f005", "category": "History of Tech", "fact": "The first 1GB hard drive (1980) cost $40,000 and weighed 550 lbs.", "color": "#FFE600"},
+    {"id": "f006", "category": "AI & ML", "fact": "Deep learning models can have over 175 billion parameters.", "color": "#00E5FF"},
+    {"id": "f007", "category": "Web Dev", "fact": "There are over 1.9 billion websites on the internet today.", "color": "#FF4D6D"},
+    {"id": "f008", "category": "Cybersecurity", "fact": "The most common password is still '123456' — yes, in 2026.", "color": "#00C853"},
+    {"id": "f009", "category": "Science", "fact": "Octopuses have three hearts and blue blood.", "color": "#FFE600"},
+    {"id": "f010", "category": "History of Tech", "fact": "The first computer bug was a literal moth, found in 1947.", "color": "#00E5FF"},
+    {"id": "f011", "category": "AI & ML", "fact": "Google search uses RankBrain, an AI, to handle 15% of new queries.", "color": "#FF4D6D"},
+    {"id": "f012", "category": "Web Dev", "fact": "CSS turned 30 in 2026 — older than most engineers using it.", "color": "#00C853"},
+    {"id": "f013", "category": "Science", "fact": "Bananas are slightly radioactive due to potassium-40.", "color": "#FFE600"},
+    {"id": "f014", "category": "History of Tech", "fact": "Email predates the World Wide Web by ~20 years.", "color": "#00E5FF"},
+]
+
+@api.get("/facts/today")
+async def fact_today():
+    idx = datetime.now(timezone.utc).timetuple().tm_yday % len(FACTS_BANK)
+    f = FACTS_BANK[idx]
+    reactions = await db.fact_reactions.find_one({"fact_id": f["id"]}, {"_id": 0}) or {"fact_id": f["id"], "reactions": {}}
+    return {**f, "reactions": reactions.get("reactions", {})}
+
+class FactReact(BaseModel):
+    fact_id: str
+    reaction: str  # mind_blown | knew_it | hmm
+
+ALLOWED_FACT_REACTS = ["mind_blown", "knew_it", "hmm"]
+
+@api.post("/facts/react")
+async def react_fact(body: FactReact, user=Depends(get_current_user)):
+    if body.reaction not in ALLOWED_FACT_REACTS:
+        raise HTTPException(400, "Invalid reaction")
+    doc = await db.fact_reactions.find_one({"fact_id": body.fact_id}, {"_id": 0}) or {"fact_id": body.fact_id, "reactions": {}}
+    reactions = doc.get("reactions", {})
+    # remove other reactions by this user
+    for r, users in list(reactions.items()):
+        if user["id"] in users:
+            reactions[r] = [u for u in users if u != user["id"]]
+    arr = reactions.get(body.reaction, [])
+    if user["id"] not in arr:
+        arr.append(user["id"])
+        # award +2 once per day per user (idempotent: check today's already)
+    reactions[body.reaction] = arr
+    await db.fact_reactions.update_one({"fact_id": body.fact_id}, {"$set": {"fact_id": body.fact_id, "reactions": reactions}}, upsert=True)
+    return {"reactions": reactions}
+
+# ---------- Word of the Day ----------
+WORDS_BANK = [
+    {"word": "Idempotent", "pron": "ai-dem-poh-tent", "def": "An operation that produces the same result no matter how many times you call it.", "example": "DELETE requests should be idempotent.", "tags": ["Backend", "QA"]},
+    {"word": "Hoisting", "pron": "hoy-sting", "def": "JavaScript's behavior of moving declarations to the top of their scope.", "example": "Var hoisting can lead to subtle bugs.", "tags": ["Frontend"]},
+    {"word": "Throughput", "pron": "throo-put", "def": "The rate at which a system processes work, usually requests per second.", "example": "We doubled API throughput by adding a cache.", "tags": ["Backend", "BA"]},
+    {"word": "Race Condition", "pron": "race-kon-di-shun", "def": "A bug where output depends on uncontrollable timing of events.", "example": "Always lock the resource to avoid a race condition.", "tags": ["Backend", "QA"]},
+    {"word": "Memoization", "pron": "mem-oh-eye-zay-shun", "def": "Caching expensive function results so repeated calls return faster.", "example": "useMemo memoizes a value across renders.", "tags": ["Frontend", "General"]},
+    {"word": "Tech Debt", "pron": "tek-det", "def": "The implied cost of choosing an easy solution now over a better, slower one.", "example": "Refactor weekly to keep tech debt low.", "tags": ["General", "BA"]},
+    {"word": "Webhook", "pron": "web-hook", "def": "An HTTP callback that fires when an event happens in a system.", "example": "Stripe sends a webhook on payment success.", "tags": ["Backend", "BA"]},
+    {"word": "Flaky Test", "pron": "flay-kee", "def": "A test that passes and fails intermittently without code changes.", "example": "Quarantine flaky tests until fixed.", "tags": ["QA"]},
+    {"word": "A11y", "pron": "ay-eleven-why", "def": "Numeronym for 'accessibility' (11 letters between A and y).", "example": "Run a11y audits on every release.", "tags": ["Frontend", "General"]},
+    {"word": "Yak Shaving", "pron": "yak-shay-ving", "def": "Doing seemingly pointless tasks that lead up to the actual task.", "example": "Half my day was yak shaving build configs.", "tags": ["General"]},
+]
+
+@api.get("/words/today")
+async def word_today():
+    idx = datetime.now(timezone.utc).timetuple().tm_yday % len(WORDS_BANK)
+    return {"id": f"w{idx}", **WORDS_BANK[idx]}
+
+# ---------- Mini Game scores ----------
+class GameScore(BaseModel):
+    game: str  # bubble_pop | memory_match | word_scramble | zen_doodle
+    score: int
+
+@api.post("/games/scores")
+async def submit_score(body: GameScore, user=Depends(get_current_user)):
+    sc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "user_avatar": user.get("avatar", ""),
+        "game": body.game,
+        "score": body.score,
+        "created_at": now_iso(),
+    }
+    await db.game_scores.insert_one(sc)
+    sc.pop("_id", None)
+    # Award some points (capped)
+    pts = min(20, body.score // 10)
+    if pts > 0:
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"points": pts}})
+    return {"score": sc, "points_awarded": pts}
+
+@api.get("/games/leaderboard")
+async def game_leaderboard(game: Optional[str] = None):
+    q = {}
+    if game:
+        q["game"] = game
+    pipeline = [
+        {"$match": q},
+        {"$group": {"_id": {"user_id": "$user_id", "user_name": "$user_name", "user_avatar": "$user_avatar"}, "best": {"$max": "$score"}}},
+        {"$sort": {"best": -1}},
+        {"$limit": 20},
+    ]
+    rows = await db.game_scores.aggregate(pipeline).to_list(20)
+    return [{"user_id": r["_id"]["user_id"], "user_name": r["_id"]["user_name"], "user_avatar": r["_id"]["user_avatar"], "best": r["best"]} for r in rows]
+
+# ---------- Quizzes ----------
+QUIZZES = {
+    "Engineering": [
+        {"q": "What does ACID stand for in DB?", "options": ["Atomicity, Consistency, Isolation, Durability", "All Caps Inside Database", "Async Calls In Daemon", "A Cool Indexing Diagram"], "answer": 0},
+        {"q": "Which HTTP method is idempotent?", "options": ["POST", "PATCH", "PUT", "CONNECT"], "answer": 2},
+        {"q": "What is JWT mainly used for?", "options": ["Email", "Auth/session", "DB queries", "CSS styling"], "answer": 1},
+        {"q": "Which is NOT a NoSQL database?", "options": ["MongoDB", "Redis", "PostgreSQL", "Cassandra"], "answer": 2},
+        {"q": "Big-O of binary search?", "options": ["O(n)", "O(log n)", "O(n log n)", "O(1)"], "answer": 1},
+    ],
+    "Design": [
+        {"q": "What's WCAG?", "options": ["Web Color Group", "Web Content Accessibility Guidelines", "Web Component Architecture", "Wide Canvas Graphics"], "answer": 1},
+        {"q": "Min contrast ratio for AA text?", "options": ["3:1", "4.5:1", "7:1", "2:1"], "answer": 1},
+        {"q": "Hick's Law is about?", "options": ["Decision time vs choices", "Color theory", "Typography", "Animations"], "answer": 0},
+        {"q": "What's a 'design token'?", "options": ["NFT", "Reusable design value (color/size)", "Subscription unit", "User session"], "answer": 1},
+        {"q": "Which is a UI law?", "options": ["Newton's Third", "Fitts's Law", "Boyle's Law", "Gauss's Law"], "answer": 1},
+    ],
+    "Marketing": [
+        {"q": "What's CTR?", "options": ["Cost To Run", "Click-Through Rate", "Conversion Tracking Rate", "Customer Trust Ratio"], "answer": 1},
+        {"q": "SEO stands for?", "options": ["Site Engine Output", "Search Engine Optimization", "Sales Email Outreach", "Server Endpoint Object"], "answer": 1},
+        {"q": "Funnel top usually has?", "options": ["Loyal users", "Awareness traffic", "VIP customers", "Refunds"], "answer": 1},
+        {"q": "A/B test is for?", "options": ["Backups", "Testing 2 variants", "API benchmarks", "Audit logs"], "answer": 1},
+        {"q": "LTV means?", "options": ["Long Term Vacation", "Lifetime Value", "Last Track Variance", "Live TV"], "answer": 1},
+    ],
+    "HR": [
+        {"q": "OKR stands for?", "options": ["Office Key Reports", "Objectives and Key Results", "Only Key Resources", "Optional KR"], "answer": 1},
+        {"q": "What's onboarding?", "options": ["Hiring", "Process to integrate new joiners", "Layoffs", "Performance reviews"], "answer": 1},
+        {"q": "1-on-1s are for?", "options": ["Firing people", "Manager-employee sync", "Sales calls", "Interviews"], "answer": 1},
+        {"q": "What's psychological safety?", "options": ["Insurance", "Feeling safe to speak up", "Office security", "Mental health break"], "answer": 1},
+        {"q": "PIP usually means?", "options": ["Performance Improvement Plan", "Pay In Pieces", "Picture In Picture", "Project Initiation Plan"], "answer": 0},
+    ],
+    "Product": [
+        {"q": "What's a PRD?", "options": ["Production Release Date", "Product Requirements Document", "Public Release Demo", "Performance Review Doc"], "answer": 1},
+        {"q": "MVP means?", "options": ["Most Valuable Player", "Minimum Viable Product", "Maximum Velocity Push", "Multi-Vendor Pipeline"], "answer": 1},
+        {"q": "Jobs-to-be-Done focuses on?", "options": ["Tasks list", "Customer's underlying goal", "Team workflow", "Sprint planning"], "answer": 1},
+        {"q": "RICE prioritization includes?", "options": ["Reach, Impact, Confidence, Effort", "Rate, Index, Cost, Energy", "Risk, Income, Cost, Equity", "Reach, Income, Cap, Earnings"], "answer": 0},
+        {"q": "What's churn?", "options": ["Customers leaving", "New signups", "Revenue per user", "App version"], "answer": 0},
+    ],
+    "Management": [
+        {"q": "What's a SWOT?", "options": ["Strengths, Weaknesses, Ops, Threats", "Strengths, Weaknesses, Opportunities, Threats", "Sales, Web, Ops, Tech", "Strategy, Wins, Outputs, Targets"], "answer": 1},
+        {"q": "KPI means?", "options": ["Key Performance Indicator", "Known Public Info", "Kept Process Internal", "Key People Index"], "answer": 0},
+        {"q": "Span of control is?", "options": ["Servers managed", "Direct reports a manager has", "Project deadlines", "Budget cap"], "answer": 1},
+        {"q": "RACI matrix tracks?", "options": ["Responsibility roles", "Risk levels", "Revenue", "Recurring audits"], "answer": 0},
+        {"q": "Servant leadership means?", "options": ["Boss-first", "Leader serves the team", "Hands-off", "Strict hierarchy"], "answer": 1},
+    ],
+    "General": [
+        {"q": "Pomodoro is?", "options": ["Italian sauce", "25-min focus + 5-min break technique", "Calendar app", "Mood tracker"], "answer": 1},
+        {"q": "20-20-20 rule is for?", "options": ["Salary", "Eye health", "Hydration", "Sleep"], "answer": 1},
+        {"q": "Best for hydration tracking?", "options": ["Random sips", "Set water reminders", "Coffee only", "Soda"], "answer": 1},
+        {"q": "Standing every X minutes?", "options": ["Never", "Every 30-60 min", "Every 5 hours", "Once a day"], "answer": 1},
+        {"q": "Mindfulness helps with?", "options": ["Coding speed only", "Stress + focus", "Salary", "Promotions"], "answer": 1},
+    ],
+}
+
+@api.get("/quizzes")
+async def get_quiz(department: Optional[str] = None, user=Depends(get_current_user)):
+    dept = department or user.get("department") or "General"
+    if dept not in QUIZZES:
+        dept = "General"
+    return {"department": dept, "questions": [{"q": q["q"], "options": q["options"]} for q in QUIZZES[dept]]}
+
+class QuizSubmit(BaseModel):
+    department: str
+    answers: List[int]
+
+@api.post("/quizzes/submit")
+async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
+    dept = body.department if body.department in QUIZZES else "General"
+    questions = QUIZZES[dept]
+    correct = 0
+    results = []
+    for i, q in enumerate(questions):
+        ans = body.answers[i] if i < len(body.answers) else -1
+        ok = (ans == q["answer"])
+        if ok:
+            correct += 1
+        results.append({"q": q["q"], "your": ans, "correct": q["answer"], "ok": ok})
+    pts = correct * 3 + (15 if correct == len(questions) else 0)
+    rec = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "department": dept,
+        "score": correct,
+        "total": len(questions),
+        "points_awarded": pts,
+        "created_at": now_iso(),
+    }
+    await db.quiz_results.insert_one(rec)
+    rec.pop("_id", None)
+    if pts:
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"points": pts}})
+    return {"correct": correct, "total": len(questions), "points": pts, "results": results}
+
+# ---------- Buddy System ----------
+@api.get("/buddy/me")
+async def my_buddy(user=Depends(get_current_user)):
+    pair = await db.buddies.find_one({"$or": [{"buddy_a": user["id"]}, {"buddy_b": user["id"]}]}, {"_id": 0})
+    if not pair:
+        return None
+    other_id = pair["buddy_b"] if pair["buddy_a"] == user["id"] else pair["buddy_a"]
+    other = await db.users.find_one({"id": other_id}, {"_id": 0, "password": 0})
+    return {"pairing": pair, "buddy": other}
+
+@api.post("/buddy/pair")
+async def pair_buddy(user=Depends(get_current_user)):
+    # if already paired, return
+    existing = await db.buddies.find_one({"$or": [{"buddy_a": user["id"]}, {"buddy_b": user["id"]}]}, {"_id": 0})
+    if existing:
+        other_id = existing["buddy_b"] if existing["buddy_a"] == user["id"] else existing["buddy_a"]
+        other = await db.users.find_one({"id": other_id}, {"_id": 0, "password": 0})
+        return {"pairing": existing, "buddy": other}
+    # find someone same department or random
+    dept = user.get("department")
+    candidates = await db.users.find({"id": {"$ne": user["id"]}, "department": dept}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
+    if not candidates:
+        candidates = await db.users.find({"id": {"$ne": user["id"]}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
+    if not candidates:
+        raise HTTPException(404, "No buddies available")
+    other = random.choice(candidates)
+    pairing = {
+        "id": str(uuid.uuid4()),
+        "buddy_a": user["id"],
+        "buddy_b": other["id"],
+        "started_at": now_iso(),
+        "checkins": [],
+    }
+    await db.buddies.insert_one(pairing)
+    pairing.pop("_id", None)
+    full_other = await db.users.find_one({"id": other["id"]}, {"_id": 0, "password": 0})
+    return {"pairing": pairing, "buddy": full_other}
+
+@api.post("/buddy/checkin")
+async def buddy_checkin(user=Depends(get_current_user)):
+    pair = await db.buddies.find_one({"$or": [{"buddy_a": user["id"]}, {"buddy_b": user["id"]}]}, {"_id": 0})
+    if not pair:
+        raise HTTPException(404, "No buddy")
+    checkins = pair.get("checkins", []) + [{"user_id": user["id"], "at": now_iso()}]
+    await db.buddies.update_one({"id": pair["id"]}, {"$set": {"checkins": checkins}})
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 10}})
+    return {"checkins": len(checkins)}
+
+# ---------- Employee Spotlight (weekly rotation) ----------
+@api.get("/spotlight/current")
+async def spotlight_current():
+    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("created_at", 1).to_list(500)
+    if not users:
+        return None
+    # week-of-year based rotation
+    woy = datetime.now(timezone.utc).isocalendar()[1]
+    pick = users[woy % len(users)]
+    pick["fun_facts"] = [
+        f"Has been crushing it since joining {pick.get('department', 'the team')}",
+        f"Currently rocking a {pick.get('streak', 0)}-day streak 🔥",
+        f"Wellness score: {pick.get('wellness_score', 50)}/100",
+    ]
+    pick["quote"] = "The only bad workout is the one that didn't happen."
+    return pick
+
+# ---------- Learning Bites ----------
+LEARNING_BITES = [
+    {"id": "lb1", "department": "Engineering", "title": "Use --depth=1 in git clone for faster pulls", "body": "Shallow clone fetches only the latest commit — saves time on big repos.", "format": "text"},
+    {"id": "lb2", "department": "Engineering", "title": "Optimize MongoDB with compound indexes", "body": "Order matters: most-equality-first then range. Match your $sort fields too.", "format": "text"},
+    {"id": "lb3", "department": "Design", "title": "Use 8pt grid for spacing", "body": "Multiples of 8 (8/16/24/32) keep everything visually consistent across breakpoints.", "format": "text"},
+    {"id": "lb4", "department": "Design", "title": "Color contrast — aim for 4.5:1", "body": "Use Stark or Contrast Ratio plugin. Most a11y issues are color-related.", "format": "text"},
+    {"id": "lb5", "department": "Marketing", "title": "Write CTAs that lead with benefit", "body": "‘Get my 7-day plan’ beats ‘Submit’ — every time.", "format": "text"},
+    {"id": "lb6", "department": "HR", "title": "Run 1-on-1s as the report owns the agenda", "body": "Manager listens. Their cadence = relationship cadence.", "format": "text"},
+    {"id": "lb7", "department": "Product", "title": "Prioritize using RICE", "body": "Reach × Impact × Confidence ÷ Effort = score. Stack-rank ruthlessly.", "format": "text"},
+    {"id": "lb8", "department": "General", "title": "The 2-minute rule", "body": "If a task takes <2 mins, do it now. Saves the mental tax of a todo list.", "format": "text"},
+    {"id": "lb9", "department": "General", "title": "Stand for every meeting under 15 min", "body": "Better posture, faster decisions. Try it tomorrow.", "format": "text"},
+    {"id": "lb10", "department": "QA", "title": "Boundary value testing", "body": "Test at min, max, just-below, just-above. Most bugs hide at edges.", "format": "text"},
+]
+
+@api.get("/learning-bites")
+async def get_bites(department: Optional[str] = None):
+    if department and department != "All":
+        bites = [b for b in LEARNING_BITES if b["department"] == department]
+    else:
+        bites = LEARNING_BITES
+    # attach tried counts
+    out = []
+    for b in bites:
+        cnt = await db.bite_tried.count_documents({"bite_id": b["id"]})
+        out.append({**b, "tried_count": cnt})
+    return out
+
+@api.post("/learning-bites/{bite_id}/tried")
+async def tried_bite(bite_id: str, user=Depends(get_current_user)):
+    existing = await db.bite_tried.find_one({"bite_id": bite_id, "user_id": user["id"]})
+    if existing:
+        return {"already": True}
+    await db.bite_tried.insert_one({"bite_id": bite_id, "user_id": user["id"], "at": now_iso()})
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 5}})
+    return {"awarded": 5}
+
+# ---------- Desk Plant Challenge ----------
+@api.post("/plants/optin")
+async def plant_optin(user=Depends(get_current_user)):
+    existing = await db.plants.find_one({"user_id": user["id"]})
+    if existing:
+        existing.pop("_id", None)
+        return existing
+    p = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "user_avatar": user.get("avatar", ""),
+        "checkins": [],
+        "streak": 0,
+        "started_at": now_iso(),
+    }
+    await db.plants.insert_one(p)
+    p.pop("_id", None)
+    return p
+
+@api.get("/plants/me")
+async def my_plant(user=Depends(get_current_user)):
+    p = await db.plants.find_one({"user_id": user["id"]}, {"_id": 0})
+    return p
+
+@api.post("/plants/checkin")
+async def plant_checkin(user=Depends(get_current_user)):
+    p = await db.plants.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Opt in first")
+    today = datetime.now(timezone.utc).date().isoformat()
+    if any(c.startswith(today) for c in p.get("checkins", [])):
+        return {"already": True, "streak": p.get("streak", 0)}
+    checkins = p.get("checkins", []) + [now_iso()]
+    # Calc streak: consecutive distinct dates ending today
+    dates = sorted({c[:10] for c in checkins})
+    streak = 0
+    cur = datetime.now(timezone.utc).date()
+    for _ in range(len(dates) + 1):
+        if cur.isoformat() in dates:
+            streak += 1
+            cur = cur - timedelta(days=1)
+        else:
+            break
+    await db.plants.update_one({"user_id": user["id"]}, {"$set": {"checkins": checkins, "streak": streak}})
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 3}})
+    return {"streak": streak, "checkins": len(checkins)}
+
+@api.get("/plants/leaderboard")
+async def plant_leaderboard():
+    items = await db.plants.find({}, {"_id": 0}).sort("streak", -1).to_list(50)
+    return items
+
+# ---------- Wellness Recap (Monday auto-post) ----------
+@api.post("/recap/post")
+async def post_recap(admin=Depends(require_admin)):
+    # Build a Monday recap post auto-posting to Fun Wall
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    # top 3 by streak this week
+    top = await db.users.find({}, {"_id": 0, "password": 0}).sort("streak", -1).to_list(3)
+    teams = await db.users.aggregate([
+        {"$group": {"_id": "$department", "points": {"$sum": "$points"}}},
+        {"$sort": {"points": -1}},
+        {"$limit": 1},
+    ]).to_list(1)
+    top_team = teams[0]["_id"] if teams else "—"
+    msg = "🏆 WEEKLY RECAP! Top streakers: " + ", ".join([f"{u['name']} ({u['streak']}d 🔥)" for u in top]) + f". 🥇 Team of the week: {top_team}!"
+    post = {
+        "id": str(uuid.uuid4()),
+        "user_id": admin["id"],
+        "user_name": "Brutal Bot",
+        "user_avatar": "https://api.dicebear.com/7.x/bottts-neutral/svg?seed=BrutalBot&backgroundColor=000000",
+        "content": msg,
+        "image": "",
+        "likes": [],
+        "comments": [],
+        "reactions": {},
+        "created_at": now_iso(),
+    }
+    await db.posts.insert_one(post)
+    post.pop("_id", None)
+    return post
+
 # ---------- Users lookup (for shoutout picker etc) ----------
 @api.get("/users")
 async def list_users(user=Depends(get_current_user)):
@@ -894,6 +1403,22 @@ async def on_startup():
             logger.info("Auto-seeded demo data from empty DB")
         else:
             logger.info("Ensured demo users present")
+        # Seed sample events (birthdays/anniversaries) for demo users
+        if await db.events.count_documents({}) == 0:
+            today = datetime.now(timezone.utc).date()
+            users = await db.users.find({"email": {"$regex": "@demo.com$"}}, {"_id": 0, "id": 1}).to_list(20)
+            for i, u in enumerate(users):
+                ev_type = "birthday" if i % 2 == 0 else "anniversary"
+                d = today + timedelta(days=i % 7)
+                await db.events.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "type": ev_type,
+                    "user_id": u["id"],
+                    "date": d.isoformat(),
+                    "note": "",
+                    "created_at": now_iso(),
+                })
+            logger.info("Seeded sample birthday/anniversary events")
     except Exception as e:
         logger.exception(f"Startup migration failed: {e}")
 

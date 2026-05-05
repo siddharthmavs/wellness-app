@@ -1,0 +1,46 @@
+{
+  "summary": "Chunk-3 full-stack test pass. Backend: 23/24 PASS, 1 xfail (seed idempotency bug prevents sam/casey from being team_lead in DB). Frontend: all new pages render and work — /music plays tracks in persistent player, /polls creates+lists+votes, /games has all 4 games with working interactions (Bubble Pop starts & renders bubbles after START click, Memory Match renders 16 cards, Word Scramble+Zen Doodle mount), /quiz renders picker+5 questions and submit shows result, /learn lists 10 bites with TRIED IT buttons, /events shows today+upcoming, Profile has buddy-card & plant-card with check-in flows, Dashboard shows did-you-know + word-of-day + spotlight-card, Navbar MORE dropdown exposes all required links (nav-music/polls/games/quiz/learn/events/help/me/admin).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "seed_demo() in server.py (~L396)", "issue": "Seed is idempotent only at insert-level: if a user already exists, their `role` field is never updated. Sam & Casey stay 'employee' instead of becoming 'team_lead' as defined in demo_users. Consequence: team_lead-only features (poll creation) cannot be tested with the documented credentials sam@demo.com / casey@demo.com."},
+      {"endpoint": "GET /api/words/today", "issue": "Returns `def` key; review_request + typical API contract expects `definition`. Frontend likely consumes `def` (internal-consistent) but external contract diverges from spec."},
+      {"endpoint": "POST /api/polls/{pid}/vote", "issue": "Invalid option_idx (e.g. 99) returns 200 instead of 4xx. Silently drops the vote (user's prior vote still removed). Should return 400."},
+      {"endpoint": "POST /api/events", "issue": "Body requires `user_id` (not `person` as review_request spec says). Minor spec/impl drift — frontend admin flow uses user_id, so no runtime break."},
+      {"endpoint": "GET /api/quizzes", "issue": "Requires auth (Depends(get_current_user)) — not mentioned in spec but reasonable. Response shape is {department, questions:[{q,options}]} (object with nested array) — spec implied a flat list."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_chunk3.py",
+    "/app/test_reports/pytest/chunk3_results.xml"
+  ],
+  "action_items": [
+    "FIX seed_demo(): after the `if exists: continue` guard, also upsert role (or run a $set on role for sam/casey) so team_lead permissions work out-of-the-box. Alternatively, drop the continue and do upsert with $setOnInsert for immutable fields (password, points, created_at) and $set for role. Without this fix, the 'team_lead or admin can create polls' feature is untestable with seeded accounts.",
+    "CONSIDER renaming response key `def` → `definition` in /api/words/today to match spec (and update frontend consumer).",
+    "CONSIDER validating option_idx bounds in /api/polls/{pid}/vote and returning 400 for out-of-range indices (currently silently ignored)."
+  ],
+  "critical_code_review_comments": [
+    "seed_demo idempotency: only guards inserts. Role (and any future flag-like changes to demo_users) will never propagate to existing DB rows — this is a real bug that breaks team_lead poll-creation. Short-term fix: `await db.users.update_one({email}, {\\\"$set\\\": {\\\"role\\\": du['role']}})` inside the loop.",
+    "server.py is now 1427 lines — past the recommended ~700 line guideline. Strongly recommend splitting into routers/ (music.py, polls.py, events.py, games.py, quizzes.py, buddy.py, plants.py, spotlight.py, facts.py, words.py, learning.py, recap.py) with a shared deps.py for auth/db.",
+    "POST /api/polls/{pid}/vote accepts `body: dict` raw — should use a Pydantic VoteReq model with option_idx: int for validation and OpenAPI docs.",
+    "POST /api/facts/react takes fact_id in body, but /api/facts/today rotates daily by day-of-year — client must read fact_id from today's response and echo back. Slightly awkward contract. Consider dropping fact_id and inferring server-side.",
+    "/api/quizzes exposes 5 questions but not question IDs; the submit endpoint relies on ORDER of answers matching the server's question order. If QUIZZES[dept] is ever reordered server-side between GET and POST in the same request flow, results mismatch silently. Using stable qids would be safer.",
+    "Music track URLs point to soundhelix.com — external CDN. If it goes down, player breaks with no fallback. Consider local or multi-source failover.",
+    "`/api/spotlight/current` derives spotlight from ISO week-of-year over ALL users — if db.users becomes large or has test pollution, spotlight can rotate onto TEST_* seed users. Consider filtering by role != 'admin' and excluding test-prefixed names."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_chunk3.py (NEW)"
+  ],
+  "success_rate": {"backend": "96% (23/24, 1 xfail for seed bug)", "frontend": "100%"},
+  "test_credentials": "admin@demo.com/demo1234 (admin), alex@demo.com/demo1234 (employee), jamie@demo.com/demo1234 (employee), sam@demo.com/demo1234 (DOCUMENTED team_lead but actually 'employee' in DB due to seed bug), casey@demo.com/demo1234 (same bug).",
+  "seed_data_creation": "No new seed data created by test. Backend auto-seeds on startup (users, posts, sample events). Test created: polls (TEST_poll_tl, TEST_fav_color), 1 event (TEST_event birthday for alex), game scores, buddy pairing for alex, plant opt-in for jamie.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Chunk-3 tests live at /app/backend/tests/test_chunk3.py; chunk-1/2 at /app/backend/tests/backend_test.py and test_chunk2.py. Key gotchas: /api/quizzes requires auth and returns {department, questions:[{q,options}]}; /api/quizzes/submit expects answers as List[int] (ordered by question index), not [{qid, option_idx}]. /api/facts/react needs {fact_id, reaction}. /api/events POST body needs user_id, not person. /api/words/today returns `def`, not `definition`. Seeded sam/casey have role='employee' — to properly test team_lead, call /api/admin/users PATCH role (via admin) or fix seed.",
+  "rca of the issue": "seed_demo() loop contains `if await db.users.find_one({email}): continue` which skips role updates for existing seeded users. Demo users from earlier chunks (created with default role='employee') never got upgraded when role field was added to demo_users list. Reproduction: call /api/auth/login for sam@demo.com, inspect user.role — will be 'employee'. Mitigation: inside the loop, when user exists, do `await db.users.update_one({'email': du['email']}, {'$set': {'role': du.get('role','employee')}})` before continuing. Or drop collection in dev and let seed recreate."
+}

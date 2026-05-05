@@ -4,6 +4,7 @@ import { BrutalButton, BrutalCard, BrutalBadge } from "../components/brutal";
 import { EyeCareTimer } from "../components/EyeCareTimer";
 import { WellnessPopup } from "../components/WellnessPopup";
 import WeeklyInsightsCard from "../components/WeeklyInsightsCard";
+import { DidYouKnowCard, WordOfDayCard, SpotlightCard } from "../components/DashboardCards";
 import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -107,6 +108,13 @@ export default function Dashboard() {
           </div>
           <p className="mt-3 text-xs font-bold uppercase">Keep grinding, champ</p>
         </motion.div>
+      </div>
+
+      {/* Daily knowledge row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <DidYouKnowCard />
+        <WordOfDayCard />
+        <SpotlightCard />
       </div>
 
       {/* Quick actions */}

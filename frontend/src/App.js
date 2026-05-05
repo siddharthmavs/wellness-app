@@ -15,6 +15,12 @@ import Profile from "./pages/Profile";
 import Shoutouts from "./pages/Shoutouts";
 import HelpBoard from "./pages/HelpBoard";
 import AdminDashboard from "./pages/AdminDashboard";
+import Music from "./pages/Music";
+import Polls from "./pages/Polls";
+import Games from "./pages/Games";
+import Quiz from "./pages/Quiz";
+import Learn from "./pages/Learn";
+import Events from "./pages/Events";
 
 const PrivateLayout = ({ children, adminOnly = false }) => {
   const { token, user } = useAuthStore();
@@ -30,11 +36,8 @@ const PrivateLayout = ({ children, adminOnly = false }) => {
 
 function App() {
   const { token, setUser } = useAuthStore();
-
   useEffect(() => {
-    if (token) {
-      api.get("/auth/me").then(({ data }) => setUser(data)).catch(() => {});
-    }
+    if (token) api.get("/auth/me").then(({ data }) => setUser(data)).catch(() => {});
   }, [token, setUser]);
 
   return (
@@ -55,6 +58,12 @@ function App() {
           <Route path="/funwall" element={<PrivateLayout><FunWall /></PrivateLayout>} />
           <Route path="/shoutouts" element={<PrivateLayout><Shoutouts /></PrivateLayout>} />
           <Route path="/help" element={<PrivateLayout><HelpBoard /></PrivateLayout>} />
+          <Route path="/music" element={<PrivateLayout><Music /></PrivateLayout>} />
+          <Route path="/polls" element={<PrivateLayout><Polls /></PrivateLayout>} />
+          <Route path="/games" element={<PrivateLayout><Games /></PrivateLayout>} />
+          <Route path="/quiz" element={<PrivateLayout><Quiz /></PrivateLayout>} />
+          <Route path="/learn" element={<PrivateLayout><Learn /></PrivateLayout>} />
+          <Route path="/events" element={<PrivateLayout><Events /></PrivateLayout>} />
           <Route path="/profile" element={<PrivateLayout><Profile /></PrivateLayout>} />
           <Route path="/admin" element={<PrivateLayout adminOnly><AdminDashboard /></PrivateLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
