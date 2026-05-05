@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { api } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/brutal";
 import { toast } from "sonner";
-import { Users, Trophy, Bell, BarChart3, MessageSquare, Trash2 } from "lucide-react";
+import { Users, Trophy, Bell, BarChart3, MessageSquare, Trash2, Gift } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LineChart, Line, Tooltip } from "recharts";
 
 const TABS = [
@@ -12,6 +12,7 @@ const TABS = [
   { id: "reminders", label: "REMINDERS", icon: Bell, color: "cyan" },
   { id: "analytics", label: "ANALYTICS", icon: BarChart3, color: "green" },
   { id: "feedback", label: "FEEDBACK", icon: MessageSquare, color: "yellow" },
+  { id: "rewards", label: "REWARDS", icon: Gift, color: "pink" },
 ];
 
 const PALETTE = ["#FFE600", "#00E5FF", "#FF4D6D", "#00C853"];
@@ -42,6 +43,7 @@ export default function AdminDashboard() {
       {tab === "reminders" && <RemindersTab />}
       {tab === "analytics" && <AnalyticsTab />}
       {tab === "feedback" && <FeedbackTab />}
+      {tab === "rewards" && <RewardsTab />}
     </div>
   );
 }
@@ -277,5 +279,88 @@ const FeedbackTab = () => {
         {items.length === 0 && <div className="text-sm font-bold uppercase">No feedback yet.</div>}
       </div>
     </BrutalCard>
+  );
+};
+
+const RewardsTab = () => {
+  const [users, setUsers] = useState([]);
+  const [rewards, setRewards] = useState([]);
+  const [form, setForm] = useState({ user_id: "", type: "coupon", points: 0, message: "", code: "" });
+
+  const load = async () => {
+    const [u, r] = await Promise.all([api.get("/admin/users"), api.get("/admin/rewards")]);
+    setUsers(u.data);
+    setRewards(r.data);
+  };
+  useEffect(() => { load(); }, []);
+
+  const issue = async () => {
+    if (!form.user_id || !form.message) { toast.error("Pick user + add message"); return; }
+    await api.post("/admin/rewards", form);
+    toast.success("🎁 Reward issued!");
+    setForm({ user_id: "", type: "coupon", points: 0, message: "", code: "" });
+    load();
+  };
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6" data-testid="rewards-tab">
+      <BrutalCard color="pink" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3 text-white">🎁 Issue Surprise Reward</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="font-black uppercase text-xs text-white block mb-1">Recipient</label>
+            <select
+              data-testid="reward-user"
+              value={form.user_id}
+              onChange={(e) => setForm({ ...form, user_id: e.target.value })}
+              className="w-full border-[3px] border-black px-3 py-3 font-bold uppercase bg-white"
+            >
+              <option value="">— pick a legend —</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.department}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="font-black uppercase text-xs text-white block mb-1">Type</label>
+            <select
+              data-testid="reward-type"
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="w-full border-[3px] border-black px-3 py-3 font-bold uppercase bg-white"
+            >
+              <option value="coupon">🎟️ Coupon</option>
+              <option value="points">⚡ Bonus Points</option>
+              <option value="shoutout">📣 Shoutout</option>
+            </select>
+          </div>
+          {form.type === "points" && (
+            <BrutalInput type="number" placeholder="Points to grant" value={form.points} onChange={(e) => setForm({ ...form, points: +e.target.value })} />
+          )}
+          {form.type === "coupon" && (
+            <BrutalInput placeholder="Coupon code (e.g. PIZZA50)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} />
+          )}
+          <BrutalInput data-testid="reward-message" placeholder="Reason / message" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
+          <BrutalButton data-testid="reward-issue" color="green" onClick={issue} className="w-full">🚀 ISSUE</BrutalButton>
+        </div>
+      </BrutalCard>
+
+      <BrutalCard color="white" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3">🏆 Recently Issued</h3>
+        <div className="space-y-2 max-h-[600px] overflow-y-auto">
+          {rewards.map((r) => (
+            <div key={r.id} className="border-[3px] border-black p-3 bg-white">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="bg-brutal-yellow border-[2px] border-black px-2 py-0.5 font-black text-[10px] uppercase">{r.type}</span>
+                <span className="font-black text-sm">→ {r.user_name}</span>
+                {r.claimed && <span className="bg-brutal-green border-[2px] border-black px-2 py-0.5 font-black text-[10px] uppercase">✅ claimed</span>}
+                <span className="text-[10px] font-bold ml-auto">{new Date(r.created_at).toLocaleDateString()}</span>
+              </div>
+              <div className="text-sm font-medium">{r.message}</div>
+              {r.code && <div className="text-xs font-mono font-black mt-1">CODE: {r.code}</div>}
+            </div>
+          ))}
+          {rewards.length === 0 && <div className="text-sm font-bold uppercase">No rewards issued yet.</div>}
+        </div>
+      </BrutalCard>
+    </div>
   );
 };

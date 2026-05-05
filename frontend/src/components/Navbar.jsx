@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuthStore } from "../store";
+import { useAuthStore, useThemeStore } from "../store";
 import {
   LogOut, Zap, Trophy, Smile, MessageSquare, User, LayoutDashboard,
   Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
-  BookOpen, Cake, MoreHorizontal,
+  BookOpen, Cake, MoreHorizontal, Sun, Moon,
 } from "lucide-react";
 
 const PRIMARY = [
@@ -29,6 +29,7 @@ const MORE = [
 
 export const Navbar = () => {
   const { user, logout } = useAuthStore();
+  const { theme, toggle: toggleTheme } = useThemeStore();
   const nav = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
   const links = [...PRIMARY];
@@ -104,6 +105,15 @@ export const Navbar = () => {
             <span className="font-black text-xs uppercase">🔥 {user?.streak || 0}</span>
             <span className="font-black text-xs uppercase border-l-2 border-black pl-2">⚡ {user?.points || 0}</span>
           </div>
+          <motion.button
+            whileTap={{ scale: 0.92, rotate: 8 }}
+            data-testid="theme-toggle"
+            onClick={toggleTheme}
+            className="bg-brutal-cyan border-[3px] border-black p-2 shadow-brutal-sm"
+            title="Toggle theme"
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </motion.button>
           <motion.button
             whileTap={{ scale: 0.95, x: 2, y: 2 }}
             data-testid="logout-btn"

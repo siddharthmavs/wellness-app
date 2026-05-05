@@ -87,6 +87,7 @@ class MoodReq(BaseModel):
     emoji: str
     label: str
     note: Optional[str] = ""
+    productivity: Optional[str] = None  # High | Med | Low
 
 class PostReq(BaseModel):
     content: str
@@ -238,6 +239,7 @@ async def log_mood(body: MoodReq, user=Depends(get_current_user)):
         "emoji": body.emoji,
         "label": body.label,
         "note": body.note or "",
+        "productivity": body.productivity or None,
         "created_at": now_iso(),
     }
     await db.moods.insert_one(entry)
@@ -1377,6 +1379,60 @@ async def post_recap(admin=Depends(require_admin)):
     await db.posts.insert_one(post)
     post.pop("_id", None)
     return post
+
+# ---------- Rewards (admin issues; users receive) ----------
+REWARD_TYPES = ["coupon", "points", "shoutout"]
+
+class RewardReq(BaseModel):
+    user_id: str
+    type: str
+    points: Optional[int] = 0
+    message: str
+    code: Optional[str] = None  # for coupon
+
+@api.post("/admin/rewards")
+async def issue_reward(body: RewardReq, admin=Depends(require_admin)):
+    if body.type not in REWARD_TYPES:
+        raise HTTPException(400, "Invalid reward type")
+    target = await db.users.find_one({"id": body.user_id}, {"_id": 0, "name": 1, "id": 1})
+    if not target:
+        raise HTTPException(404, "User not found")
+    rew = {
+        "id": str(uuid.uuid4()),
+        "user_id": body.user_id,
+        "user_name": target["name"],
+        "issued_by": admin["name"],
+        "issued_by_id": admin["id"],
+        "type": body.type,
+        "points": body.points or 0,
+        "message": body.message,
+        "code": body.code or "",
+        "claimed": False,
+        "created_at": now_iso(),
+    }
+    await db.rewards.insert_one(rew)
+    rew.pop("_id", None)
+    if body.type == "points" and body.points:
+        await db.users.update_one({"id": body.user_id}, {"$inc": {"points": body.points}})
+    return rew
+
+@api.get("/admin/rewards")
+async def list_all_rewards(admin=Depends(require_admin)):
+    items = await db.rewards.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+@api.get("/rewards/me")
+async def my_rewards(user=Depends(get_current_user)):
+    items = await db.rewards.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return items
+
+@api.post("/rewards/{rid}/claim")
+async def claim_reward(rid: str, user=Depends(get_current_user)):
+    rew = await db.rewards.find_one({"id": rid}, {"_id": 0})
+    if not rew or rew["user_id"] != user["id"]:
+        raise HTTPException(404, "Not found")
+    await db.rewards.update_one({"id": rid}, {"$set": {"claimed": True, "claimed_at": now_iso()}})
+    return {"claimed": True}
 
 # ---------- Users lookup (for shoutout picker etc) ----------
 @api.get("/users")

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api } from "../lib/api";
-import { BrutalButton, BrutalCard, BrutalInput } from "../components/brutal";
+import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/brutal";
+import { EmptyState } from "../components/Skeleton";
 import { toast } from "sonner";
 
 const MOODS = [
@@ -15,8 +16,15 @@ const MOODS = [
   { emoji: "🧊", label: "Cold", color: "bg-brutal-cyan" },
 ];
 
+const PRODUCTIVITY = [
+  { id: "High", label: "🚀 High", color: "green" },
+  { id: "Med", label: "🌤️ Medium", color: "yellow" },
+  { id: "Low", label: "🐢 Low", color: "pink" },
+];
+
 export default function Mood() {
   const [selected, setSelected] = useState(null);
+  const [productivity, setProductivity] = useState(null);
   const [note, setNote] = useState("");
   const [logs, setLogs] = useState([]);
 
@@ -29,10 +37,10 @@ export default function Mood() {
 
   const submit = async () => {
     if (!selected) { toast.error("Pick a vibe first"); return; }
-    await api.post("/mood", { emoji: selected.emoji, label: selected.label, note });
+    await api.post("/mood", { emoji: selected.emoji, label: selected.label, note, productivity });
     await api.post("/activities", { type: "mood" });
     toast.success(`🎭 Logged ${selected.emoji}`);
-    setSelected(null); setNote("");
+    setSelected(null); setNote(""); setProductivity(null);
     load();
   };
 
@@ -62,7 +70,15 @@ export default function Mood() {
         ))}
       </div>
 
-      <BrutalCard color="white" className="mb-8">
+      <BrutalCard color="white" className="mb-8" hover={false}>
+        <div className="text-xs font-black uppercase mb-2">📊 Productivity today</div>
+        <div className="flex gap-2 flex-wrap mb-4" data-testid="productivity-picker">
+          {PRODUCTIVITY.map((p) => (
+            <BrutalTag key={p.id} active={productivity === p.id} color={p.color} onClick={() => setProductivity(p.id)}>
+              {p.label}
+            </BrutalTag>
+          ))}
+        </div>
         <label className="font-bold uppercase text-xs tracking-wider block mb-1">Note (optional)</label>
         <BrutalInput
           data-testid="mood-note"
@@ -76,16 +92,25 @@ export default function Mood() {
       </BrutalCard>
 
       <h2 className="font-display font-black text-2xl uppercase mb-3">Past Vibes</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="mood-history">
-        {logs.map((l) => (
-          <div key={l.id} className="bg-white border-[3px] border-black shadow-brutal p-3 rounded-[2px]">
-            <div className="text-3xl">{l.emoji}</div>
-            <div className="font-black text-sm uppercase">{l.label}</div>
-            <div className="text-[10px] text-gray-600">{new Date(l.created_at).toLocaleString()}</div>
-            {l.note && <div className="text-xs mt-1 font-medium">"{l.note}"</div>}
-          </div>
-        ))}
-      </div>
+      {logs.length === 0 ? (
+        <EmptyState emoji="🌫️" title="No vibes logged" subtitle="Drop an emoji and write the page." />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="mood-history">
+          {logs.map((l) => (
+            <div key={l.id} className="bg-white border-[3px] border-black shadow-brutal p-3 rounded-[2px]">
+              <div className="text-3xl">{l.emoji}</div>
+              <div className="font-black text-sm uppercase">{l.label}</div>
+              {l.productivity && (
+                <div className="mt-1 inline-block bg-brutal-yellow border-[2px] border-black px-1.5 py-0.5 font-black text-[10px] uppercase">
+                  {PRODUCTIVITY.find(p => p.id === l.productivity)?.label || l.productivity}
+                </div>
+              )}
+              <div className="text-[10px] text-gray-600 mt-1">{new Date(l.created_at).toLocaleString()}</div>
+              {l.note && <div className="text-xs mt-1 font-medium">"{l.note}"</div>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

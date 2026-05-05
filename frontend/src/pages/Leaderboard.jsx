@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { api } from "../lib/api";
 import { BrutalTag } from "../components/brutal";
 import { Crown, Trophy, Medal } from "lucide-react";
+import { Skeleton, EmptyState } from "../components/Skeleton";
 
 const PERIODS = [
   { id: "daily", label: "📅 Today" },
@@ -110,7 +111,7 @@ export default function Leaderboard() {
               </motion.div>
             );
           })}
-          {users.length === 0 && <div className="text-center py-10 font-bold uppercase">No data. Go earn points, champ.</div>}
+          {users.length === 0 && <EmptyState emoji="🏜️" title="No data yet" subtitle="Go earn some points, champ." />}
         </div>
       ) : (
         <div className="space-y-3" data-testid="team-leaderboard">

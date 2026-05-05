@@ -2,9 +2,10 @@ import React, { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
-import { useAuthStore } from "./store";
+import { useAuthStore, useThemeStore } from "./store";
 import { api } from "./lib/api";
 import { Navbar } from "./components/Navbar";
+import { BottomNav } from "./components/BottomNav";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
@@ -30,12 +31,15 @@ const PrivateLayout = ({ children, adminOnly = false }) => {
     <div className="min-h-screen bg-white">
       <Navbar />
       {children}
+      <BottomNav />
     </div>
   );
 };
 
 function App() {
   const { token, setUser } = useAuthStore();
+  const applyTheme = useThemeStore((s) => s.apply);
+  useEffect(() => { applyTheme(); }, [applyTheme]);
   useEffect(() => {
     if (token) api.get("/auth/me").then(({ data }) => setUser(data)).catch(() => {});
   }, [token, setUser]);

@@ -4,6 +4,7 @@ import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { BrutalCard, BrutalBadge, BrutalButton, BrutalInput, BrutalTag } from "../components/brutal";
 import { BuddyCard, PlantCard } from "../components/BuddyAndPlant";
+import { RewardsSection } from "../components/RewardsSection";
 import { toast } from "sonner";
 
 const FB_CATEGORIES = ["Wellness", "Social", "Technical", "General"];
@@ -89,6 +90,8 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      <RewardsSection />
 
       <h2 className="font-display font-black text-3xl uppercase mb-4">🤝 Connections</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">

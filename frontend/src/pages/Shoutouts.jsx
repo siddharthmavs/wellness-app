@@ -5,6 +5,7 @@ import { BrutalButton, BrutalCard, BrutalInput, BrutalTag, BrutalBadge } from ".
 import { useAuthStore } from "../store";
 import { toast } from "sonner";
 import { Trophy } from "lucide-react";
+import { EmptyState } from "../components/Skeleton";
 
 const CATEGORIES = ["Helpfulness", "Teamwork", "Problem Solving", "Going Extra Mile", "Just Because"];
 const REACTS = ["😂", "❤️", "👏", "🔥"];
@@ -136,7 +137,7 @@ export default function Shoutouts() {
             </div>
           </motion.div>
         ))}
-        {shouts.length === 0 && <div className="text-sm font-bold uppercase">No shoutouts yet. Be the first to spread love.</div>}
+        {shouts.length === 0 && <EmptyState emoji="📢" title="Quiet here" subtitle="Be the first to spread love." />}
       </div>
     </div>
   );

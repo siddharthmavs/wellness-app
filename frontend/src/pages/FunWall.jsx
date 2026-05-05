@@ -5,12 +5,15 @@ import { BrutalButton, BrutalCard, BrutalInput } from "../components/brutal";
 import { Heart, MessageCircle, ImagePlus } from "lucide-react";
 import { useAuthStore } from "../store";
 import { toast } from "sonner";
+import { MentionInput, renderMentions } from "../components/MentionInput";
+import { Skeleton, EmptyState } from "../components/Skeleton";
 
 const REACTS = ["😂", "❤️", "👏", "🔥"];
 
 export default function FunWall() {
   const { user } = useAuthStore();
   const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [content, setContent] = useState("");
   const [image, setImage] = useState("");
   const [commentText, setCommentText] = useState({});
@@ -19,6 +22,7 @@ export default function FunWall() {
   const load = async () => {
     const { data } = await api.get("/posts");
     setPosts(data);
+    setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
@@ -70,13 +74,12 @@ export default function FunWall() {
       </motion.div>
 
       <BrutalCard color="white" className="mb-6" tilt={0} hover={false}>
-        <textarea
-          data-testid="post-content"
-          placeholder="Got something to say, legend?"
+        <MentionInput
+          testid="post-content"
+          placeholder="Got something to say, legend? Try @ to mention"
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={setContent}
           rows={3}
-          className="w-full border-[3px] border-black px-4 py-3 bg-white focus:outline-none focus:ring-4 focus:ring-brutal-cyan font-medium rounded-[2px] resize-none"
         />
         {image && (
           <div className="mt-3 relative inline-block">
@@ -115,7 +118,7 @@ export default function FunWall() {
                 <div className="text-[10px] font-bold uppercase text-gray-600">{new Date(p.created_at).toLocaleString()}</div>
               </div>
             </div>
-            <div className="font-semibold text-lg mb-3">{p.content}</div>
+            <div className="font-semibold text-lg mb-3">{renderMentions(p.content)}</div>
             {p.image && <img src={p.image} alt="" className="w-full border-[3px] border-black rounded-[2px] mb-3" />}
 
             <div className="flex gap-2 items-center flex-wrap">
@@ -155,7 +158,7 @@ export default function FunWall() {
                     <img src={c.user_avatar} alt={c.user_name} className="w-7 h-7 border-[2px] border-black bg-brutal-cyan" />
                     <div className="flex-1 bg-brutal-yellow/40 border-[2px] border-black px-2 py-1 rounded-[2px]">
                       <div className="font-black text-xs uppercase">{c.user_name}</div>
-                      <div className="text-sm font-medium">{c.content}</div>
+                      <div className="text-sm font-medium">{renderMentions(c.content)}</div>
                     </div>
                   </div>
                 ))}
@@ -163,12 +166,12 @@ export default function FunWall() {
             )}
 
             <div className="mt-3 flex gap-2">
-              <BrutalInput
-                data-testid={`comment-input-${p.id}`}
-                placeholder="Drop a comment..."
+              <MentionInput
+                asInput
+                testid={`comment-input-${p.id}`}
+                placeholder="Drop a comment... try @"
                 value={commentText[p.id] || ""}
-                onChange={(e) => setCommentText({ ...commentText, [p.id]: e.target.value })}
-                onKeyDown={(e) => { if (e.key === "Enter") comment(p.id); }}
+                onChange={(v) => setCommentText({ ...commentText, [p.id]: v })}
               />
               <BrutalButton data-testid={`comment-submit-${p.id}`} color="cyan" size="sm" onClick={() => comment(p.id)}>
                 POST
@@ -176,8 +179,9 @@ export default function FunWall() {
             </div>
           </motion.div>
         ))}
-        {posts.length === 0 && (
-          <div className="text-center py-10 font-bold uppercase">No posts yet. Be the first legend.</div>
+        {loading && posts.length === 0 && <Skeleton className="h-44" count={3} />}
+        {!loading && posts.length === 0 && (
+          <EmptyState emoji="🦗" title="No posts yet" subtitle="Be the first legend." />
         )}
       </div>
     </div>

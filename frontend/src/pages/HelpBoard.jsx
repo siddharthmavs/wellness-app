@@ -5,6 +5,7 @@ import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/
 import { Heart, ImagePlus, MessageCircle } from "lucide-react";
 import { useAuthStore } from "../store";
 import { toast } from "sonner";
+import { EmptyState } from "../components/Skeleton";
 
 const CATS = ["All", "Housing", "Travel", "Buy-Sell", "Recommendations", "General"];
 const ICONS = { Housing: "🏠", Travel: "🚗", "Buy-Sell": "🛒", Recommendations: "🍽️", General: "💬" };
@@ -134,7 +135,7 @@ export default function HelpBoard() {
             </div>
           </motion.div>
         ))}
-        {posts.length === 0 && <div className="text-sm font-bold uppercase">Nothing here yet. Be a hero.</div>}
+        {posts.length === 0 && <EmptyState emoji="🤝" title="Nothing here yet" subtitle="Be a hero. Post a request or offer help." />}
       </div>
     </div>
   );
