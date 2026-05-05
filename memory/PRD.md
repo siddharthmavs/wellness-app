@@ -26,63 +26,29 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 ## ✅ Implemented (as of Feb 2026)
 
 ### Chunk 1 (v1)
-- JWT auth (register, login, me) with bcrypt
-- Wellness Notification full-screen popup with YES/IGNORE
-- Quick action wellness logs (water/eye_care/stand/breathing) with point rewards
-- Eye Care 20-20-20 timer
-- Daily Challenges
-- Leaderboard (daily/weekly/monthly/all)
-- Mood tracker with emoji + history
-- Fun Wall posts with base64 image upload, like, comment
-- AI mood insight via Claude
-- Profile with badges grid + activity feed
-- Auto-seeded demo data
+- JWT auth, Wellness popup, Eye Care 20-20-20, Quick actions, Mood, Fun Wall, AI insight, Profile, Badges, Challenges, Auto-seed
 
 ### Chunk 2 (Engagement + Recognition)
-- Roles (employee/team_lead/admin) + admin guard
-- Admin Dashboard: Users mgmt, Challenges CRUD, Reminders config, Analytics (DAU/WAU/MAU + recharts), Feedback inbox
-- Shoutout Wall: peer recognition with category, @mentions multi-select, weekly digest of top 3, emoji reactions
-- Help Board: 5 categories (Housing/Travel/Buy-Sell/Recommendations/General) with image, like, comment
-- Team Leaderboard with podium 🥇🥈🥉 for top 3
-- Weekly Wellness Insights card on dashboard (week-over-week % change)
-- DND toggle on profile
-- Fun Wall emoji reactions (😂❤️👏🔥)
-- Categorized Feedback (with anonymous toggle)
-- Conditional Admin nav link
+- Roles + admin guard, Admin Dashboard (Users, Challenges, Reminders, Analytics, Feedback), Shoutout Wall, Help Board, Team Leaderboard with podium, Weekly Insights, DND, Fun Wall emoji reactions, Categorized Feedback
 
-## 📋 Backlog (from PRD, P0/P1 priorities)
-
-### P0 (next chunk candidates)
-- Music Player widget (Focus/Relax/Energy playlists, persistent bottom)
-- Polls & Voting
-- Birthday/Anniversary celebration auto-banner
-- Did You Know? daily tech fact card
-- Word of the Day card
-
-### P1
-- Buddy System (new joiner pairing)
+### Chunk 3 (PRD complete — "add all")
+- Music Player (3 playlists, persistent bottom widget)
+- Polls & Voting (admin/team_lead create, employees vote +2 pts)
+- Mini Games hub: Bubble Pop, Memory Match, Word Scramble, Zen Doodle (with score leaderboard, capped points)
+- Department Quizzes (7 departments, 5 Qs each, +3/correct +15 bonus for 100%)
+- Learning Bites (60-sec micro-lessons w/ "Tried it" +5)
+- Birthdays/Anniversaries (Today + Upcoming pages, auto-seeded for demo users)
+- Daily Tech Fact (Did You Know?) + Word of the Day cards on dashboard
 - Employee Spotlight (weekly auto-rotation)
-- Learning Bites (60-sec micro-lessons)
-- Mini Games (Bubble Pop, Zen Doodle, Word Scramble, Memory Match)
-- Weekly Department Quizzes
-- Dark mode toggle
-- Productivity rating in mood tracker
-- Notification snooze (5 min follow-up)
-- Anonymous mode for leaderboard
+- Buddy System (auto-pair + weekly check-in +10) on profile
+- Desk Plant Challenge (opt-in + daily check-in +3 + plant leaderboard) on profile
+- Wellness Recap autopost (admin endpoint posts top streakers + team-of-week to Fun Wall)
+- Navbar with primary links + MORE dropdown for full feature access
 
-### P2
-- Desk Plant Challenge
-- Surprise Reward issuance
-- Fact archive page
-- Word bookmarks
-- Buddy 30-day check-in tracker
-- Productivity heatmap for admin
-- Skeleton loaders / illustrated empty states
-- Mobile bottom-nav optimization
-
-## Test Status
-- iteration_1: backend 96%, frontend 85% (Chunk 1)
+## Test iterations
+- iteration_1: backend 96%, frontend 85% (Chunk 1, fixed streak bug)
 - iteration_2: backend 100%, frontend 100% (Chunk 2)
+- iteration_3: backend 96%, frontend 100% (Chunk 3, fixed seed role-update bug)
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py

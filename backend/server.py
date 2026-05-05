@@ -394,7 +394,14 @@ async def seed_data():
         {"name": "Casey Boss", "email": "casey@demo.com", "password": "demo1234", "department": "Product", "points": 1680, "color": "FFE600", "role": "team_lead"},
     ]
     for du in demo_users:
-        if await db.users.find_one({"email": du["email"]}):
+        existing = await db.users.find_one({"email": du["email"]})
+        if existing:
+            # Ensure role is up-to-date for existing seeded users
+            if existing.get("role") != du.get("role", "employee"):
+                await db.users.update_one(
+                    {"email": du["email"]},
+                    {"$set": {"role": du.get("role", "employee")}},
+                )
             continue
         uid = str(uuid.uuid4())
         await db.users.insert_one({
