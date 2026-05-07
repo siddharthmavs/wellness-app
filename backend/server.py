@@ -147,7 +147,8 @@ POINTS_MAP = {"water": 10, "eye_care": 15, "stand": 10, "breathing": 20, "mood":
 
 @api.post("/activities")
 async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
-    pts = body.points or POINTS_MAP.get(body.type, 5)
+    pc = await get_points_config()
+    pts = body.points or pc.get(body.type, 5)
     activity = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -158,10 +159,10 @@ async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
     await db.activities.insert_one(activity)
     activity.pop("_id", None)
 
-    # Update user points / streak / level / wellness_score
+    gc = await get_game_config()
     new_points = user.get("points", 0) + pts
-    new_level = 1 + new_points // 200
-    new_score = min(100, user.get("wellness_score", 50) + 2)
+    new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
+    new_score = min(100, user.get("wellness_score", 50) + gc.get("wellness_score_increment", 2))
 
     # streak: increment on first activity of a new calendar day; reset if > 36h gap
     streak = user.get("streak", 0)
@@ -1159,6 +1160,15 @@ QUIZZES = {
 @api.get("/quizzes")
 async def get_quiz(department: Optional[str] = None, user=Depends(get_current_user)):
     dept = department or user.get("department") or "General"
+    # Check for custom quiz first
+    custom = await db.custom_quizzes.find_one({"department": dept}, {"_id": 0})
+    if custom and custom.get("questions"):
+        return {
+            "department": dept,
+            "title": custom.get("title", f"{dept} Quiz"),
+            "questions": [{"q": q["q"], "options": q["options"]} for q in custom["questions"]],
+            "custom": True,
+        }
     if dept not in QUIZZES:
         dept = "General"
     return {"department": dept, "questions": [{"q": q["q"], "options": q["options"]} for q in QUIZZES[dept]]}
@@ -1169,8 +1179,14 @@ class QuizSubmit(BaseModel):
 
 @api.post("/quizzes/submit")
 async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
-    dept = body.department if body.department in QUIZZES else "General"
-    questions = QUIZZES[dept]
+    dept = body.department
+    custom = await db.custom_quizzes.find_one({"department": dept}, {"_id": 0})
+    if custom and custom.get("questions"):
+        questions = custom["questions"]
+    else:
+        if dept not in QUIZZES:
+            dept = "General"
+        questions = QUIZZES[dept]
     correct = 0
     results = []
     for i, q in enumerate(questions):
@@ -1179,7 +1195,8 @@ async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
         if ok:
             correct += 1
         results.append({"q": q["q"], "your": ans, "correct": q["answer"], "ok": ok})
-    pts = correct * 3 + (15 if correct == len(questions) else 0)
+    pc = await get_points_config()
+    pts = correct * pc.get("quiz_per_correct", 3) + (pc.get("quiz_perfect_bonus", 15) if correct == len(questions) else 0)
     rec = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -1433,6 +1450,261 @@ async def claim_reward(rid: str, user=Depends(get_current_user)):
         raise HTTPException(404, "Not found")
     await db.rewards.update_one({"id": rid}, {"$set": {"claimed": True, "claimed_at": now_iso()}})
     return {"claimed": True}
+
+# ---------- Configurable Points & Gamification ----------
+DEFAULT_POINTS_CONFIG = {
+    "water": 10, "eye_care": 15, "stand": 10, "breathing": 20,
+    "mood": 5, "post": 10, "quiz_per_correct": 3, "quiz_perfect_bonus": 15,
+    "shoutout_sender": 5, "shoutout_receiver": 10, "poll_vote": 2,
+    "buddy_checkin": 10, "plant_checkin": 3, "bite_tried": 5,
+    "fact_react": 2, "game_score_per_10": 1, "game_score_max": 20,
+}
+
+DEFAULT_GAME_CONFIG = {
+    "level_threshold": 200,
+    "streak_gap_hours": 36,
+    "wellness_score_increment": 2,
+}
+
+async def get_points_config():
+    cfg = await db.config.find_one({"key": "points_config"}, {"_id": 0})
+    if not cfg:
+        return DEFAULT_POINTS_CONFIG.copy()
+    return {**DEFAULT_POINTS_CONFIG, **{k: v for k, v in cfg.items() if k != "key"}}
+
+async def get_game_config():
+    cfg = await db.config.find_one({"key": "game_config"}, {"_id": 0})
+    if not cfg:
+        return DEFAULT_GAME_CONFIG.copy()
+    return {**DEFAULT_GAME_CONFIG, **{k: v for k, v in cfg.items() if k != "key"}}
+
+@api.get("/admin/points-config")
+async def get_pc(admin=Depends(require_admin)):
+    return await get_points_config()
+
+@api.put("/admin/points-config")
+async def set_pc(body: dict, admin=Depends(require_admin)):
+    clean = {k: int(v) for k, v in body.items() if k in DEFAULT_POINTS_CONFIG and isinstance(v, (int, float))}
+    await db.config.update_one({"key": "points_config"}, {"$set": {"key": "points_config", **clean}}, upsert=True)
+    return await get_points_config()
+
+@api.get("/admin/game-config")
+async def get_gc(admin=Depends(require_admin)):
+    return await get_game_config()
+
+@api.put("/admin/game-config")
+async def set_gc(body: dict, admin=Depends(require_admin)):
+    clean = {k: int(v) for k, v in body.items() if k in DEFAULT_GAME_CONFIG and isinstance(v, (int, float))}
+    await db.config.update_one({"key": "game_config"}, {"$set": {"key": "game_config", **clean}}, upsert=True)
+    return await get_game_config()
+
+# ---------- Manual Points Adjustment + Audit Log ----------
+class PointAward(BaseModel):
+    user_id: Optional[str] = None
+    team_id: Optional[str] = None
+    points: int
+    reason: str
+
+@api.post("/admin/points/award")
+async def admin_award_points(body: PointAward, admin=Depends(require_admin)):
+    if not body.user_id and not body.team_id:
+        raise HTTPException(400, "Provide user_id or team_id")
+    log = {
+        "id": str(uuid.uuid4()),
+        "user_id": body.user_id,
+        "team_id": body.team_id,
+        "points": body.points,
+        "reason": body.reason,
+        "issued_by": admin["name"],
+        "issued_by_id": admin["id"],
+        "created_at": now_iso(),
+    }
+    if body.user_id:
+        await db.users.update_one({"id": body.user_id}, {"$inc": {"points": body.points}})
+    if body.team_id:
+        await db.game_teams.update_one({"id": body.team_id}, {"$inc": {"team_points": body.points}})
+    await db.points_log.insert_one(log)
+    log.pop("_id", None)
+    return log
+
+@api.get("/admin/points/log")
+async def points_log(admin=Depends(require_admin)):
+    items = await db.points_log.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+# ---------- Quiz CRUD (admin) ----------
+class QuizPayload(BaseModel):
+    department: str
+    title: Optional[str] = None
+    questions: List[dict]  # [{q, options, answer}]
+
+@api.get("/admin/quizzes")
+async def admin_list_quizzes(admin=Depends(require_admin)):
+    items = await db.custom_quizzes.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+@api.post("/admin/quizzes")
+async def admin_create_quiz(body: QuizPayload, admin=Depends(require_admin)):
+    for q in body.questions:
+        if not isinstance(q.get("options"), list) or len(q["options"]) < 2:
+            raise HTTPException(400, "Each question needs 2+ options")
+        if not isinstance(q.get("answer"), int) or q["answer"] < 0 or q["answer"] >= len(q["options"]):
+            raise HTTPException(400, "answer must be valid index")
+    quiz = {
+        "id": str(uuid.uuid4()),
+        "department": body.department,
+        "title": body.title or f"{body.department} Quiz",
+        "questions": body.questions,
+        "created_at": now_iso(),
+    }
+    await db.custom_quizzes.insert_one(quiz)
+    quiz.pop("_id", None)
+    return quiz
+
+@api.delete("/admin/quizzes/{qid}")
+async def admin_delete_quiz(qid: str, admin=Depends(require_admin)):
+    await db.custom_quizzes.delete_one({"id": qid})
+    return {"deleted": True}
+
+# ---------- Announcements (push notifications) ----------
+class AnnouncementReq(BaseModel):
+    title: str
+    message: str
+    target: str = "all"  # "all" or list as comma-separated user_ids
+    target_user_ids: Optional[List[str]] = None
+    kind: Optional[str] = "info"  # info, alert, party
+
+@api.post("/admin/announcements")
+async def create_announcement(body: AnnouncementReq, admin=Depends(require_admin)):
+    if body.target == "all":
+        users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(1000)
+        recipient_ids = [u["id"] for u in users]
+    else:
+        recipient_ids = body.target_user_ids or []
+    ann = {
+        "id": str(uuid.uuid4()),
+        "title": body.title,
+        "message": body.message,
+        "kind": body.kind or "info",
+        "from_id": admin["id"],
+        "from_name": admin["name"],
+        "recipients": recipient_ids,
+        "read_by": [],
+        "created_at": now_iso(),
+    }
+    await db.announcements.insert_one(ann)
+    ann.pop("_id", None)
+    return ann
+
+@api.get("/admin/announcements")
+async def admin_list_announcements(admin=Depends(require_admin)):
+    items = await db.announcements.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+@api.get("/announcements/me")
+async def my_announcements(user=Depends(get_current_user)):
+    items = await db.announcements.find({"recipients": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    for a in items:
+        a["unread"] = user["id"] not in (a.get("read_by") or [])
+    return items
+
+@api.post("/announcements/{aid}/read")
+async def mark_read(aid: str, user=Depends(get_current_user)):
+    await db.announcements.update_one({"id": aid}, {"$addToSet": {"read_by": user["id"]}})
+    return {"ok": True}
+
+# ---------- Game Teams ----------
+GAME_TEAM_COLORS = ["yellow", "cyan", "pink", "green"]
+
+class GameTeamReq(BaseModel):
+    name: str
+    color: Optional[str] = "yellow"
+
+class GameTeamMembers(BaseModel):
+    user_ids: List[str]
+
+class ShuffleReq(BaseModel):
+    num_teams: int = 4
+    name_prefix: Optional[str] = "Squad"
+
+@api.post("/admin/game-teams")
+async def create_team(body: GameTeamReq, admin=Depends(require_admin)):
+    t = {
+        "id": str(uuid.uuid4()),
+        "name": body.name,
+        "color": body.color or "yellow",
+        "members": [],
+        "team_points": 0,
+        "created_at": now_iso(),
+    }
+    await db.game_teams.insert_one(t)
+    t.pop("_id", None)
+    return t
+
+@api.get("/admin/game-teams")
+async def list_teams_admin(admin=Depends(require_admin)):
+    items = await db.game_teams.find({}, {"_id": 0}).sort("team_points", -1).to_list(50)
+    # resolve member info
+    for t in items:
+        members = await db.users.find({"id": {"$in": t.get("members", [])}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
+        t["member_details"] = members
+    return items
+
+@api.get("/game-teams")
+async def list_teams_public():
+    items = await db.game_teams.find({}, {"_id": 0}).sort("team_points", -1).to_list(50)
+    for t in items:
+        members = await db.users.find({"id": {"$in": t.get("members", [])}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
+        t["member_details"] = members
+    return items
+
+@api.patch("/admin/game-teams/{tid}")
+async def update_team(tid: str, body: GameTeamReq, admin=Depends(require_admin)):
+    await db.game_teams.update_one({"id": tid}, {"$set": {"name": body.name, "color": body.color}})
+    t = await db.game_teams.find_one({"id": tid}, {"_id": 0})
+    return t
+
+@api.delete("/admin/game-teams/{tid}")
+async def delete_team(tid: str, admin=Depends(require_admin)):
+    await db.game_teams.delete_one({"id": tid})
+    return {"deleted": True}
+
+@api.put("/admin/game-teams/{tid}/members")
+async def set_team_members(tid: str, body: GameTeamMembers, admin=Depends(require_admin)):
+    # Remove these users from any other team first (one team per user)
+    for uid in body.user_ids:
+        await db.game_teams.update_many({"id": {"$ne": tid}}, {"$pull": {"members": uid}})
+    await db.game_teams.update_one({"id": tid}, {"$set": {"members": body.user_ids}})
+    t = await db.game_teams.find_one({"id": tid}, {"_id": 0})
+    return t
+
+@api.post("/admin/game-teams/shuffle")
+async def shuffle_teams(body: ShuffleReq, admin=Depends(require_admin)):
+    n = max(2, min(8, body.num_teams or 4))
+    users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(1000)
+    random.shuffle(users)
+    # delete existing auto-shuffled teams to avoid pile-up
+    await db.game_teams.delete_many({"auto_shuffled": True})
+    teams = []
+    for i in range(n):
+        color = GAME_TEAM_COLORS[i % len(GAME_TEAM_COLORS)]
+        t = {
+            "id": str(uuid.uuid4()),
+            "name": f"{body.name_prefix or 'Squad'} {chr(65 + i)}",
+            "color": color,
+            "members": [],
+            "team_points": 0,
+            "auto_shuffled": True,
+            "created_at": now_iso(),
+        }
+        teams.append(t)
+    for idx, u in enumerate(users):
+        teams[idx % n]["members"].append(u["id"])
+    if teams:
+        await db.game_teams.insert_many(teams)
+    for t in teams:
+        t.pop("_id", None)
+    return teams
 
 # ---------- Users lookup (for shoutout picker etc) ----------
 @api.get("/users")
