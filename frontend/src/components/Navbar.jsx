@@ -7,6 +7,7 @@ import {
   Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
   BookOpen, Cake, MoreHorizontal, Sun, Moon,
 } from "lucide-react";
+import NotificationBell from "./NotificationBell";
 
 const PRIMARY = [
   { to: "/", label: "DASH", icon: LayoutDashboard, color: "bg-brutal-yellow" },
@@ -105,6 +106,7 @@ export const Navbar = () => {
             <span className="font-black text-xs uppercase">🔥 {user?.streak || 0}</span>
             <span className="font-black text-xs uppercase border-l-2 border-black pl-2">⚡ {user?.points || 0}</span>
           </div>
+          <NotificationBell />
           <motion.button
             whileTap={{ scale: 0.92, rotate: 8 }}
             data-testid="theme-toggle"
