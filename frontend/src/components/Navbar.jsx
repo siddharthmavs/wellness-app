@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore, useThemeStore } from "../store";
+import { NotificationBell } from "./NotificationBell";
 import {
   LogOut, Zap, Trophy, Smile, MessageSquare, User, LayoutDashboard,
   Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
-  BookOpen, Cake, MoreHorizontal, Sun, Moon,
+  BookOpen, Cake, MoreHorizontal, Sun, Moon, Swords,
 } from "lucide-react";
 
 const PRIMARY = [
@@ -24,6 +25,7 @@ const MORE = [
   { to: "/quiz", label: "QUIZ", icon: Brain, color: "bg-brutal-pink" },
   { to: "/learn", label: "LEARN", icon: BookOpen, color: "bg-brutal-green" },
   { to: "/events", label: "EVENTS", icon: Cake, color: "bg-brutal-yellow" },
+  { to: "/teams", label: "TEAMS", icon: Swords, color: "bg-brutal-pink" },
   { to: "/profile", label: "ME", icon: User, color: "bg-white" },
 ];
 
@@ -105,6 +107,7 @@ export const Navbar = () => {
             <span className="font-black text-xs uppercase">🔥 {user?.streak || 0}</span>
             <span className="font-black text-xs uppercase border-l-2 border-black pl-2">⚡ {user?.points || 0}</span>
           </div>
+          <NotificationBell />
           <motion.button
             whileTap={{ scale: 0.92, rotate: 8 }}
             data-testid="theme-toggle"
