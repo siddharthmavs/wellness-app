@@ -53,11 +53,22 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 - 🚀 Productivity rating in Mood tracker (High/Med/Low, persisted + shown on history)
 - 🎁 Surprise Reward issuance from admin (coupon w/ code, bonus points, shoutout) + claim flow on profile
 
+### Chunk 5 (Admin Platform Control)
+- 📚 Quiz CRUD — admin creates custom quizzes per department; live quiz reads custom-first with fallback to hardcoded
+- ⚡ Configurable Points Allocation — full points map editable from admin (water/eye/stand/quiz/etc.); activities + quizzes read from live config
+- 🎮 Gamification Settings — level threshold, streak gap hours, wellness score increment all admin-tunable
+- 📣 Push Notifications / Announcements — admin sends to ALL or specific users, kind (info/alert/party); navbar bell with unread badge, 30s polling, click-to-read
+- ⚔️ Game Teams — manual create (name + color) OR auto-shuffle (round-robin into N teams, fair distribution), one-team-per-user invariant, member CRUD via modal, team-level points + quick +50/-10 buttons
+- 🏆 Manual Point Adjustment — admin can award/dock points for users OR teams with reason; full audit log endpoint
+- 🔔 Notification Bell in navbar (badge + dropdown)
+- ⚔️ /teams page for users to see their game team + global standings
+
 ## Test iterations
 - iteration_1: backend 96%, frontend 85% (Chunk 1, fixed streak bug)
 - iteration_2: backend 100%, frontend 100% (Chunk 2)
 - iteration_3: backend 96%, frontend 100% (Chunk 3, fixed seed role-update bug)
 - iteration_4: backend 100%, frontend 100% (Chunk 4 polish)
+- iteration_5: backend 100% (25/25), frontend 100% (Chunk 5 admin control)
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py
