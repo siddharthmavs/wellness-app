@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore, useThemeStore } from "../store";
+import { NotificationBell } from "./NotificationBell";
 import {
   LogOut, Zap, Trophy, Smile, MessageSquare, User, LayoutDashboard,
   Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
-  BookOpen, Cake, MoreHorizontal, Sun, Moon,
+  BookOpen, Cake, MoreHorizontal, Sun, Moon, Swords,
 } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 
@@ -25,6 +26,7 @@ const MORE = [
   { to: "/quiz", label: "QUIZ", icon: Brain, color: "bg-brutal-pink" },
   { to: "/learn", label: "LEARN", icon: BookOpen, color: "bg-brutal-green" },
   { to: "/events", label: "EVENTS", icon: Cake, color: "bg-brutal-yellow" },
+  { to: "/teams", label: "TEAMS", icon: Swords, color: "bg-brutal-pink" },
   { to: "/profile", label: "ME", icon: User, color: "bg-white" },
 ];
 

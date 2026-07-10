@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { api } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/brutal";
 import { toast } from "sonner";
-import { Users, Trophy, Bell, BarChart3, MessageSquare, Trash2, Gift, BookOpen, Zap, Settings2, Megaphone, Pencil, X } from "lucide-react";
+import { Users, Trophy, Bell, BarChart3, MessageSquare, Trash2, Gift, Brain, Settings, Megaphone, Shuffle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LineChart, Line, Tooltip } from "recharts";
 
 const TABS = [
@@ -13,11 +13,10 @@ const TABS = [
   { id: "analytics", label: "ANALYTICS", icon: BarChart3, color: "green" },
   { id: "feedback", label: "FEEDBACK", icon: MessageSquare, color: "yellow" },
   { id: "rewards", label: "REWARDS", icon: Gift, color: "pink" },
-  { id: "quizzes", label: "QUIZZES", icon: BookOpen, color: "cyan" },
-  { id: "points", label: "POINTS", icon: Zap, color: "yellow" },
-  { id: "gamification", label: "GAMIFY", icon: Settings2, color: "green" },
-  { id: "announcements", label: "ANNOUNCE", icon: Megaphone, color: "pink" },
-  { id: "teams", label: "TEAMS", icon: Users, color: "cyan" },
+  { id: "quizzes", label: "QUIZZES", icon: Brain, color: "cyan" },
+  { id: "points", label: "POINTS", icon: Settings, color: "green" },
+  { id: "teams", label: "GAME TEAMS", icon: Shuffle, color: "yellow" },
+  { id: "announcements", label: "ANNOUNCEMENTS", icon: Megaphone, color: "pink" },
 ];
 
 const PALETTE = ["#FFE600", "#00E5FF", "#FF4D6D", "#00C853"];
@@ -50,10 +49,9 @@ export default function AdminDashboard() {
       {tab === "feedback" && <FeedbackTab />}
       {tab === "rewards" && <RewardsTab />}
       {tab === "quizzes" && <QuizzesTab />}
-      {tab === "points" && <PointsConfigTab />}
-      {tab === "gamification" && <GamificationTab />}
-      {tab === "announcements" && <AnnouncementsTab />}
+      {tab === "points" && <PointsTab />}
       {tab === "teams" && <TeamsTab />}
+      {tab === "announcements" && <AnnouncementsTab />}
     </div>
   );
 }
@@ -375,442 +373,389 @@ const RewardsTab = () => {
   );
 };
 
-// ─── QUIZ MANAGEMENT ───────────────────────────────────────────────────────
-const DEPARTMENTS = ["Engineering", "Design", "Marketing", "HR", "Product", "Management", "General"];
+const DEPTS = ["Engineering", "Design", "Marketing", "HR", "Product", "Management", "General", "QA"];
 
 const QuizzesTab = () => {
-  const [quizzes, setQuizzes] = useState([]);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ department: "General", title: "", questions: [] });
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState({ department: "Engineering", title: "", questions: [{ q: "", options: ["", "", ""], answer: 0 }] });
 
-  const load = async () => { const { data } = await api.get("/admin/quizzes"); setQuizzes(data); };
+  const load = async () => { const { data } = await api.get("/admin/quizzes"); setItems(data); };
   useEffect(() => { load(); }, []);
 
-  const startNew = () => { setEditing("new"); setForm({ department: "General", title: "", questions: [] }); };
-  const startEdit = (q) => { setEditing(q.id); setForm({ department: q.department, title: q.title, questions: q.questions.map((x) => ({ ...x, options: [...x.options] })) }); };
-  const addQuestion = () => setForm((f) => ({ ...f, questions: [...f.questions, { q: "", options: ["", ""], answer: 0 }] }));
-  const removeQuestion = (qi) => setForm((f) => ({ ...f, questions: f.questions.filter((_, i) => i !== qi) }));
-  const updateQ = (qi, field, val) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === qi ? { ...q, [field]: val } : q) }));
-  const updateOption = (qi, oi, val) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i !== qi ? q : { ...q, options: q.options.map((o, j) => j === oi ? val : o) }) }));
-  const addOption = (qi) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === qi ? { ...q, options: [...q.options, ""] } : q) }));
-
-  const save = async () => {
-    if (!form.questions.length) { toast.error("Add at least one question"); return; }
-    try {
-      if (editing === "new") { await api.post("/admin/quizzes", form); toast.success("🧠 Quiz created!"); }
-      else { await api.put(`/admin/quizzes/${editing}`, form); toast.success("✅ Quiz updated!"); }
-      setEditing(null); load();
-    } catch (e) { toast.error(e?.response?.data?.detail || "Save failed"); }
+  const addQ = () => setForm({ ...form, questions: [...form.questions, { q: "", options: ["", "", ""], answer: 0 }] });
+  const setQ = (i, field, val) => {
+    const qs = [...form.questions]; qs[i] = { ...qs[i], [field]: val };
+    setForm({ ...form, questions: qs });
   };
-  const del = async (id) => { await api.delete(`/admin/quizzes/${id}`); toast("🗑️ Deleted"); load(); };
+  const setOpt = (i, j, val) => {
+    const qs = [...form.questions]; const opts = [...qs[i].options]; opts[j] = val; qs[i].options = opts;
+    setForm({ ...form, questions: qs });
+  };
+  const create = async () => {
+    if (!form.questions.every(q => q.q && q.options.every(o => o))) { toast.error("Fill all fields"); return; }
+    await api.post("/admin/quizzes", form);
+    toast.success("📚 Quiz created");
+    setForm({ department: "Engineering", title: "", questions: [{ q: "", options: ["", "", ""], answer: 0 }] });
+    load();
+  };
+  const del = async (id) => { await api.delete(`/admin/quizzes/${id}`); load(); };
 
   return (
-    <div className="grid md:grid-cols-2 gap-6" data-testid="quizzes-tab">
-      <BrutalCard color="white" hover={false}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display font-black text-2xl uppercase">🧠 Custom Quizzes</h3>
-          <BrutalButton color="yellow" onClick={startNew}>+ NEW</BrutalButton>
-        </div>
-        <div className="space-y-2">
-          {quizzes.map((q) => (
-            <div key={q.id} className="border-[3px] border-black p-3 flex items-center justify-between bg-white">
-              <div>
-                <div className="font-black uppercase text-sm">{q.title}</div>
-                <div className="text-xs font-bold">{q.department} · {q.questions?.length || 0} Qs</div>
-              </div>
-              <div className="flex gap-1">
-                <button onClick={() => startEdit(q)} className="bg-brutal-cyan border-[2px] border-black p-1.5"><Pencil className="w-4 h-4" /></button>
-                <button onClick={() => del(q.id)} className="bg-brutal-pink border-[2px] border-black p-1.5"><Trash2 className="w-4 h-4" /></button>
-              </div>
-            </div>
-          ))}
-          {!quizzes.length && <p className="text-sm font-bold uppercase py-4">No custom quizzes. Built-ins still active.</p>}
-        </div>
-      </BrutalCard>
-
-      {editing !== null ? (
-        <BrutalCard color="cyan" hover={false}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-black text-2xl uppercase">{editing === "new" ? "➕ New Quiz" : "✏️ Edit Quiz"}</h3>
-            <button onClick={() => setEditing(null)} className="border-[3px] border-black p-1"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="space-y-2">
-            <select className="w-full border-[3px] border-black px-3 py-2 font-bold uppercase" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
-              {DEPARTMENTS.map((d) => <option key={d}>{d}</option>)}
-            </select>
-            <BrutalInput placeholder="Title (optional)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {form.questions.map((q, qi) => (
-                <div key={qi} className="border-[3px] border-black bg-white p-3">
-                  <div className="flex gap-2 mb-2">
-                    <span className="bg-black text-white font-black text-xs px-2 py-1">Q{qi + 1}</span>
-                    <input className="flex-1 border-[2px] border-black px-2 py-1 font-bold text-sm" placeholder="Question" value={q.q} onChange={(e) => updateQ(qi, "q", e.target.value)} />
-                    <button onClick={() => removeQuestion(qi)} className="bg-brutal-pink border-[2px] border-black p-1"><X className="w-3 h-3" /></button>
-                  </div>
-                  {q.options.map((opt, oi) => (
-                    <div key={oi} className="flex items-center gap-2 mb-1">
-                      <input type="radio" name={`ans-${qi}`} checked={q.answer === oi} onChange={() => updateQ(qi, "answer", oi)} className="w-4 h-4 accent-black" />
-                      <input className="flex-1 border-[2px] border-black px-2 py-1 text-sm font-bold" placeholder={`Option ${oi + 1}`} value={opt} onChange={(e) => updateOption(qi, oi, e.target.value)} />
-                    </div>
-                  ))}
-                  <button onClick={() => addOption(qi)} className="text-xs font-black uppercase underline">+ option</button>
+    <div className="grid lg:grid-cols-2 gap-6" data-testid="quizzes-tab">
+      <BrutalCard color="cyan" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3">➕ New Custom Quiz</h3>
+        <select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full border-[3px] border-black px-3 py-3 font-bold uppercase mb-2">
+          {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <BrutalInput data-testid="quiz-title" placeholder="Quiz title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mb-3" />
+        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+          {form.questions.map((q, i) => (
+            <div key={i} className="border-[3px] border-black p-3 bg-white">
+              <div className="text-xs font-black uppercase mb-1">Q{i + 1}</div>
+              <BrutalInput placeholder="Question text" value={q.q} onChange={(e) => setQ(i, "q", e.target.value)} className="mb-2" />
+              {q.options.map((o, j) => (
+                <div key={j} className="flex items-center gap-2 mb-1">
+                  <input type="radio" checked={q.answer === j} onChange={() => setQ(i, "answer", j)} className="w-5 h-5" />
+                  <BrutalInput placeholder={`Option ${String.fromCharCode(65 + j)}`} value={o} onChange={(e) => setOpt(i, j, e.target.value)} />
                 </div>
               ))}
             </div>
-            <BrutalButton color="yellow" onClick={addQuestion} className="w-full">+ ADD QUESTION</BrutalButton>
-            <BrutalButton color="green" onClick={save} className="w-full">💾 SAVE QUIZ</BrutalButton>
-          </div>
-        </BrutalCard>
-      ) : (
-        <div className="border-[4px] border-dashed border-black flex items-center justify-center p-12">
-          <p className="font-display font-black text-xl uppercase text-center">Select to edit<br /><span className="text-sm">or create a new one</span></p>
+          ))}
         </div>
-      )}
+        <div className="flex gap-2 mt-3">
+          <BrutalButton color="white" onClick={addQ}>+ Q</BrutalButton>
+          <BrutalButton data-testid="quiz-create" color="green" onClick={create}>🚀 CREATE</BrutalButton>
+        </div>
+      </BrutalCard>
+      <BrutalCard color="white" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3">📋 Custom Quizzes</h3>
+        <div className="space-y-2">
+          {items.map((q) => (
+            <div key={q.id} className="border-[3px] border-black p-3 flex items-center justify-between">
+              <div>
+                <div className="font-black uppercase">{q.title}</div>
+                <div className="text-xs font-bold">{q.department} · {q.questions.length} Qs</div>
+              </div>
+              <button data-testid={`quiz-delete-${q.id}`} onClick={() => del(q.id)} className="bg-brutal-pink border-[2px] border-black p-1.5"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          ))}
+          {items.length === 0 && <div className="text-sm font-bold uppercase">No custom quizzes. Hardcoded ones still active.</div>}
+        </div>
+      </BrutalCard>
     </div>
   );
 };
 
-// ─── POINTS CONFIG ─────────────────────────────────────────────────────────
-const POINTS_LABELS = {
-  water: "💧 Water Break", eye_care: "👀 Eye Care", stand: "🧍 Stand Up", breathing: "🌬️ Breathing",
-  mood: "🎭 Mood Log", post: "📸 Fun Wall Post", quiz_per_correct: "🧠 Quiz / correct answer",
-  quiz_perfect_bonus: "🏆 Perfect Quiz Bonus", shoutout_sender: "📣 Shoutout (sender)",
-  shoutout_receiver: "📣 Shoutout (receiver)", poll_vote: "📊 Poll Vote",
-  buddy_checkin: "👬 Buddy Check-in", plant_checkin: "🌱 Plant Check-in",
-  bite_tried: "📚 Learning Bite", fact_react: "💡 Fact Reaction",
-  game_score_per_10: "🎮 Game pts / 10 score", game_score_max: "🎮 Game pts cap",
-};
-
-const PointsConfigTab = () => {
+const PointsTab = () => {
   const [config, setConfig] = useState({});
-  useEffect(() => { api.get("/admin/points-config").then(({ data }) => setConfig(data)); }, []);
-  const save = async () => { await api.put("/admin/points-config", config); toast.success("⚡ Points config saved!"); };
-  return (
-    <BrutalCard color="yellow" hover={false} data-testid="points-tab">
-      <h3 className="font-display font-black text-2xl uppercase mb-4">⚡ Points Per Activity</h3>
-      <div className="grid md:grid-cols-2 gap-2 mb-4">
-        {Object.entries(config).map(([key, val]) => (
-          <div key={key} className="flex items-center gap-3 border-[3px] border-black bg-white p-3">
-            <label className="flex-1 font-bold text-xs uppercase">{POINTS_LABELS[key] || key}</label>
-            <input type="number" value={val}
-              onChange={(e) => setConfig({ ...config, [key]: +e.target.value })}
-              className="w-16 border-[3px] border-black px-2 py-1 font-black text-center" />
-          </div>
-        ))}
-      </div>
-      <BrutalButton color="green" onClick={save} data-testid="save-points">💾 SAVE POINTS CONFIG</BrutalButton>
-    </BrutalCard>
-  );
-};
-
-// ─── GAMIFICATION SETTINGS ─────────────────────────────────────────────────
-const GamificationTab = () => {
-  const [config, setConfig] = useState({ level_threshold: 200, streak_gap_hours: 36, wellness_score_increment: 2 });
-  useEffect(() => { api.get("/admin/game-config").then(({ data }) => setConfig(data)); }, []);
-  const save = async () => { await api.put("/admin/game-config", config); toast.success("🎮 Gamification saved!"); };
-  return (
-    <BrutalCard color="green" hover={false} data-testid="gamification-tab">
-      <h3 className="font-display font-black text-2xl uppercase mb-4 text-white">🎮 Gamification Settings</h3>
-      <div className="space-y-4 max-w-md">
-        {[
-          { key: "level_threshold", label: "⬆️ Points per Level", desc: "Points needed to advance one level" },
-          { key: "streak_gap_hours", label: "🔥 Streak Reset Gap (hrs)", desc: "Inactivity hours before streak resets" },
-          { key: "wellness_score_increment", label: "💪 Wellness Score / Activity", desc: "Wellness points added per logged activity" },
-        ].map(({ key, label, desc }) => (
-          <div key={key} className="border-[3px] border-black bg-white p-4">
-            <label className="font-black uppercase text-sm block mb-1">{label}</label>
-            <p className="text-xs font-bold text-gray-500 mb-2">{desc}</p>
-            <input type="number" value={config[key] ?? ""} onChange={(e) => setConfig({ ...config, [key]: +e.target.value })}
-              className="w-full border-[3px] border-black px-3 py-2 font-black text-2xl" />
-          </div>
-        ))}
-        <BrutalButton color="yellow" onClick={save} data-testid="save-gamification">💾 SAVE SETTINGS</BrutalButton>
-      </div>
-    </BrutalCard>
-  );
-};
-
-// ─── ANNOUNCEMENTS (PUSH NOTIFICATIONS) ────────────────────────────────────
-const KIND_STYLES = { info: "bg-brutal-cyan", alert: "bg-brutal-pink", party: "bg-brutal-yellow" };
-
-const AnnouncementsTab = () => {
-  const [form, setForm] = useState({ title: "", message: "", kind: "info", target: "all", target_user_ids: [] });
+  const [game, setGame] = useState({});
   const [users, setUsers] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
+  const [adj, setAdj] = useState({ user_id: "", points: 10, reason: "" });
+  const [log, setLog] = useState([]);
 
   const load = async () => {
-    const [u, a] = await Promise.all([api.get("/admin/users"), api.get("/admin/announcements")]);
-    setUsers(u.data); setAnnouncements(a.data);
+    const [pc, gc, u, l] = await Promise.all([
+      api.get("/admin/points-config"),
+      api.get("/admin/game-config"),
+      api.get("/admin/users"),
+      api.get("/admin/points/log"),
+    ]);
+    setConfig(pc.data); setGame(gc.data); setUsers(u.data); setLog(l.data);
   };
   useEffect(() => { load(); }, []);
 
-  const send = async () => {
-    if (!form.title || !form.message) { toast.error("Title + message required"); return; }
-    if (form.target === "specific" && !form.target_user_ids.length) { toast.error("Pick at least one user"); return; }
-    await api.post("/admin/announcements", form);
-    toast.success("📣 Announcement sent!");
-    setForm({ title: "", message: "", kind: "info", target: "all", target_user_ids: [] });
+  const savePoints = async () => {
+    await api.put("/admin/points-config", config);
+    toast.success("⚡ Points config saved");
+  };
+  const saveGame = async () => {
+    await api.put("/admin/game-config", game);
+    toast.success("🎮 Gamification saved");
+  };
+  const award = async () => {
+    if (!adj.user_id || !adj.reason) { toast.error("Pick user + reason"); return; }
+    await api.post("/admin/points/award", adj);
+    toast.success(`⚡ ${adj.points > 0 ? "+" : ""}${adj.points} → user`);
+    setAdj({ user_id: "", points: 10, reason: "" });
     load();
   };
 
-  const toggleUser = (uid) => {
-    const ids = form.target_user_ids.includes(uid)
-      ? form.target_user_ids.filter((id) => id !== uid)
-      : [...form.target_user_ids, uid];
-    setForm({ ...form, target_user_ids: ids });
-  };
-
   return (
-    <div className="grid md:grid-cols-2 gap-6" data-testid="announcements-tab">
-      <BrutalCard color="pink" hover={false}>
-        <h3 className="font-display font-black text-2xl uppercase mb-3 text-white">📣 Send Announcement</h3>
-        <div className="space-y-3">
-          <BrutalInput data-testid="ann-title" placeholder="Headline" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          <textarea
-            data-testid="ann-message" rows={3} placeholder="Your message here..."
-            value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })}
-            className="w-full border-[3px] border-black px-3 py-2 font-bold resize-none"
-          />
-          <div>
-            <p className="font-black uppercase text-xs text-white mb-1">Type</p>
-            <div className="flex gap-2">
-              {[["info", "ℹ️ Info"], ["alert", "⚠️ Alert"], ["party", "🎉 Party"]].map(([k, lbl]) => (
-                <button key={k} onClick={() => setForm({ ...form, kind: k })}
-                  className={`border-[3px] border-black px-3 py-1 font-black text-xs uppercase ${form.kind === k ? "bg-black text-white" : "bg-white"}`}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="font-black uppercase text-xs text-white mb-1">Recipients</p>
-            <div className="flex gap-2">
-              {[["all", "🌍 All Users"], ["specific", "🎯 Specific"]].map(([t, lbl]) => (
-                <button key={t} onClick={() => setForm({ ...form, target: t, target_user_ids: [] })}
-                  className={`border-[3px] border-black px-3 py-1 font-black text-xs uppercase ${form.target === t ? "bg-black text-white" : "bg-white"}`}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-          {form.target === "specific" && (
-            <div className="border-[3px] border-black bg-white p-2 max-h-48 overflow-y-auto space-y-1">
-              {users.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-brutal-yellow">
-                  <input type="checkbox" checked={form.target_user_ids.includes(u.id)} onChange={() => toggleUser(u.id)} className="w-4 h-4 border-[2px] border-black" />
-                  <img src={u.avatar} className="w-6 h-6 border border-black" alt="" />
-                  <span className="font-bold text-sm">{u.name}</span>
-                  <span className="text-xs text-gray-500 font-bold">{u.department}</span>
-                </label>
-              ))}
-            </div>
-          )}
-          <BrutalButton data-testid="ann-send" color="green" onClick={send} className="w-full">🚀 SEND NOW</BrutalButton>
-        </div>
-      </BrutalCard>
-
-      <BrutalCard color="white" hover={false}>
-        <h3 className="font-display font-black text-2xl uppercase mb-3">📬 Sent ({announcements.length})</h3>
-        <div className="space-y-2 max-h-[520px] overflow-y-auto">
-          {announcements.map((a) => (
-            <div key={a.id} className={`border-[3px] border-black p-3 ${KIND_STYLES[a.kind] || "bg-white"}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-black text-sm uppercase">{a.title}</span>
-                <span className="text-xs font-bold ml-auto">{new Date(a.created_at).toLocaleDateString()}</span>
-              </div>
-              <p className="text-sm font-medium">{a.message}</p>
-              <p className="text-xs font-bold mt-1">→ {a.recipients.length} recipients · {a.read_by?.length || 0} read</p>
+    <div className="grid lg:grid-cols-2 gap-6" data-testid="points-tab">
+      <BrutalCard color="green" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3">⚡ Point Allocation</h3>
+        <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
+          {Object.entries(config).map(([k, v]) => (
+            <div key={k}>
+              <label className="font-bold uppercase text-[10px]">{k}</label>
+              <input
+                type="number"
+                value={v}
+                data-testid={`pts-${k}`}
+                onChange={(e) => setConfig({ ...config, [k]: +e.target.value })}
+                className="w-full border-[3px] border-black px-2 py-1 font-bold bg-white"
+              />
             </div>
           ))}
-          {!announcements.length && <p className="text-sm font-bold uppercase">Nothing sent yet.</p>}
         </div>
+        <BrutalButton data-testid="save-points-config" color="black" onClick={savePoints} className="mt-3">💾 SAVE</BrutalButton>
+      </BrutalCard>
+
+      <BrutalCard color="yellow" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3">🎮 Gamification Settings</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="font-bold uppercase text-xs">Level threshold (pts/level)</label>
+            <BrutalInput type="number" value={game.level_threshold || 200} onChange={(e) => setGame({ ...game, level_threshold: +e.target.value })} />
+          </div>
+          <div>
+            <label className="font-bold uppercase text-xs">Streak gap hours</label>
+            <BrutalInput type="number" value={game.streak_gap_hours || 36} onChange={(e) => setGame({ ...game, streak_gap_hours: +e.target.value })} />
+          </div>
+          <div>
+            <label className="font-bold uppercase text-xs">Wellness score per action</label>
+            <BrutalInput type="number" value={game.wellness_score_increment || 2} onChange={(e) => setGame({ ...game, wellness_score_increment: +e.target.value })} />
+          </div>
+          <BrutalButton color="black" onClick={saveGame}>💾 SAVE</BrutalButton>
+        </div>
+
+        <hr className="my-4 border-[2px] border-black" />
+        <h4 className="font-display font-black text-xl uppercase mb-2">🎁 Manual Point Adjustment</h4>
+        <select value={adj.user_id} onChange={(e) => setAdj({ ...adj, user_id: e.target.value })} className="w-full border-[3px] border-black px-3 py-2 font-bold uppercase mb-2 bg-white">
+          <option value="">— pick user —</option>
+          {users.map(u => <option key={u.id} value={u.id}>{u.name} · {u.points}pts</option>)}
+        </select>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <BrutalInput type="number" value={adj.points} onChange={(e) => setAdj({ ...adj, points: +e.target.value })} placeholder="Points (+/-)" />
+          <BrutalInput value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} placeholder="Reason" />
+        </div>
+        <BrutalButton data-testid="award-points" color="pink" onClick={award}>⚡ AWARD</BrutalButton>
+
+        {log.length > 0 && (
+          <div className="mt-4">
+            <div className="text-xs font-black uppercase mb-2">📋 Audit Log</div>
+            <div className="max-h-32 overflow-y-auto space-y-1">
+              {log.slice(0, 10).map((l) => (
+                <div key={l.id} className="text-xs bg-white border-[2px] border-black p-2 flex justify-between">
+                  <span className="font-bold">{l.points > 0 ? "+" : ""}{l.points} {l.user_id ? "user" : "team"} · {l.reason}</span>
+                  <span className="text-[10px]">{new Date(l.created_at).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </BrutalCard>
     </div>
   );
 };
-
-// ─── TEAM MANAGEMENT ───────────────────────────────────────────────────────
-const TEAM_COLORS = ["yellow", "cyan", "pink", "green"];
-const TEAM_BG = { yellow: "bg-brutal-yellow", cyan: "bg-brutal-cyan", pink: "bg-brutal-pink", green: "bg-brutal-green" };
 
 const TeamsTab = () => {
   const [teams, setTeams] = useState([]);
   const [users, setUsers] = useState([]);
-  const [pointsLog, setPointsLog] = useState([]);
-  const [newTeam, setNewTeam] = useState({ name: "", color: "yellow" });
-  const [shuffle, setShuffle] = useState({ num_teams: 4, name_prefix: "Squad" });
-  const [pointForm, setPointForm] = useState({ user_id: "", team_id: "", points: 10, reason: "" });
-  const [editMembers, setEditMembers] = useState({ teamId: null, selected: [] });
+  const [form, setForm] = useState({ name: "", color: "yellow" });
+  const [shuffleN, setShuffleN] = useState(4);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [memberPicks, setMemberPicks] = useState([]);
 
   const load = async () => {
-    const [t, u, l] = await Promise.all([api.get("/admin/game-teams"), api.get("/admin/users"), api.get("/admin/points/log")]);
-    setTeams(t.data); setUsers(u.data); setPointsLog(l.data.slice(0, 20));
+    const [t, u] = await Promise.all([api.get("/admin/game-teams"), api.get("/admin/users")]);
+    setTeams(t.data); setUsers(u.data);
   };
   useEffect(() => { load(); }, []);
 
-  const createTeam = async () => {
-    if (!newTeam.name) { toast.error("Name required"); return; }
-    await api.post("/admin/game-teams", newTeam);
-    toast.success("✅ Team created");
-    setNewTeam({ name: "", color: "yellow" }); load();
+  const create = async () => {
+    if (!form.name) { toast.error("Name plz"); return; }
+    await api.post("/admin/game-teams", form);
+    toast.success("⚔️ Team created");
+    setForm({ name: "", color: "yellow" });
+    load();
   };
-
-  const doShuffle = async () => {
-    if (!window.confirm(`Shuffle all users into ${shuffle.num_teams} teams? Existing auto-shuffled teams will be replaced.`)) return;
-    await api.post("/admin/game-teams/shuffle", shuffle);
-    toast.success(`🔀 Shuffled into ${shuffle.num_teams} teams`); load();
+  const shuffle = async () => {
+    if (!window.confirm(`Auto-shuffle into ${shuffleN} teams? This replaces existing auto-shuffled teams.`)) return;
+    await api.post("/admin/game-teams/shuffle", { num_teams: shuffleN, name_prefix: "Squad" });
+    toast.success("🎲 Shuffled!");
+    load();
   };
-
-  const delTeam = async (id) => { await api.delete(`/admin/game-teams/${id}`); load(); };
-
-  const openMembers = (team) => setEditMembers({ teamId: team.id, selected: [...(team.members || [])] });
+  const del = async (id) => {
+    if (!window.confirm("Delete team?")) return;
+    await api.delete(`/admin/game-teams/${id}`);
+    load();
+  };
+  const openMembers = (t) => { setSelectedTeam(t); setMemberPicks(t.members || []); };
   const saveMembers = async () => {
-    await api.put(`/admin/game-teams/${editMembers.teamId}/members`, { user_ids: editMembers.selected });
-    toast.success("✅ Members updated");
-    setEditMembers({ teamId: null, selected: [] }); load();
+    await api.put(`/admin/game-teams/${selectedTeam.id}/members`, { user_ids: memberPicks });
+    toast.success("👥 Updated");
+    setSelectedTeam(null);
+    load();
   };
-
-  const awardPoints = async () => {
-    if (!pointForm.points || !pointForm.reason) { toast.error("Points + reason required"); return; }
-    if (!pointForm.user_id && !pointForm.team_id) { toast.error("Pick a user or team"); return; }
-    await api.post("/admin/points/award", pointForm);
-    toast.success(`⚡ +${pointForm.points} awarded!`);
-    setPointForm({ user_id: "", team_id: "", points: 10, reason: "" }); load();
+  const award = async (tid, pts) => {
+    const reason = window.prompt(`Reason for ${pts > 0 ? "+" : ""}${pts} pts?`);
+    if (!reason) return;
+    await api.post("/admin/points/award", { team_id: tid, points: pts, reason });
+    toast.success(`⚡ ${pts > 0 ? "+" : ""}${pts} team pts`);
+    load();
   };
 
   return (
     <div className="space-y-6" data-testid="teams-tab">
       <div className="grid md:grid-cols-2 gap-6">
         <BrutalCard color="yellow" hover={false}>
-          <h3 className="font-display font-black text-xl uppercase mb-3">➕ Create Team</h3>
-          <div className="space-y-3">
-            <BrutalInput data-testid="team-name" placeholder="Team name" value={newTeam.name} onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })} />
-            <div className="flex gap-2">
-              {TEAM_COLORS.map((c) => (
-                <button key={c} onClick={() => setNewTeam({ ...newTeam, color: c })}
-                  className={`w-10 h-10 ${TEAM_BG[c]} border-[3px] ${newTeam.color === c ? "border-black shadow-brutal-sm" : "border-transparent"}`} />
-              ))}
-            </div>
-            <BrutalButton data-testid="team-create" color="green" onClick={createTeam} className="w-full">CREATE TEAM</BrutalButton>
-          </div>
+          <h3 className="font-display font-black text-2xl uppercase mb-3">➕ Create Team</h3>
+          <BrutalInput data-testid="team-name" placeholder="Team name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mb-2" />
+          <select value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="w-full border-[3px] border-black px-3 py-2 font-bold uppercase mb-3 bg-white">
+            <option value="yellow">Yellow</option>
+            <option value="cyan">Cyan</option>
+            <option value="pink">Pink</option>
+            <option value="green">Green</option>
+          </select>
+          <BrutalButton data-testid="team-create" color="green" onClick={create}>🚀 CREATE</BrutalButton>
         </BrutalCard>
-
-        <BrutalCard color="cyan" hover={false}>
-          <h3 className="font-display font-black text-xl uppercase mb-3">🔀 Auto Shuffle</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="font-bold uppercase text-xs block mb-1">Number of Teams</label>
-              <BrutalInput type="number" min="2" max="8" value={shuffle.num_teams} onChange={(e) => setShuffle({ ...shuffle, num_teams: +e.target.value })} />
+        <BrutalCard color="pink" hover={false}>
+          <h3 className="font-display font-black text-2xl uppercase mb-3 text-white">🎲 Auto-Shuffle</h3>
+          <p className="text-white text-sm mb-3 font-bold">Randomly distribute all users into N teams (fair distribution).</p>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="font-bold uppercase text-xs text-white">Teams (2-8)</label>
+              <BrutalInput type="number" min="2" max="8" value={shuffleN} onChange={(e) => setShuffleN(+e.target.value)} />
             </div>
-            <div>
-              <label className="font-bold uppercase text-xs block mb-1">Name Prefix</label>
-              <BrutalInput placeholder="Squad" value={shuffle.name_prefix} onChange={(e) => setShuffle({ ...shuffle, name_prefix: e.target.value })} />
-            </div>
-            <BrutalButton data-testid="team-shuffle" color="pink" onClick={doShuffle} className="w-full">🔀 SHUFFLE & ASSIGN</BrutalButton>
+            <BrutalButton data-testid="team-shuffle" color="black" onClick={shuffle}>🎲 SHUFFLE</BrutalButton>
           </div>
         </BrutalCard>
       </div>
 
       <BrutalCard color="white" hover={false}>
-        <h3 className="font-display font-black text-2xl uppercase mb-3">🏴 Teams ({teams.length})</h3>
-        <div className="grid md:grid-cols-3 gap-3">
+        <h3 className="font-display font-black text-2xl uppercase mb-3">⚔️ Teams ({teams.length})</h3>
+        <div className="space-y-3">
           {teams.map((t) => (
-            <div key={t.id} className={`border-[4px] border-black p-4 shadow-brutal-sm ${TEAM_BG[t.color] || "bg-white"}`}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-display font-black text-lg uppercase truncate">{t.name}</span>
-                <div className="flex gap-1 flex-shrink-0">
-                  <button onClick={() => openMembers(t)} className="bg-white border-[2px] border-black p-1"><Users className="w-3 h-3" /></button>
-                  <button onClick={() => delTeam(t.id)} className="bg-brutal-pink border-[2px] border-black p-1"><Trash2 className="w-3 h-3" /></button>
-                </div>
+            <div key={t.id} className={`border-[4px] border-black bg-brutal-${t.color} p-4`}>
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                <div className="font-display font-black text-xl uppercase flex-1">{t.name}</div>
+                <div className="font-display font-black text-2xl">⚡ {t.team_points}</div>
+                <button onClick={() => award(t.id, 50)} className="bg-white border-[3px] border-black px-2 py-1 font-black text-xs">+50</button>
+                <button onClick={() => award(t.id, -10)} className="bg-white border-[3px] border-black px-2 py-1 font-black text-xs">-10</button>
+                <button data-testid={`team-members-${t.id}`} onClick={() => openMembers(t)} className="bg-black text-white border-[3px] border-black px-2 py-1 font-black text-xs">👥 {t.members?.length || 0}</button>
+                <button onClick={() => del(t.id)} className="bg-brutal-pink border-[3px] border-black p-1.5"><Trash2 className="w-3 h-3" /></button>
               </div>
-              <div className="font-black text-2xl">⚡ {t.team_points || 0}</div>
-              <div className="text-xs font-bold uppercase mb-2">{(t.member_details || []).length} members</div>
               <div className="flex flex-wrap gap-1">
-                {(t.member_details || []).slice(0, 4).map((m) => (
-                  <img key={m.id} src={m.avatar} className="w-6 h-6 border-[2px] border-black" title={m.name} alt="" />
+                {(t.member_details || []).map((m) => (
+                  <span key={m.id} className="bg-white border-[2px] border-black px-1.5 py-0.5 font-black text-[10px]">{m.name}</span>
                 ))}
-                {(t.member_details || []).length > 4 && (
-                  <div className="w-6 h-6 border-[2px] border-black bg-black text-white text-[10px] font-black flex items-center justify-center">
-                    +{(t.member_details || []).length - 4}
-                  </div>
-                )}
               </div>
             </div>
           ))}
-          {!teams.length && <p className="col-span-3 text-sm font-bold uppercase text-center py-6">No teams yet. Create one or shuffle!</p>}
+          {teams.length === 0 && <div className="text-sm font-bold uppercase">No teams. Create or shuffle.</div>}
         </div>
       </BrutalCard>
 
-      {editMembers.teamId && (
-        <BrutalCard color="yellow" hover={false}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-black text-xl uppercase">👥 Assign — {teams.find((t) => t.id === editMembers.teamId)?.name}</h3>
-            <button onClick={() => setEditMembers({ teamId: null, selected: [] })} className="border-[3px] border-black p-1"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 max-h-64 overflow-y-auto">
-            {users.map((u) => {
-              const sel = editMembers.selected.includes(u.id);
-              return (
-                <label key={u.id} className={`flex items-center gap-2 cursor-pointer border-[3px] border-black p-2 ${sel ? "bg-black text-white" : "bg-white"}`}>
-                  <input type="checkbox" checked={sel}
-                    onChange={() => setEditMembers((prev) => ({ ...prev, selected: sel ? prev.selected.filter((id) => id !== u.id) : [...prev.selected, u.id] }))}
-                    className="hidden" />
-                  <img src={u.avatar} className="w-6 h-6 border border-black flex-shrink-0" alt="" />
-                  <span className="font-bold text-xs uppercase truncate">{u.name}</span>
+      {selectedTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setSelectedTeam(null)}>
+          <div className="bg-white border-[4px] border-black shadow-brutal-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display font-black text-2xl uppercase mb-3">Members of {selectedTeam.name}</h3>
+            <div className="grid grid-cols-2 gap-2 mb-4 max-h-96 overflow-y-auto">
+              {users.map((u) => (
+                <label key={u.id} className="flex items-center gap-2 border-[3px] border-black p-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={memberPicks.includes(u.id)}
+                    onChange={() => setMemberPicks(memberPicks.includes(u.id) ? memberPicks.filter(x => x !== u.id) : [...memberPicks, u.id])}
+                    className="w-4 h-4"
+                  />
+                  <img src={u.avatar} alt="" className="w-7 h-7 border-[2px] border-black" />
+                  <span className="font-black uppercase text-xs">{u.name}</span>
                 </label>
-              );
-            })}
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <BrutalButton color="green" onClick={saveMembers}>💾 SAVE</BrutalButton>
+              <BrutalButton color="white" onClick={() => setSelectedTeam(null)}>CANCEL</BrutalButton>
+            </div>
           </div>
-          <BrutalButton color="green" onClick={saveMembers}>💾 SAVE MEMBERS ({editMembers.selected.length})</BrutalButton>
-        </BrutalCard>
+        </div>
       )}
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <BrutalCard color="green" hover={false}>
-          <h3 className="font-display font-black text-xl uppercase mb-3 text-white">⚡ Award Points</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="font-black uppercase text-xs text-white block mb-1">User</label>
-              <select data-testid="award-user" value={pointForm.user_id}
-                onChange={(e) => setPointForm({ ...pointForm, user_id: e.target.value, team_id: "" })}
-                className="w-full border-[3px] border-black px-3 py-2 font-bold uppercase bg-white">
-                <option value="">— no user —</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.department}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="font-black uppercase text-xs text-white block mb-1">Team</label>
-              <select data-testid="award-team" value={pointForm.team_id}
-                onChange={(e) => setPointForm({ ...pointForm, team_id: e.target.value, user_id: "" })}
-                className="w-full border-[3px] border-black px-3 py-2 font-bold uppercase bg-white">
-                <option value="">— no team —</option>
-                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <BrutalInput data-testid="award-points-input" type="number" placeholder="Points" value={pointForm.points} onChange={(e) => setPointForm({ ...pointForm, points: +e.target.value })} />
-            <BrutalInput data-testid="award-reason" placeholder="Reason (e.g. won the hackathon)" value={pointForm.reason} onChange={(e) => setPointForm({ ...pointForm, reason: e.target.value })} />
-            <BrutalButton data-testid="award-submit" color="yellow" onClick={awardPoints} className="w-full">⚡ AWARD POINTS</BrutalButton>
-          </div>
-        </BrutalCard>
-
-        <BrutalCard color="white" hover={false}>
-          <h3 className="font-display font-black text-xl uppercase mb-3">📋 Points Log</h3>
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {pointsLog.map((l) => (
-              <div key={l.id} className="border-[3px] border-black p-2 bg-white">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="bg-brutal-yellow border-[2px] border-black px-2 py-0.5 font-black text-xs">+{l.points}</span>
-                  <span className="font-bold text-sm">{l.user_id ? "User" : "Team"}</span>
-                  <span className="text-xs font-bold ml-auto">{new Date(l.created_at).toLocaleDateString()}</span>
-                </div>
-                <p className="text-xs font-medium mt-1">{l.reason}</p>
-                <p className="text-[10px] font-bold text-gray-500">by {l.issued_by}</p>
-              </div>
-            ))}
-            {!pointsLog.length && <p className="text-sm font-bold uppercase">No points awarded yet.</p>}
-          </div>
-        </BrutalCard>
-      </div>
     </div>
   );
 };
+
+const AnnouncementsTab = () => {
+  const [form, setForm] = useState({ title: "", message: "", target: "all", target_user_ids: [], kind: "info" });
+  const [users, setUsers] = useState([]);
+  const [history, setHistory] = useState([]);
+
+  const load = async () => {
+    const [u, h] = await Promise.all([api.get("/admin/users"), api.get("/admin/announcements")]);
+    setUsers(u.data); setHistory(h.data);
+  };
+  useEffect(() => { load(); }, []);
+
+  const send = async () => {
+    if (!form.title || !form.message) { toast.error("Title + message needed"); return; }
+    if (form.target === "specific" && form.target_user_ids.length === 0) { toast.error("Pick at least 1 user"); return; }
+    const body = { ...form, target: form.target === "specific" ? "specific" : "all" };
+    await api.post("/admin/announcements", body);
+    toast.success(`📣 Sent to ${form.target === "all" ? "everyone" : form.target_user_ids.length + " users"}`);
+    setForm({ title: "", message: "", target: "all", target_user_ids: [], kind: "info" });
+    load();
+  };
+
+  const togglePick = (uid) => {
+    setForm({ ...form, target_user_ids: form.target_user_ids.includes(uid) ? form.target_user_ids.filter(x => x !== uid) : [...form.target_user_ids, uid] });
+  };
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-6" data-testid="announcements-tab">
+      <BrutalCard color="pink" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3 text-white">📣 Send Announcement</h3>
+        <BrutalInput data-testid="ann-title" placeholder="Title (e.g. Pizza party 🍕)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mb-3" />
+        <textarea
+          data-testid="ann-message"
+          placeholder="Message..."
+          value={form.message}
+          onChange={(e) => setForm({ ...form, message: e.target.value })}
+          rows={4}
+          className="w-full border-[3px] border-black px-3 py-2 font-medium resize-none mb-3"
+        />
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} className="border-[3px] border-black px-2 py-2 font-bold uppercase bg-white">
+            <option value="info">ℹ️ Info</option>
+            <option value="alert">🚨 Alert</option>
+            <option value="party">🎉 Party</option>
+          </select>
+          <select data-testid="ann-target" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} className="border-[3px] border-black px-2 py-2 font-bold uppercase bg-white">
+            <option value="all">🌍 Everyone</option>
+            <option value="specific">🎯 Specific users</option>
+          </select>
+        </div>
+        {form.target === "specific" && (
+          <div className="border-[3px] border-black p-2 mb-3 max-h-40 overflow-y-auto bg-white">
+            {users.map(u => (
+              <label key={u.id} className="flex items-center gap-2 py-1 cursor-pointer text-black">
+                <input type="checkbox" checked={form.target_user_ids.includes(u.id)} onChange={() => togglePick(u.id)} className="w-4 h-4" />
+                <span className="font-black text-xs">{u.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <BrutalButton data-testid="ann-send" color="green" onClick={send} className="w-full">🚀 BLAST</BrutalButton>
+      </BrutalCard>
+
+      <BrutalCard color="white" hover={false}>
+        <h3 className="font-display font-black text-2xl uppercase mb-3">📋 History ({history.length})</h3>
+        <div className="space-y-2 max-h-[600px] overflow-y-auto">
+          {history.map((a) => (
+            <div key={a.id} className="border-[3px] border-black p-3 bg-white">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`border-[2px] border-black px-1.5 py-0.5 font-black text-[10px] uppercase ${a.kind === "alert" ? "bg-brutal-pink text-white" : a.kind === "party" ? "bg-brutal-yellow" : "bg-brutal-cyan"}`}>{a.kind}</span>
+                <span className="font-black text-sm">{a.title}</span>
+                <span className="text-[10px] ml-auto font-bold">{a.recipients?.length || 0} ppl · ✅{a.read_by?.length || 0}</span>
+              </div>
+              <div className="text-sm font-medium">{a.message}</div>
+              <div className="text-[10px] font-bold mt-1">{new Date(a.created_at).toLocaleString()}</div>
+            </div>
+          ))}
+          {history.length === 0 && <div className="text-sm font-bold uppercase">No announcements yet.</div>}
+        </div>
+      </BrutalCard>
+    </div>
+  );
+};
+

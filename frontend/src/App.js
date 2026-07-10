@@ -22,6 +22,7 @@ import Games from "./pages/Games";
 import Quiz from "./pages/Quiz";
 import Learn from "./pages/Learn";
 import Events from "./pages/Events";
+import GameTeams from "./pages/GameTeams";
 
 const PrivateLayout = ({ children, adminOnly = false }) => {
   const { token, user } = useAuthStore();
@@ -68,6 +69,7 @@ function App() {
           <Route path="/quiz" element={<PrivateLayout><Quiz /></PrivateLayout>} />
           <Route path="/learn" element={<PrivateLayout><Learn /></PrivateLayout>} />
           <Route path="/events" element={<PrivateLayout><Events /></PrivateLayout>} />
+          <Route path="/teams" element={<PrivateLayout><GameTeams /></PrivateLayout>} />
           <Route path="/profile" element={<PrivateLayout><Profile /></PrivateLayout>} />
           <Route path="/admin" element={<PrivateLayout adminOnly><AdminDashboard /></PrivateLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
