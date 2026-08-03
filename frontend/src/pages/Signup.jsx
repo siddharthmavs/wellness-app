@@ -28,7 +28,7 @@ export default function Signup() {
 
  return (
  <div className="min-h-screen flex items-center justify-center p-6 paper-grain relative overflow-hidden"
- style={{ background: "linear-gradient(180deg, #EEF5E8 0%, #F0EBE0 100%)" }}>
+ style={{ background: "transparent" }}>
  <div className="absolute top-8 left-8 opacity-40 floaty-1 pointer-events-none"><IconSparkle size={56} /></div>
  <div className="absolute bottom-16 right-14 opacity-40 floaty-2 pointer-events-none"><IconLeaf size={72} /></div>
 
