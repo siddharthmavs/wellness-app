@@ -75,13 +75,25 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 - Dark mode: separate cozy dark palette (#1E241B bg, #262E22 surface, #8FBF72 primary) preserving warm character
 - Cozy floating mobile bottom-nav (rounded pill, not edge-to-edge)
 
+### Chunk 7 (Hand-drawn Illustration Pass)
+- New `HandDrawn.jsx` library — 27+ SVG icons in unified 2-3px organic wobbly ink line style with paper-grain filter and personality (asymmetric, wobbly, muted flat fills from cozy palette)
+- Mood picker: 8 hand-drawn mood characters (Lit flame w/face, Zen sitting cat + steam curl, Meh tilted eyes, Stressed tangled scribble cloud, Tired droopy eyes + Zzz, Hyped star burst, Overload spiral eyes, Cold snowflakes)
+- Fact card reactions: Mind Blown / Knew It / Hmm hand-drawn faces (no emoji)
+- Fun Wall reactions: hand-drawn laugh / heart / clap / fire illustrations (no emoji)
+- Navbar streak/points pill: IconSeedling + IconBolt SVG (no 🌱 ⚡ emoji)
+- Dashboard cards: corner doodles (Lightbulb / Book / Sparkle) bleed slightly outside container
+- Kalam handwritten font for quotes, notes, marginal captions
+- New CSS utilities: `.washi-tag` (torn tape sticker w/ striped edges), `.hand-frame` (SVG wobble border), `.doodle-corner` (flourish), `.ink-underline` (wobbly hand-drawn underline), `.journal-page` (torn-paper card feel)
+- Removed duplicate emoji from Dashboard ritual card labels and Admin Zone header
+
 ## Test iterations
-- iteration_1: backend 96%, frontend 85% (Chunk 1)
-- iteration_2: 100%/100% (Chunk 2)
-- iteration_3: 96%/100% (Chunk 3)
-- iteration_4: 100%/100% (Chunk 4 polish)
-- iteration_5: 100% (25/25)/100% (Chunk 5 admin control)
-- iteration_6: frontend 100% across 15+ routes (Chunk 6 Cozy redesign)
+- iteration_1: backend 96%, frontend 85%
+- iteration_2: 100%/100%
+- iteration_3: 96%/100%
+- iteration_4: 100%/100%
+- iteration_5: 100%/100%
+- iteration_6: frontend 100% (Cozy redesign)
+- iteration_7: frontend 100% on user-flagged illustration requirements
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py

@@ -12,10 +12,10 @@ import { toast } from "sonner";
 import { Droplet, Eye, StretchHorizontal, Wind, Sparkles } from "lucide-react";
 
 const ACTIONS = [
-  { type: "water", label: "💧 Drink Water", sub: "Hey legend, hydrate!", icon: Droplet, color: "cyan", pts: 10 },
-  { type: "eye_care", label: "👀 Eye Break", sub: "Your eyes, tired bro", icon: Eye, color: "yellow", pts: 15 },
-  { type: "stand", label: "🧍 Stand Up", sub: "Becoming a chair?", icon: StretchHorizontal, color: "pink", pts: 10 },
-  { type: "breathing", label: "🌬️ Breathe", sub: "Reset the brain", icon: Wind, color: "green", pts: 20 },
+  { type: "water", label: "Drink Water", sub: "Hey legend, hydrate!", icon: Droplet, color: "cyan", pts: 10 },
+  { type: "eye_care", label: "Eye Break", sub: "Your eyes, tired bro", icon: Eye, color: "yellow", pts: 15 },
+  { type: "stand", label: "Stand Up", sub: "Becoming a chair?", icon: StretchHorizontal, color: "pink", pts: 10 },
+  { type: "breathing", label: "Breathe", sub: "Reset the brain", icon: Wind, color: "green", pts: 20 },
 ];
 
 export default function Dashboard() {

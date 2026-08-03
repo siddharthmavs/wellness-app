@@ -30,7 +30,7 @@ export default function AdminDashboard() {
         className="bg-black text-brutal-yellow border-[4px] border-black shadow-brutal-lg p-6 mb-6 inline-block"
         data-testid="admin-header"
       >
-        <h1 className="font-display font-black text-5xl md:text-6xl uppercase leading-none">⚡ ADMIN ZONE</h1>
+        <h1 className="font-display font-black text-5xl md:text-6xl uppercase leading-none">Admin Zone</h1>
         <p className="text-xs uppercase tracking-widest mt-2">control center · don't break stuff</p>
       </motion.div>
 
