@@ -29,9 +29,9 @@ const PrivateLayout = ({ children, adminOnly = false }) => {
   if (!token) return <Navigate to="/login" replace />;
   if (adminOnly && user?.role !== "admin") return <Navigate to="/" replace />;
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white paper-grain relative">
       <Navbar />
-      {children}
+      <div className="relative z-10">{children}</div>
       <BottomNav />
     </div>
   );

@@ -25,9 +25,9 @@ export const DidYouKnowCard = () => {
       style={{ background: fact.color }}
       data-testid="did-you-know"
     >
-      <div className="text-xs font-black uppercase tracking-widest mb-1">💡 DID YOU KNOW?</div>
-      <div className="bg-black text-white inline-block px-2 py-0.5 font-black text-xs uppercase mb-2">{fact.category}</div>
-      <p className="font-display font-black text-xl uppercase leading-tight mt-1">{fact.fact}</p>
+      <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--cozy-muted)" }}>💡 DAILY WELLNESS FACT</div>
+      <div className="inline-block px-2 py-0.5 font-semibold text-xs uppercase mb-2 rounded-full" style={{ background: "var(--cozy-surface)", color: "var(--cozy-text)" }}>{fact.category}</div>
+      <p className="font-display text-xl leading-snug mt-1">{fact.fact}</p>
       <div className="flex gap-2 flex-wrap mt-3">
         {REACTS.map(r => (
           <button
@@ -54,9 +54,9 @@ export const WordOfDayCard = () => {
       className="bg-black text-brutal-yellow border-[4px] border-black shadow-brutal-lg p-5 rounded-[4px]"
       data-testid="word-of-day"
     >
-      <div className="text-xs font-black uppercase tracking-widest mb-1">📖 WORD OF THE DAY</div>
-      <div className="font-display font-black text-4xl uppercase leading-none mt-2">{word.word}</div>
-      <div className="text-xs font-bold mt-1 italic">/{word.pron}/</div>
+      <div className="text-xs font-semibold uppercase tracking-wider mb-1">🌷 WELLNESS TIP · REFLECTION</div>
+      <div className="font-display text-4xl leading-none mt-2">{word.word}</div>
+      <div className="text-xs italic mt-1 opacity-80">/{word.pron}/</div>
       <p className="font-medium text-sm mt-3">{word.def}</p>
       <p className="text-xs font-bold italic mt-2">"{word.example}"</p>
       <div className="flex gap-1 flex-wrap mt-3">
@@ -78,7 +78,7 @@ export const SpotlightCard = () => {
       className="bg-brutal-pink text-white border-[4px] border-black shadow-brutal-lg p-5 rounded-[4px]"
       data-testid="spotlight-card"
     >
-      <div className="text-xs font-black uppercase tracking-widest mb-2">⭐ EMPLOYEE SPOTLIGHT · WEEK</div>
+      <div className="text-xs font-semibold uppercase tracking-wider mb-2">✨ COMMUNITY HIGHLIGHT · THIS WEEK</div>
       <div className="flex items-center gap-3">
         <img src={s.avatar} alt="" className="w-16 h-16 border-[3px] border-black bg-white" />
         <div>

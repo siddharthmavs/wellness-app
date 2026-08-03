@@ -5,6 +5,7 @@ import { EyeCareTimer } from "../components/EyeCareTimer";
 import { WellnessPopup } from "../components/WellnessPopup";
 import WeeklyInsightsCard from "../components/WeeklyInsightsCard";
 import { DidYouKnowCard, WordOfDayCard, SpotlightCard } from "../components/DashboardCards";
+import { CompanionMascot } from "../components/CompanionMascot";
 import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -81,32 +82,49 @@ export default function Dashboard() {
       {/* Hero row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <motion.div
-          initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          className="md:col-span-2 bg-brutal-yellow border-[4px] border-black shadow-brutal-lg p-6 md:p-8 rounded-[4px] -rotate-1"
+          initial={{ y: -12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          className="md:col-span-2 relative overflow-hidden p-6 md:p-8"
+          style={{ background: "linear-gradient(135deg, #F7D9C4 0%, #F2B5A7 100%)", borderRadius: 28, boxShadow: "var(--shadow-cozy-lg)" }}
           data-testid="hero-card"
         >
-          <div className="text-xs font-black uppercase tracking-widest mb-2">Yo, {user?.name?.split(" ")[0] || "Legend"}</div>
-          <h1 className="font-display font-black text-4xl md:text-6xl uppercase leading-none mb-4">
-            FEELING<br/>BRUTAL<br/>TODAY? 💪
-          </h1>
-          <div className="flex gap-3 flex-wrap">
-            <BrutalBadge color="pink">🔥 {user?.streak || 0} day streak</BrutalBadge>
-            <BrutalBadge color="green">⚡ {user?.points || 0} pts</BrutalBadge>
-            <BrutalBadge color="cyan">🎮 Lvl {user?.level || 1}</BrutalBadge>
+          <div className="relative z-10 max-w-md">
+            <div className="text-sm font-semibold mb-2" style={{ color: "var(--cozy-text)", opacity: 0.7 }}>
+              {new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening"}, {user?.name?.split(" ")[0] || "friend"} 🌿
+            </div>
+            <h1 className="font-display text-4xl md:text-5xl leading-tight mb-4" style={{ color: "var(--cozy-text)" }}>
+              A calm start makes a strong day.
+            </h1>
+            <p className="font-hand text-lg" style={{ color: "var(--cozy-text)", opacity: 0.8 }}>
+              your daily ritual, one small step at a time
+            </p>
+            <div className="flex gap-2 mt-5 flex-wrap">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(255,255,255,0.5)" }}>🌱 {user?.streak || 0} day streak</span>
+              <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(255,255,255,0.5)" }}>⚡ {user?.points || 0} pts</span>
+              <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(255,255,255,0.5)" }}>🌳 Level {user?.level || 1}</span>
+            </div>
+          </div>
+          <div className="absolute right-4 bottom-0 opacity-90 pointer-events-none">
+            <CompanionMascot state={(user?.wellness_score || 50) >= 60 ? "happy" : (user?.wellness_score || 50) >= 40 ? "idle" : "sad"} size={140} />
           </div>
         </motion.div>
 
         <motion.div
-          initial={{ y: -20, opacity: 0, rotate: 2 }} animate={{ y: 0, opacity: 1, rotate: 1 }}
-          className="bg-brutal-pink text-white border-[4px] border-black shadow-brutal-lg p-6 rounded-[4px]"
+          initial={{ y: -12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          className="p-6"
+          style={{ background: "var(--cozy-surface)", borderRadius: 24, boxShadow: "var(--shadow-cozy)", border: "1px solid var(--cozy-border)" }}
           data-testid="wellness-score-card"
         >
-          <div className="text-xs font-black uppercase tracking-widest mb-2">Wellness Score</div>
-          <div className="font-display font-black text-7xl leading-none">{user?.wellness_score || 50}<span className="text-2xl">/100</span></div>
-          <div className="mt-4 h-5 bg-white border-[3px] border-black">
-            <div className="h-full bg-brutal-green border-r-[3px] border-black" style={{ width: `${user?.wellness_score || 50}%` }} />
+          <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--cozy-muted)" }}>🌸 Wellness Garden</div>
+          <div className="font-display text-6xl leading-none" style={{ color: "var(--cozy-primary-dark)" }}>
+            {user?.wellness_score || 50}<span className="text-2xl" style={{ color: "var(--cozy-muted)" }}>/100</span>
           </div>
-          <p className="mt-3 text-xs font-bold uppercase">Keep grinding, champ</p>
+          <div className="mt-4 h-3 overflow-hidden" style={{ borderRadius: 999, background: "var(--cozy-bg)" }}>
+            <div
+              className="h-full transition-all"
+              style={{ width: `${user?.wellness_score || 50}%`, background: "linear-gradient(90deg, #7FAE62 0%, #A8D189 100%)", borderRadius: 999 }}
+            />
+          </div>
+          <p className="mt-3 text-xs font-medium" style={{ color: "var(--cozy-muted)" }}>Nurture with small daily acts</p>
         </motion.div>
       </div>
 
@@ -118,7 +136,7 @@ export default function Dashboard() {
       </div>
 
       {/* Quick actions */}
-      <h2 className="font-display font-black text-3xl uppercase mb-4">⚡ Quick Wins</h2>
+      <h2 className="font-display text-2xl mb-4" style={{ color: "var(--cozy-text)" }}>🌱 Today's rituals</h2>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
         {ACTIONS.map((a, i) => (
           <motion.button

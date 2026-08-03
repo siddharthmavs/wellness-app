@@ -1,18 +1,34 @@
 import React from "react";
 import { motion } from "framer-motion";
 
+// Cozy Wellness component library (backwards-compatible names)
 const COLORS = {
-  yellow: "bg-brutal-yellow",
-  cyan: "bg-brutal-cyan",
-  pink: "bg-brutal-pink",
-  green: "bg-brutal-green",
-  white: "bg-white",
-  black: "bg-black text-white",
+  yellow: "bg-cozy-secondary text-cozy-text",
+  cyan: "text-cozy-text",
+  pink: "bg-cozy-accent text-cozy-text",
+  green: "bg-cozy-primary text-white",
+  white: "bg-cozy-surface text-cozy-text",
+  black: "text-white",
+  primary: "bg-cozy-primary text-white",
+  secondary: "bg-cozy-secondary text-cozy-text",
+  accent: "bg-cozy-accent text-cozy-text",
+};
+
+const COLOR_HEX = {
+  yellow: "#F7D9C4",
+  cyan: "#C8DFF0",
+  pink: "#F2B5A7",
+  green: "#7FAE62",
+  white: "var(--cozy-surface)",
+  black: "var(--cozy-text)",
+  primary: "#7FAE62",
+  secondary: "#F7D9C4",
+  accent: "#F2B5A7",
 };
 
 export const BrutalButton = ({
   children,
-  color = "yellow",
+  color = "primary",
   className = "",
   size = "md",
   onClick,
@@ -20,16 +36,17 @@ export const BrutalButton = ({
   disabled = false,
   ...rest
 }) => {
-  const sizeCls = size === "lg" ? "px-7 py-4 text-lg" : size === "sm" ? "px-3 py-2 text-xs" : "px-5 py-3 text-sm";
+  const sizeCls = size === "lg" ? "px-7 py-4 text-base" : size === "sm" ? "px-3 py-2 text-xs" : "px-5 py-2.5 text-sm";
   return (
     <motion.button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      whileHover={disabled ? {} : { scale: 1.02, rotate: -1 }}
-      whileTap={disabled ? {} : { scale: 0.95, x: 4, y: 4, boxShadow: "0px 0px 0px 0px rgba(0,0,0,1)" }}
-      transition={{ type: "spring", stiffness: 400, damping: 17 }}
-      className={`${COLORS[color]} ${sizeCls} font-black uppercase tracking-wider border-[3px] border-black shadow-brutal rounded-[2px] disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      whileHover={disabled ? {} : { y: -2 }}
+      whileTap={disabled ? {} : { scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 400, damping: 20 }}
+      className={`${COLORS[color] || COLORS.primary} ${sizeCls} font-display font-semibold tracking-wide rounded-full shadow-cozy hover:shadow-cozy-lg disabled:opacity-50 disabled:cursor-not-allowed brutal-btn ${className}`}
+      style={{ backgroundColor: color === "cyan" ? "#C8DFF0" : undefined }}
       {...rest}
     >
       {children}
@@ -39,11 +56,12 @@ export const BrutalButton = ({
 
 export const BrutalCard = ({ children, color = "white", className = "", tilt = 0, hover = true, ...rest }) => (
   <motion.div
-    initial={{ opacity: 0, y: 20, rotate: tilt - 1 }}
-    animate={{ opacity: 1, y: 0, rotate: tilt }}
-    whileHover={hover ? { scale: 1.01, rotate: tilt + 1, y: -2 } : {}}
-    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-    className={`${COLORS[color]} border-[4px] border-black shadow-brutal-lg rounded-[4px] p-5 ${className}`}
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    whileHover={hover ? { y: -3 } : {}}
+    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+    className={`${COLORS[color] || COLORS.white} border border-cozy-border shadow-cozy hover:shadow-cozy-lg p-6 ${className}`}
+    style={{ borderRadius: 24, backgroundColor: color === "cyan" ? "#C8DFF0" : undefined }}
     {...rest}
   >
     {children}
@@ -53,25 +71,39 @@ export const BrutalCard = ({ children, color = "white", className = "", tilt = 0
 export const BrutalInput = React.forwardRef(({ className = "", ...rest }, ref) => (
   <input
     ref={ref}
-    className={`w-full border-[3px] border-black px-4 py-3 bg-white focus:outline-none focus:ring-4 focus:ring-brutal-cyan focus:border-black font-medium rounded-[2px] ${className}`}
+    className={`w-full border border-cozy-border px-4 py-3 bg-cozy-surface text-cozy-text placeholder:text-cozy-muted focus:outline-none font-medium ${className}`}
+    style={{ borderRadius: 16 }}
     {...rest}
   />
 ));
 BrutalInput.displayName = "BrutalInput";
 
-export const BrutalBadge = ({ children, color = "pink", className = "" }) => (
+export const BrutalBadge = ({ children, color = "primary", className = "" }) => (
   <span
-    className={`${COLORS[color]} inline-flex items-center border-[2px] border-black px-3 py-1 font-bold text-xs uppercase tracking-wider shadow-brutal-sm rounded-[2px] ${className}`}
+    className={`inline-flex items-center px-3 py-1 font-semibold text-xs ${className}`}
+    style={{
+      borderRadius: 999,
+      backgroundColor: COLOR_HEX[color] || COLOR_HEX.primary,
+      color: color === "green" || color === "primary" ? "#fff" : "var(--cozy-text)",
+      border: "1px solid var(--cozy-border)",
+    }}
   >
     {children}
   </span>
 );
 
-export const BrutalTag = ({ children, color = "yellow", active = false, onClick }) => (
+export const BrutalTag = ({ children, color = "primary", active = false, onClick }) => (
   <motion.button
     whileTap={{ scale: 0.95 }}
     onClick={onClick}
-    className={`${active ? COLORS[color] : "bg-white"} border-[3px] border-black px-4 py-2 font-black uppercase tracking-wider text-xs rounded-[2px] ${active ? "shadow-brutal" : ""}`}
+    className="px-4 py-2 font-semibold text-xs tracking-wide transition-all"
+    style={{
+      borderRadius: 999,
+      backgroundColor: active ? (COLOR_HEX[color] || COLOR_HEX.primary) : "var(--cozy-surface)",
+      color: active && (color === "green" || color === "primary") ? "#fff" : "var(--cozy-text)",
+      border: active ? "none" : "1px solid var(--cozy-border)",
+      boxShadow: active ? "var(--shadow-cozy)" : "none",
+    }}
   >
     {children}
   </motion.button>

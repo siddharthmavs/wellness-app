@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BrutalButton, BrutalCard, BrutalInput } from "../components/brutal";
+import { BrutalButton, BrutalInput } from "../components/brutal";
+import { CompanionMascot } from "../components/CompanionMascot";
 import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -19,7 +20,7 @@ export default function Login() {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       setAuth(data.token, data.user);
-      toast.success("🔥 Locked in");
+      toast.success("Welcome back 🌿");
       nav("/");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Login failed");
@@ -27,53 +28,93 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen brutal-dots flex items-center justify-center p-6">
-      <div className="max-w-md w-full">
+    <div
+      className="min-h-screen flex items-center justify-center p-6 paper-grain relative overflow-hidden"
+      style={{ background: "linear-gradient(180deg, #EEF5E8 0%, #F0EBE0 100%)" }}
+    >
+      {/* Cozy background illustrations */}
+      <div className="absolute top-8 left-8 text-6xl opacity-30 floaty-1">☁️</div>
+      <div className="absolute top-20 right-16 text-5xl opacity-30 floaty-2">🌱</div>
+      <div className="absolute bottom-16 left-20 text-5xl opacity-30 floaty-3">🍃</div>
+      <div className="absolute bottom-24 right-8 text-6xl opacity-25 floaty-1">🌸</div>
+
+      <div className="max-w-5xl w-full grid md:grid-cols-2 gap-8 items-center relative z-10">
+        {/* Left: cozy room illustration */}
         <motion.div
-          initial={{ y: -30, opacity: 0, rotate: -3 }}
-          animate={{ y: 0, opacity: 1, rotate: -2 }}
-          className="mb-6 bg-black text-brutal-yellow border-[4px] border-black shadow-brutal-lg p-5 inline-block"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+          className="hidden md:flex flex-col items-center text-center"
         >
-          <h1 className="font-display font-black text-4xl uppercase leading-none">
-            BRUTAL<br/>WELLNESS
+          <div className="relative">
+            <CompanionMascot state="happy" size={220} />
+            <div className="absolute -top-4 -right-4 text-4xl floaty-2">✨</div>
+          </div>
+          <h1 className="font-display text-4xl mt-4" style={{ color: "var(--cozy-primary-dark)" }}>
+            A little corner of calm
           </h1>
-          <p className="text-xs mt-2 uppercase tracking-widest">👊 Get in loser, we're lifting</p>
+          <p className="font-hand text-lg mt-2" style={{ color: "var(--cozy-muted)" }}>
+            your daily ritual for wellbeing
+          </p>
+          <div className="flex gap-4 mt-6 text-cozy-muted text-sm">
+            <span>🌱 Grow habits</span>
+            <span>🐾 Meet companion</span>
+            <span>🎨 Community</span>
+          </div>
         </motion.div>
 
-        <BrutalCard color="white" tilt={1}>
-          <h2 className="font-display font-black text-3xl uppercase mb-4">Enter the Zone</h2>
+        {/* Right: login card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="bg-cozy-surface shadow-cozy-lg p-8 md:p-10"
+          style={{ borderRadius: 32, border: "1px solid var(--cozy-border)" }}
+        >
+          <h2 className="font-display text-3xl mb-1" style={{ color: "var(--cozy-text)" }}>
+            Welcome back
+          </h2>
+          <p className="text-sm mb-6" style={{ color: "var(--cozy-muted)" }}>
+            Sign in to continue your journey
+          </p>
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className="font-bold uppercase text-xs tracking-wider block mb-1">Email</label>
+              <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>
+                Email
+              </label>
               <BrutalInput
                 data-testid="login-email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
               />
             </div>
             <div>
-              <label className="font-bold uppercase text-xs tracking-wider block mb-1">Password</label>
+              <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>
+                Password
+              </label>
               <BrutalInput
                 data-testid="login-password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
               />
             </div>
-            <BrutalButton data-testid="login-submit" type="submit" color="yellow" size="lg" className="w-full" disabled={loading}>
-              {loading ? "LOADING..." : "ENTER THE ZONE →"}
+            <BrutalButton data-testid="login-submit" type="submit" color="primary" size="lg" className="w-full" disabled={loading}>
+              {loading ? "One sec..." : "Enter garden 🌱"}
             </BrutalButton>
           </form>
-          <p className="text-center mt-4 text-sm font-semibold">
-            New here? <Link className="underline font-black uppercase" to="/signup" data-testid="link-signup">Make an account</Link>
+          <p className="text-center mt-5 text-sm" style={{ color: "var(--cozy-muted)" }}>
+            New here? <Link className="font-semibold text-cozy-primary-dark underline" to="/signup" data-testid="link-signup">Create an account</Link>
           </p>
-          <div className="mt-4 bg-brutal-cyan border-[3px] border-black p-3 text-xs font-bold">
-            🧪 DEMO: alex@demo.com / demo1234
+          <div className="mt-4 p-3 text-xs font-medium" style={{ background: "var(--cozy-bg)", borderRadius: 16, color: "var(--cozy-muted)" }}>
+            🌿 Try demo: <b>alex@demo.com</b> / demo1234 · <b>admin@demo.com</b> / demo1234
           </div>
-        </BrutalCard>
+        </motion.div>
       </div>
     </div>
   );

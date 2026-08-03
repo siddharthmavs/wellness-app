@@ -4,29 +4,29 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore, useThemeStore } from "../store";
 import { NotificationBell } from "./NotificationBell";
 import {
-  LogOut, Zap, Trophy, Smile, MessageSquare, User, LayoutDashboard,
+  LogOut, Home, Trophy, Smile, MessageSquare, User, Sparkles,
   Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
   BookOpen, Cake, MoreHorizontal, Sun, Moon, Swords,
 } from "lucide-react";
 
 const PRIMARY = [
-  { to: "/", label: "DASH", icon: LayoutDashboard, color: "bg-brutal-yellow" },
-  { to: "/leaderboard", label: "TOP DOGS", icon: Trophy, color: "bg-brutal-pink" },
-  { to: "/mood", label: "MOOD", icon: Smile, color: "bg-brutal-cyan" },
-  { to: "/funwall", label: "FUN WALL", icon: MessageSquare, color: "bg-brutal-green" },
-  { to: "/shoutouts", label: "SHOUTS", icon: Megaphone, color: "bg-brutal-yellow" },
+  { to: "/", label: "Home", icon: Home },
+  { to: "/leaderboard", label: "Journey", icon: Trophy },
+  { to: "/mood", label: "Mood", icon: Smile },
+  { to: "/funwall", label: "Community", icon: MessageSquare },
+  { to: "/shoutouts", label: "Kudos", icon: Sparkles },
 ];
 
 const MORE = [
-  { to: "/help", label: "HELP", icon: HandHelping, color: "bg-brutal-cyan" },
-  { to: "/music", label: "MUSIC", icon: Music, color: "bg-brutal-pink" },
-  { to: "/polls", label: "POLLS", icon: Vote, color: "bg-brutal-cyan" },
-  { to: "/games", label: "GAMES", icon: Gamepad2, color: "bg-brutal-yellow" },
-  { to: "/quiz", label: "QUIZ", icon: Brain, color: "bg-brutal-pink" },
-  { to: "/learn", label: "LEARN", icon: BookOpen, color: "bg-brutal-green" },
-  { to: "/events", label: "EVENTS", icon: Cake, color: "bg-brutal-yellow" },
-  { to: "/teams", label: "TEAMS", icon: Swords, color: "bg-brutal-pink" },
-  { to: "/profile", label: "ME", icon: User, color: "bg-white" },
+  { to: "/help", label: "Help", icon: HandHelping },
+  { to: "/music", label: "Music", icon: Music },
+  { to: "/polls", label: "Polls", icon: Vote },
+  { to: "/games", label: "Games", icon: Gamepad2 },
+  { to: "/quiz", label: "Quiz", icon: Brain },
+  { to: "/learn", label: "Learn", icon: BookOpen },
+  { to: "/events", label: "Events", icon: Cake },
+  { to: "/teams", label: "Teams", icon: Swords },
+  { to: "/profile", label: "Me", icon: User },
 ];
 
 export const Navbar = () => {
@@ -34,53 +34,66 @@ export const Navbar = () => {
   const { theme, toggle: toggleTheme } = useThemeStore();
   const nav = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
-  const links = [...PRIMARY];
   const more = [...MORE];
   if (user?.role === "admin") {
-    more.push({ to: "/admin", label: "ADMIN", icon: Shield, color: "bg-black text-brutal-yellow" });
+    more.push({ to: "/admin", label: "Admin", icon: Shield });
   }
 
   return (
-    <header data-testid="navbar" className="sticky top-0 z-40 border-b-[4px] border-black bg-white">
+    <header
+      data-testid="navbar"
+      className="sticky top-0 z-40 bg-cozy-surface"
+      style={{
+        borderBottom: "1px solid var(--cozy-border)",
+        backdropFilter: "blur(8px)",
+      }}
+    >
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4 flex-wrap">
         <motion.div
-          initial={{ rotate: -3 }} animate={{ rotate: -2 }} whileHover={{ rotate: 2, scale: 1.05 }}
-          className="bg-black text-brutal-yellow px-3 py-1.5 border-[3px] border-black shadow-brutal-sm font-display font-black text-base md:text-lg uppercase tracking-tighter"
+          whileHover={{ scale: 1.04 }}
+          className="flex items-center gap-2 font-display font-semibold text-lg text-cozy-primary-dark"
         >
-          <Zap className="inline w-4 h-4 mr-1 -mt-1" /> BRUTAL
+          <span className="text-2xl">🌿</span>
+          <span className="hidden sm:inline">Wellness Garden</span>
         </motion.div>
 
         <nav className="flex gap-1.5 flex-wrap" data-testid="nav-links">
-          {links.map((l) => (
+          {PRIMARY.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
               end={l.to === "/"}
-              data-testid={`nav-${l.label.toLowerCase().replace(/\s+/g, "-")}`}
+              data-testid={`nav-${l.label.toLowerCase()}`}
               className={({ isActive }) =>
-                `flex items-center gap-1 font-black uppercase text-[11px] tracking-wider px-2.5 py-1.5 border-[3px] border-black rounded-[2px] transition-all ${
-                  isActive ? `${l.color} shadow-brutal-sm` : "bg-white hover:-translate-y-0.5"
+                `flex items-center gap-1.5 font-semibold text-xs md:text-sm px-3 py-2 rounded-full transition-all ${
+                  isActive
+                    ? "bg-cozy-primary text-white shadow-cozy"
+                    : "text-cozy-text hover:bg-cozy-secondary/60"
                 }`
               }
             >
-              <l.icon className="w-3.5 h-3.5" /> {l.label}
+              <l.icon className="w-4 h-4" /> {l.label}
             </NavLink>
           ))}
           <div className="relative">
             <button
               data-testid="nav-more-btn"
               onClick={() => setMoreOpen(!moreOpen)}
-              className={`flex items-center gap-1 font-black uppercase text-[11px] tracking-wider px-2.5 py-1.5 border-[3px] border-black rounded-[2px] ${moreOpen ? "bg-brutal-yellow shadow-brutal-sm" : "bg-white"}`}
+              className={`flex items-center gap-1.5 font-semibold text-xs md:text-sm px-3 py-2 rounded-full transition-all ${
+                moreOpen ? "bg-cozy-secondary shadow-cozy" : "text-cozy-text hover:bg-cozy-secondary/60"
+              }`}
             >
-              <MoreHorizontal className="w-3.5 h-3.5" /> MORE
+              <MoreHorizontal className="w-4 h-4" /> More
             </button>
             <AnimatePresence>
               {moreOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: -10, rotate: -2 }}
-                  animate={{ opacity: 1, y: 0, rotate: -1 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute top-full right-0 mt-2 z-50 bg-white border-[4px] border-black shadow-brutal-lg p-2 grid grid-cols-2 gap-1.5 min-w-[260px]"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute top-full right-0 mt-2 z-50 bg-cozy-surface shadow-cozy-lg p-2 grid grid-cols-2 gap-1.5 min-w-[280px]"
+                  style={{ border: "1px solid var(--cozy-border)", borderRadius: 20 }}
                   data-testid="nav-more-menu"
                 >
                   {more.map((l) => (
@@ -90,10 +103,14 @@ export const Navbar = () => {
                       onClick={() => setMoreOpen(false)}
                       data-testid={`nav-${l.label.toLowerCase()}`}
                       className={({ isActive }) =>
-                        `flex items-center gap-1 font-black uppercase text-[11px] px-2 py-2 border-[3px] border-black rounded-[2px] ${isActive ? `${l.color}` : "bg-white hover:bg-brutal-yellow"}`
+                        `flex items-center gap-2 font-semibold text-xs px-3 py-2 rounded-full transition ${
+                          isActive
+                            ? "bg-cozy-primary text-white"
+                            : "text-cozy-text hover:bg-cozy-secondary/50"
+                        }`
                       }
                     >
-                      <l.icon className="w-3.5 h-3.5" /> {l.label}
+                      <l.icon className="w-4 h-4" /> {l.label}
                     </NavLink>
                   ))}
                 </motion.div>
@@ -103,27 +120,30 @@ export const Navbar = () => {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden md:flex items-center gap-2 bg-brutal-yellow border-[3px] border-black px-3 py-1.5 shadow-brutal-sm">
-            <span className="font-black text-xs uppercase">🔥 {user?.streak || 0}</span>
-            <span className="font-black text-xs uppercase border-l-2 border-black pl-2">⚡ {user?.points || 0}</span>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: "var(--cozy-secondary)" }}>
+            <span className="font-bold text-xs">🌱 {user?.streak || 0}</span>
+            <span className="font-bold text-xs opacity-40">·</span>
+            <span className="font-bold text-xs">⚡ {user?.points || 0}</span>
           </div>
           <NotificationBell />
           <motion.button
-            whileTap={{ scale: 0.92, rotate: 8 }}
+            whileTap={{ scale: 0.9 }}
             data-testid="theme-toggle"
             onClick={toggleTheme}
-            className="bg-brutal-cyan border-[3px] border-black p-2 shadow-brutal-sm"
+            className="p-2 rounded-full shadow-cozy"
+            style={{ background: "var(--cozy-surface)", border: "1px solid var(--cozy-border)" }}
             title="Toggle theme"
           >
             {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </motion.button>
           <motion.button
-            whileTap={{ scale: 0.95, x: 2, y: 2 }}
+            whileTap={{ scale: 0.95 }}
             data-testid="logout-btn"
             onClick={() => { logout(); nav("/login"); }}
-            className="bg-brutal-pink border-[3px] border-black px-3 py-2 shadow-brutal-sm font-black uppercase text-xs flex items-center gap-1"
+            className="px-3 py-2 rounded-full font-semibold text-xs flex items-center gap-1 text-cozy-text shadow-cozy"
+            style={{ background: "var(--cozy-accent)" }}
           >
-            <LogOut className="w-4 h-4" /> BOUNCE
+            <LogOut className="w-4 h-4" /> Sign out
           </motion.button>
         </div>
       </div>
