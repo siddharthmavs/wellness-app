@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore, useThemeStore } from "../store";
 import { NotificationBell } from "./NotificationBell";
+import { IconSeedling, IconBolt } from "./HandDrawn";
 import {
   LogOut, Home, Trophy, Smile, MessageSquare, User, Sparkles,
   Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
@@ -120,10 +121,12 @@ export const Navbar = () => {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: "var(--cozy-secondary)" }}>
-            <span className="font-bold text-xs">🌱 {user?.streak || 0}</span>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "var(--cozy-secondary)" }}>
+            <IconSeedling size={20} />
+            <span className="font-bold text-xs">{user?.streak || 0}</span>
             <span className="font-bold text-xs opacity-40">·</span>
-            <span className="font-bold text-xs">⚡ {user?.points || 0}</span>
+            <IconBolt size={18} />
+            <span className="font-bold text-xs">{user?.points || 0}</span>
           </div>
           <NotificationBell />
           <motion.button

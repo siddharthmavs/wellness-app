@@ -7,8 +7,14 @@ import { useAuthStore } from "../store";
 import { toast } from "sonner";
 import { MentionInput, renderMentions } from "../components/MentionInput";
 import { Skeleton, EmptyState } from "../components/Skeleton";
+import { IconLaugh, IconHeart, IconClap, IconFire } from "../components/HandDrawn";
 
-const REACTS = ["😂", "❤️", "👏", "🔥"];
+const REACTS = [
+  { emoji: "😂", Icon: IconLaugh },
+  { emoji: "❤️", Icon: IconHeart },
+  { emoji: "👏", Icon: IconClap },
+  { emoji: "🔥", Icon: IconFire },
+];
 
 export default function FunWall() {
   const { user } = useAuthStore();
@@ -134,7 +140,7 @@ export default function FunWall() {
                 <MessageCircle className="w-4 h-4" /> {p.comments?.length || 0}
               </div>
               <div className="flex gap-1.5 ml-1" data-testid={`reactions-${p.id}`}>
-                {REACTS.map((e) => {
+                {REACTS.map(({ emoji: e, Icon }) => {
                   const arr = p.reactions?.[e] || [];
                   const mine = arr.includes(user?.id);
                   return (
@@ -142,9 +148,15 @@ export default function FunWall() {
                       key={e}
                       data-testid={`react-${p.id}-${e}`}
                       onClick={() => react(p.id, e)}
-                      className={`border-[2px] border-black px-2 py-1 shadow-brutal-sm font-black text-xs ${mine ? "bg-brutal-yellow" : "bg-white"}`}
+                      className="flex items-center gap-1 px-2 py-1 rounded-full font-semibold text-xs"
+                      style={{
+                        background: mine ? "var(--cozy-secondary)" : "var(--cozy-surface)",
+                        border: "1px solid var(--cozy-border)",
+                        boxShadow: "var(--shadow-cozy)",
+                      }}
                     >
-                      {e}{arr.length > 0 ? ` ${arr.length}` : ""}
+                      <Icon size={18} />
+                      {arr.length > 0 ? <span>{arr.length}</span> : null}
                     </button>
                   );
                 })}

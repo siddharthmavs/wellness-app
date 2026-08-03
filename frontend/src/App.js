@@ -6,6 +6,7 @@ import { useAuthStore, useThemeStore } from "./store";
 import { api } from "./lib/api";
 import { Navbar } from "./components/Navbar";
 import { BottomNav } from "./components/BottomNav";
+import { InkDefs } from "./components/HandDrawn";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
