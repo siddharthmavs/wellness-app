@@ -63,12 +63,25 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 - 🔔 Notification Bell in navbar (badge + dropdown)
 - ⚔️ /teams page for users to see their game team + global standings
 
+### Chunk 6 (Cozy Wellness Redesign)
+- Full visual pivot from Neo-Brutalism → Cozy Wellness per PRD spec v2
+- New palette (light + dark): sage/cream/peach/coral warm tones; deep olive text
+- New fonts: Fredoka (display), Nunito (body), Kalam (accent handwritten)
+- Rounded 20-24px cards, soft box-shadows (no hard brutal), pill buttons/badges/nav
+- Hand-drawn SVG cat mascot (CompanionMascot) with 3 states (idle/happy/sad) tied to wellness_score
+- Paper grain SVG noise overlay, floating decorative emojis (🌿☁️🍃🌱🌸)
+- Section renames per spec §12: Wellness Score→Wellness Garden, Did You Know→Daily Wellness Fact, Word of Day→Wellness Tip, Employee Spotlight→Community Highlight, Feeling Brutal→time-of-day greeting
+- Approach: global CSS overrides in index.css remap every legacy `bg-brutal-*`, `border-black`, `shadow-brutal*`, `border-[3-6px]`, `rounded-[2-4px]` utility to cozy tokens — so every existing page inherits new look automatically without per-file edits
+- Dark mode: separate cozy dark palette (#1E241B bg, #262E22 surface, #8FBF72 primary) preserving warm character
+- Cozy floating mobile bottom-nav (rounded pill, not edge-to-edge)
+
 ## Test iterations
-- iteration_1: backend 96%, frontend 85% (Chunk 1, fixed streak bug)
-- iteration_2: backend 100%, frontend 100% (Chunk 2)
-- iteration_3: backend 96%, frontend 100% (Chunk 3, fixed seed role-update bug)
-- iteration_4: backend 100%, frontend 100% (Chunk 4 polish)
-- iteration_5: backend 100% (25/25), frontend 100% (Chunk 5 admin control)
+- iteration_1: backend 96%, frontend 85% (Chunk 1)
+- iteration_2: 100%/100% (Chunk 2)
+- iteration_3: 96%/100% (Chunk 3)
+- iteration_4: 100%/100% (Chunk 4 polish)
+- iteration_5: 100% (25/25)/100% (Chunk 5 admin control)
+- iteration_6: frontend 100% across 15+ routes (Chunk 6 Cozy redesign)
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py

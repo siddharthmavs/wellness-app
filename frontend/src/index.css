@@ -105,6 +105,20 @@ html.dark .bg-brutal-pink { background-color: #7A4E4A !important; color: var(--c
 html.dark .bg-brutal-green { background-color: var(--cozy-primary) !important; color: #fff; }
 html.dark .bg-gray-100 { background-color: var(--cozy-surface) !important; }
 
+/* Dark-mode overrides for inline pastel backgrounds used in hero + cards */
+html.dark [style*="background: linear-gradient(135deg, #F7D9C4"],
+html.dark [style*="linear-gradient(135deg, #F7D9C4"] {
+  background: linear-gradient(135deg, #6B5341 0%, #7A4E4A 100%) !important;
+  color: var(--cozy-text) !important;
+}
+html.dark [style*="background: #C8DFF0"],
+html.dark [style*="backgroundColor: \"#C8DFF0\""] {
+  background: #4A6A80 !important;
+}
+html.dark [style*="backgroundColor: color === \"cyan\" ? \"#C8DFF0\""] {
+  background: #4A6A80 !important;
+}
+
 /* Borders: black → soft cozy border */
 .border-black { border-color: var(--cozy-border) !important; }
 html.dark .border-black { border-color: var(--cozy-border) !important; }
