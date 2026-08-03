@@ -309,10 +309,10 @@ async def comment_post(post_id: str, body: CommentReq, user=Depends(get_current_
 
 # ---------- Notifications (wellness reminders) ----------
 WELLNESS_NOTIFS = [
-    {"type": "water", "title": "🚰 Hey legend, drink water", "message": "It's been a while. Hydrate or deteriorate.", "color": "#00E5FF"},
-    {"type": "eye_care", "title": "👀 Your eyes are tired bro", "message": "20-20-20. Look away for 20 seconds at something 20ft away.", "color": "#FFE600"},
-    {"type": "stand", "title": "🧍 You are becoming a chair", "message": "Stand up. Stretch. Be a human.", "color": "#FF4D6D"},
-    {"type": "breathing", "title": "🌬️ Breathe, champion", "message": "Quick 4-7-8 breathing. Reset your brain.", "color": "#00C853"},
+    {"type": "water", "title": " Hey legend, drink water", "message": "It's been a while. Hydrate or deteriorate.", "color": "#00E5FF"},
+    {"type": "eye_care", "title": " Your eyes are tired bro", "message": "20-20-20. Look away for 20 seconds at something 20ft away.", "color": "#FFE600"},
+    {"type": "stand", "title": " You are becoming a chair", "message": "Stand up. Stretch. Be a human.", "color": "#FF4D6D"},
+    {"type": "breathing", "title": " Breathe, champion", "message": "Quick 4-7-8 breathing. Reset your brain.", "color": "#00C853"},
 ]
 
 @api.get("/notifications/random")
@@ -322,11 +322,11 @@ async def random_notif(user=Depends(get_current_user)):
 
 # ---------- Badges ----------
 BADGES = [
-    {"id": "first_drop", "name": "First Drop", "emoji": "💧", "desc": "Logged first water break", "color": "#00E5FF"},
-    {"id": "eye_master", "name": "Eye Master", "emoji": "👁️", "desc": "10 eye breaks", "color": "#FFE600"},
-    {"id": "streak_5", "name": "Fire Starter", "emoji": "🔥", "desc": "5 day streak", "color": "#FF4D6D"},
-    {"id": "mood_mood", "name": "Feels Expert", "emoji": "🎭", "desc": "Logged 7 moods", "color": "#00C853"},
-    {"id": "social", "name": "Meme Lord", "emoji": "😎", "desc": "Posted on Fun Wall", "color": "#FFE600"},
+    {"id": "first_drop", "name": "First Drop", "emoji": "", "desc": "Logged first water break", "color": "#00E5FF"},
+    {"id": "eye_master", "name": "Eye Master", "emoji": "", "desc": "10 eye breaks", "color": "#FFE600"},
+    {"id": "streak_5", "name": "Fire Starter", "emoji": "", "desc": "5 day streak", "color": "#FF4D6D"},
+    {"id": "mood_mood", "name": "Feels Expert", "emoji": "", "desc": "Logged 7 moods", "color": "#00C853"},
+    {"id": "social", "name": "Meme Lord", "emoji": "", "desc": "Posted on Fun Wall", "color": "#FFE600"},
 ]
 
 @api.get("/badges")
@@ -335,10 +335,10 @@ async def all_badges():
 
 # ---------- Challenges ----------
 CHALLENGES = [
-    {"id": "water_5", "title": "💦 Drink water 5 times", "reward": 50, "target": 5, "type": "water"},
-    {"id": "eye_3", "title": "👀 3 eye breaks today", "reward": 30, "target": 3, "type": "eye_care"},
-    {"id": "stand_3", "title": "🧍 Stand 3 times", "reward": 30, "target": 3, "type": "stand"},
-    {"id": "mood_1", "title": "🎭 Log your mood", "reward": 20, "target": 1, "type": "mood"},
+    {"id": "water_5", "title": " Drink water 5 times", "reward": 50, "target": 5, "type": "water"},
+    {"id": "eye_3", "title": " 3 eye breaks today", "reward": 30, "target": 3, "type": "eye_care"},
+    {"id": "stand_3", "title": " Stand 3 times", "reward": 30, "target": 3, "type": "stand"},
+    {"id": "mood_1", "title": " Log your mood", "reward": 20, "target": 1, "type": "mood"},
 ]
 
 @api.get("/challenges")
@@ -365,7 +365,7 @@ async def ai_mood_insight(body: AIInsightReq, user=Depends(get_current_user)):
         items = await db.moods.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(7)
         moods = [f"{m['emoji']} {m['label']}" for m in items]
     if not moods:
-        return {"insight": "No mood data yet. Log your vibes and I'll cook up some wisdom. 🎭"}
+        return {"insight": "No mood data yet. Log your vibes and I'll cook up some wisdom. "}
 
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -380,7 +380,7 @@ async def ai_mood_insight(body: AIInsightReq, user=Depends(get_current_user)):
         return {"insight": str(resp)}
     except Exception as e:
         logger.exception("AI insight failed")
-        return {"insight": f"Your vibe has been a mix of {', '.join(moods[:3])}. Keep logging — self-awareness is the cheat code. 💪"}
+        return {"insight": f"Your vibe has been a mix of {', '.join(moods[:3])}. Keep logging — self-awareness is the cheat code. "}
 
 # ---------- Seed ----------
 @api.post("/seed")
@@ -431,10 +431,10 @@ async def seed_data():
         return {"seeded": True, "users_inserted": "idempotent", "posts": 0}
 
     demo_posts = [
-        {"user_name": "Alex Chaos", "content": "When Monday hits and the coffee hasn't ☕", "image": ""},
-        {"user_name": "Jamie Vibe", "content": "Legit feel like I merged with my chair 🧍‍♂️ stand up y'all", "image": ""},
-        {"user_name": "Sam Hustle", "content": "Day 7 streak of NOT looking at screen during lunch 🏆", "image": ""},
-        {"user_name": "Casey Boss", "content": "Just learned the 20-20-20 rule. My eyes: 😌", "image": ""},
+        {"user_name": "Alex Chaos", "content": "When Monday hits and the coffee hasn't ", "image": ""},
+        {"user_name": "Jamie Vibe", "content": "Legit feel like I merged with my chair  stand up y'all", "image": ""},
+        {"user_name": "Sam Hustle", "content": "Day 7 streak of NOT looking at screen during lunch ", "image": ""},
+        {"user_name": "Casey Boss", "content": "Just learned the 20-20-20 rule. My eyes: ", "image": ""},
     ]
     users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(10)
     user_map = {u["name"]: u for u in users}
@@ -458,9 +458,9 @@ async def seed_data():
 
 # ---------- Fun Wall emoji reactions ----------
 class ReactReq(BaseModel):
-    emoji: str  # one of 😂 ❤️ 👏 🔥
+    emoji: str  # one of    
 
-ALLOWED_REACTIONS = ["😂", "❤️", "👏", "🔥"]
+ALLOWED_REACTIONS = ["", "", "", ""]
 
 @api.post("/posts/{post_id}/react")
 async def react_post(post_id: str, body: ReactReq, user=Depends(get_current_user)):
@@ -718,10 +718,10 @@ async def weekly_insights(user=Depends(get_current_user)):
         return round(((a - b) / b) * 100)
 
     messages = [
-        "Fantastic week! Keep it going, champ. 🔥",
-        "Solid grind this week. Brain thanks you. 🧠",
-        "Vibes were immaculate. Don't stop now. 💪",
-        "Okay-ish week. Let's crush it next one. 🚀",
+        "Fantastic week! Keep it going, champ. ",
+        "Solid grind this week. Brain thanks you. ",
+        "Vibes were immaculate. Don't stop now. ",
+        "Okay-ish week. Let's crush it next one. ",
     ]
     water_change = pct_change(water_this, water_last)
     score_weighted = water_this + eye_this + stand_this
@@ -876,7 +876,7 @@ async def admin_analytics(admin=Depends(require_admin)):
 PLAYLISTS = {
     "focus": {
         "id": "focus",
-        "name": "🧠 Focus Mode",
+        "name": " Focus Mode",
         "color": "#00E5FF",
         "tracks": [
             {"id": "f1", "title": "Lofi Brain", "artist": "Beats Inc", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", "duration": 372},
@@ -886,7 +886,7 @@ PLAYLISTS = {
     },
     "relax": {
         "id": "relax",
-        "name": "🌊 Relax Vibes",
+        "name": " Relax Vibes",
         "color": "#00C853",
         "tracks": [
             {"id": "r1", "title": "Slow Sunday", "artist": "Chillax", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", "duration": 235},
@@ -896,7 +896,7 @@ PLAYLISTS = {
     },
     "energy": {
         "id": "energy",
-        "name": "⚡ Energy Boost",
+        "name": " Energy Boost",
         "color": "#FF4D6D",
         "tracks": [
             {"id": "e1", "title": "Power Hour", "artist": "PumpUp", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", "duration": 198},
@@ -1272,7 +1272,7 @@ async def spotlight_current():
     pick = users[woy % len(users)]
     pick["fun_facts"] = [
         f"Has been crushing it since joining {pick.get('department', 'the team')}",
-        f"Currently rocking a {pick.get('streak', 0)}-day streak 🔥",
+        f"Currently rocking a {pick.get('streak', 0)}-day streak ",
         f"Wellness score: {pick.get('wellness_score', 50)}/100",
     ]
     pick["quote"] = "The only bad workout is the one that didn't happen."
@@ -1380,7 +1380,7 @@ async def post_recap(admin=Depends(require_admin)):
         {"$limit": 1},
     ]).to_list(1)
     top_team = teams[0]["_id"] if teams else "—"
-    msg = "🏆 WEEKLY RECAP! Top streakers: " + ", ".join([f"{u['name']} ({u['streak']}d 🔥)" for u in top]) + f". 🥇 Team of the week: {top_team}!"
+    msg = " WEEKLY RECAP! Top streakers: " + ", ".join([f"{u['name']} ({u['streak']}d )" for u in top]) + f".  Team of the week: {top_team}!"
     post = {
         "id": str(uuid.uuid4()),
         "user_id": admin["id"],

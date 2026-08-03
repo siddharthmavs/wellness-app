@@ -86,14 +86,17 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 - New CSS utilities: `.washi-tag` (torn tape sticker w/ striped edges), `.hand-frame` (SVG wobble border), `.doodle-corner` (flourish), `.ink-underline` (wobbly hand-drawn underline), `.journal-page` (torn-paper card feel)
 - Removed duplicate emoji from Dashboard ritual card labels and Admin Zone header
 
+### Chunk 8 (Complete Emoji Purge)
+- Python cleanup script stripped every emoji character (U+1F300-1FAFF, U+2600-27BF, U+1F900-1F9FF, ZWJ, variation selectors) from all 81 frontend files + backend server.py
+- Only trivial whitespace normalization applied (double space → single) — newlines preserved
+- Login/Signup floating decorations: swapped from emoji chars to hand-drawn SVG (`IconCloud`, `IconLeaf`, `IconSparkle`) illustrations
+- CSS `leaf-bg` pseudo-elements: swapped emoji `content:"..."` to SVG data-URI backgrounds
+- Backend WELLNESS_NOTIFS + fact bank + badge emoji fields cleaned
+- All page titles/toasts/labels now emoji-free; interactive elements (mood buttons, fact reactions, Fun Wall reactions, navbar streak/points) use hand-drawn SVG from `HandDrawn.jsx`
+
 ## Test iterations
-- iteration_1: backend 96%, frontend 85%
-- iteration_2: 100%/100%
-- iteration_3: 96%/100%
-- iteration_4: 100%/100%
-- iteration_5: 100%/100%
-- iteration_6: frontend 100% (Cozy redesign)
-- iteration_7: frontend 100% on user-flagged illustration requirements
+- iteration_1-7: all passed
+- iteration_8: full emoji purge — app now uses zero emoji characters anywhere; all illustrations are hand-drawn SVG
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py
