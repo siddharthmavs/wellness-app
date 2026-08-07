@@ -97,6 +97,23 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 ## Test iterations
 - iteration_1-7: all passed
 - iteration_8: full emoji purge — app now uses zero emoji characters anywhere; all illustrations are hand-drawn SVG
+- iteration_8: Music Zone v1 — 11/11 backend tests pass, full frontend E2E pass (upload, play, persist across routes, like, delete, search)
+
+### Chunk 9 (Spotify-inspired Music Zone v1 — Feb 2026)
+- Backend: object-storage-backed audio uploads via Emergent Integrations proxy
+  - Endpoints: POST /api/music/upload (multipart, ≤50MB, audio/* only), GET /api/music/tracks, GET /api/music/stream/{id} (Bearer or ?auth= query for <audio> tag), POST/DELETE like, GET liked, POST/GET history, DELETE tracks (owner or admin)
+  - Storage helpers: _init_storage / _put_object / _get_object with force-refresh on 404, path prefix `wellness-garden/music/{user_id}/{uuid}.{ext}`
+  - Mongo collections: songs, song_likes, play_history — all soft-deleted via is_deleted
+- Frontend: Spotify-authentic dark island rendered at /music (user explicitly chose over cozy theme)
+  - Left sidebar (Home / Liked / Recently Played / Your Uploads), green upload CTA
+  - Green hero "All Team Tracks" + Play-all
+  - Featured grid (procedurally-tinted covers from title chars) + full track table with hover-play, animated equalizer on current row, per-row like + delete-when-owner
+  - Drag & drop upload modal with progress, metadata (title/artist), 50MB guard
+  - Search across title/artist/uploader
+  - Instant Cozy input-style overrides scoped to the dark island so it stays authentic Spotify
+- Global sticky bottom `MusicPlayer` (Zustand-persisted queue) — survives route changes across the entire app; controls: play/pause/prev/next/mute/volume/seek/close; logs /music/history on track change
+- No emojis introduced — all icons via lucide-react
+
 
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py
