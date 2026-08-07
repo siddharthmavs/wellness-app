@@ -939,6 +939,12 @@ const PlaylistSettingsModal = ({ playlist, onClose, onSaved }) => {
     api.get("/users").then(({ data }) => setUsers(data.filter((u) => u.id !== playlist.owner_id))).catch(() => {});
   }, [playlist.owner_id]);
 
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);

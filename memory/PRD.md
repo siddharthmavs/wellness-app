@@ -97,6 +97,29 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 ## Test iterations
 - iteration_1-7: all passed
 - iteration_8: full emoji purge — app now uses zero emoji characters anywhere; all illustrations are hand-drawn SVG
+- iteration_9: Music Zone v2 — 26/26 backend tests pass, full frontend E2E pass (external links, playlists, trending). Two low-priority polish items applied.
+
+### Chunk 10 (Music Zone v2 — External links, Playlists, Trending — Feb 2026)
+- Backend
+  - `POST /api/music/link` — accepts YouTube / Spotify URLs, parses `external_id` via regex, calls oEmbed (`youtube.com/oembed`, `open.spotify.com/oembed`) to enrich title/thumbnail. Rejects unsupported URLs (400)
+  - `GET /api/music/stream/{id}` now rejects external tracks (400) — only uploaded storage-backed tracks streamed
+  - `GET /api/music/trending?days=7&limit=8` — Mongo aggregation on `play_history` grouped by song_id, joins song + liked flags per current user
+  - Playlists CRUD: `playlists` collection with owner_id, visibility ∈ {private, shared, public}, shared_with[], track_ids[], cover_color (deterministic palette hash)
+  - Endpoints: `POST /api/playlists`, `GET /api/playlists` (filtered by ACL), `GET /api/playlists/{id}` (hydrates ordered track objects + `can_edit`), `PATCH /api/playlists/{id}`, `DELETE /api/playlists/{id}`, `POST /api/playlists/{id}/tracks`, `DELETE /api/playlists/{id}/tracks/{track_id}`, `PUT /api/playlists/{id}/reorder`
+  - Access helpers `_pl_can_view` / `_pl_can_edit`; admin override supported
+- Frontend
+  - `MusicPlayer.jsx` — source-aware: `upload` (HTML5 audio), `youtube` (dynamic YouTube IFrame API in hidden iframe, full seek/volume/next-on-end control), `spotify` (Spotify Iframe API embed strip). Thumbnail + Youtube/Spotify badge shown per track. Global `unhandledrejection`/`error` handler filters Spotify SDK noise
+  - `Music.jsx` complete rebuild
+    - Sidebar: main nav + Playlists section with create (+) button
+    - Home shows Trending row (per-item play-count badge + real oEmbed cover) + Featured row + All-Tracks table
+    - Add-track modal — two tabs (File / Link)
+    - Add-to-playlist modal reachable from every track row (+ icon)
+    - PlaylistDetail — cover, name, visibility icon, play-all, settings & delete; TrackTable supports draggable rows with reorder persisted via PUT /reorder
+    - PlaylistSettingsModal — edit name/description/visibility; shared visibility surfaces a user checklist; ESC to dismiss
+    - CreatePlaylistModal — visibility toggle grid (Only me / Shared / Whole team)
+- Testing
+  - `/app/test_reports/iteration_9.json` — 26/26 backend tests + full frontend E2E flow verified across two user roles + admin
+
 - iteration_8: Music Zone v1 — 11/11 backend tests pass, full frontend E2E pass (upload, play, persist across routes, like, delete, search)
 
 ### Chunk 9 (Spotify-inspired Music Zone v1 — Feb 2026)

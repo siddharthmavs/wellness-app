@@ -83,6 +83,22 @@ export const MusicPlayer = () => {
     setDuration(track.duration || 0);
   }, [track?.id]);
 
+  /* --- swallow Spotify SDK errors so they don't bubble as toasts --- */
+  useEffect(() => {
+    const isSpotifyErr = (msgOrErr) => {
+      const s = String(msgOrErr?.stack || msgOrErr?.message || msgOrErr || "");
+      return /spotifycdn|open\.spotify|iframe-api/i.test(s);
+    };
+    const onRej = (e) => { if (isSpotifyErr(e.reason)) e.preventDefault(); };
+    const onErr = (e) => { if (isSpotifyErr(e.error) || isSpotifyErr(e.filename)) e.preventDefault(); };
+    window.addEventListener("unhandledrejection", onRej);
+    window.addEventListener("error", onErr, true);
+    return () => {
+      window.removeEventListener("unhandledrejection", onRej);
+      window.removeEventListener("error", onErr, true);
+    };
+  }, []);
+
   /* ---------------- HTML5 audio (uploaded files) ---------------- */
   useEffect(() => {
     if (!audioRef.current) return;
@@ -174,21 +190,27 @@ export const MusicPlayer = () => {
     loadSpotify().then((IFrameAPI) => {
       if (cancelled || !spElRef.current) return;
       const [type, id] = track.external_id.split(":");
-      IFrameAPI.createController(
-        spElRef.current,
-        { uri: `spotify:${type || "track"}:${id}`, width: "100%", height: "80" },
-        (ctrl) => {
-          spCtrlRef.current = ctrl;
-          ctrl.addListener("playback_update", (e) => {
-            const { position, duration: d, isPaused } = e.data || {};
-            if (typeof position === "number") setProgress(position / 1000);
-            if (typeof d === "number") setDuration(d / 1000);
-            if (typeof isPaused === "boolean") setPlaying(!isPaused);
-          });
-          if (playing) ctrl.play?.();
-        }
-      );
-    });
+      try {
+        IFrameAPI.createController(
+          spElRef.current,
+          { uri: `spotify:${type || "track"}:${id}`, width: "100%", height: "80" },
+          (ctrl) => {
+            spCtrlRef.current = ctrl;
+            try {
+              ctrl.addListener("playback_update", (e) => {
+                try {
+                  const { position, duration: d, isPaused } = e.data || {};
+                  if (typeof position === "number") setProgress(position / 1000);
+                  if (typeof d === "number") setDuration(d / 1000);
+                  if (typeof isPaused === "boolean") setPlaying(!isPaused);
+                } catch (_e) { /* ignore listener errors */ }
+              });
+              if (playing) ctrl.play?.();
+            } catch (_e) { /* ignore Spotify SDK init errors */ }
+          }
+        );
+      } catch (_e) { /* ignore Spotify createController errors */ }
+    }).catch(() => { /* ignore Spotify SDK load errors */ });
     return () => {
       cancelled = true;
       if (spCtrlRef.current) {
