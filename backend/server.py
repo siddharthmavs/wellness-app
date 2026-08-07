@@ -68,6 +68,20 @@ async def require_admin(user=Depends(get_current_user)):
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+async def create_notification(user_id: str, kind: str, title: str, message: str, icon: str = "🔔", data: dict = None):
+    """Insert a notification into db.notifications for a given user."""
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "kind": kind,           # shoutout | reward | announcement | wellness | birthday | badge
+        "title": title,
+        "message": message,
+        "icon": icon,
+        "data": data or {},
+        "read": False,
+        "created_at": now_iso(),
+    })
+
 # ---------- Models ----------
 class RegisterReq(BaseModel):
     name: str
@@ -307,7 +321,7 @@ async def comment_post(post_id: str, body: CommentReq, user=Depends(get_current_
     await db.posts.update_one({"id": post_id}, {"$set": {"comments": comments}})
     return comment
 
-# ---------- Notifications (wellness reminders) ----------
+# ---------- Notifications ----------
 WELLNESS_NOTIFS = [
     {"type": "water", "title": " Hey legend, drink water", "message": "It's been a while. Hydrate or deteriorate.", "color": "#00E5FF"},
     {"type": "eye_care", "title": " Your eyes are tired bro", "message": "20-20-20. Look away for 20 seconds at something 20ft away.", "color": "#FFE600"},
@@ -319,6 +333,85 @@ WELLNESS_NOTIFS = [
 async def random_notif(user=Depends(get_current_user)):
     n = random.choice(WELLNESS_NOTIFS)
     return {"id": str(uuid.uuid4()), **n}
+
+class WellnessNotifReq(BaseModel):
+    type: str   # water | eye_care | stand | breathing
+
+@api.post("/notifications/wellness")
+async def log_wellness_notif(body: WellnessNotifReq, user=Depends(get_current_user)):
+    """Frontend calls this when a wellness reminder fires so it appears in the bell."""
+    mapping = {
+        "water":     ("🚰", "💧 Time to drink water!",    "Hydrate or deteriorate, legend."),
+        "eye_care":  ("👀", "👀 Eye break time!",          "20-20-20. You got this."),
+        "stand":     ("🧍", "🧍 Stand up!",               "You're becoming a chair. Move."),
+        "breathing": ("🌬️", "🌬️ Breathing break!",        "4-7-8. In... hold... out."),
+    }
+    if body.type not in mapping:
+        raise HTTPException(400, "Unknown wellness type")
+    icon, title, message = mapping[body.type]
+    await create_notification(user_id=user["id"], kind="wellness", title=title, message=message, icon=icon)
+    return {"ok": True}
+
+@api.post("/notifications/birthday")
+async def log_birthday_notif(user=Depends(get_current_user)):
+    """Frontend calls this on login when today has birthday/anniversary events."""
+    today_events = await db.events.find({}, {"_id": 0}).to_list(100)
+    today_md = datetime.now(timezone.utc).date().strftime("%m-%d")
+    out = []
+    for e in today_events:
+        if e.get("date", "")[5:10] == today_md and e.get("user_id") != user["id"]:
+            u = await db.users.find_one({"id": e["user_id"]}, {"_id": 0, "name": 1})
+            if u:
+                label = "🎂 Birthday" if e["type"] == "birthday" else "🎉 Anniversary"
+                await create_notification(
+                    user_id=user["id"],
+                    kind="birthday",
+                    title=f"{label}: {u['name']} today!",
+                    message=e.get("note") or f"Don't forget to wish {u['name']} well!",
+                    icon="🎂" if e["type"] == "birthday" else "🎉",
+                    data={"event_id": e["id"]},
+                )
+                out.append(u["name"])
+    return {"notified": out}
+
+@api.get("/notifications/me")
+async def my_notifications(user=Depends(get_current_user)):
+    """Returns unified notifications (db.notifications) + admin announcements, newest first."""
+    notifs = await db.notifications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    # also surface admin announcements as notifications
+    announcements = await db.announcements.find({"recipients": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    for a in announcements:
+        a["kind"] = "announcement"
+        a["icon"] = {"info": "ℹ️", "alert": "⚠️", "party": "🎉"}.get(a.get("kind") or "info", "📢")
+        a["read"] = user["id"] in (a.get("read_by") or [])
+        a["user_id"] = user["id"]
+    combined = notifs + announcements
+    combined.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return combined[:80]
+
+@api.post("/notifications/{nid}/read")
+async def mark_notification_read(nid: str, user=Depends(get_current_user)):
+    # try notifications collection first
+    result = await db.notifications.update_one(
+        {"id": nid, "user_id": user["id"]},
+        {"$set": {"read": True}},
+    )
+    if result.modified_count == 0:
+        # might be an announcement
+        await db.announcements.update_one({"id": nid}, {"$addToSet": {"read_by": user["id"]}})
+    return {"ok": True}
+
+@api.post("/notifications/read-all")
+async def mark_all_read(user=Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": user["id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    # mark all their announcements read too
+    ann_ids = await db.announcements.distinct("id", {"recipients": user["id"]})
+    for aid in ann_ids:
+        await db.announcements.update_one({"id": aid}, {"$addToSet": {"read_by": user["id"]}})
+    return {"ok": True}
 
 # ---------- Badges ----------
 BADGES = [
@@ -525,10 +618,18 @@ async def create_shoutout(body: ShoutoutReq, user=Depends(get_current_user)):
     }
     await db.shoutouts.insert_one(shout)
     shout.pop("_id", None)
-    # points
+    # points + notifications for each recipient
     await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 5}})
     for rid in body.recipient_ids:
         await db.users.update_one({"id": rid}, {"$inc": {"points": 10}})
+        await create_notification(
+            user_id=rid,
+            kind="shoutout",
+            title=f"📣 {user['name']} shouted you out!",
+            message=f"{body.category}: {body.message[:120]}",
+            icon="📣",
+            data={"shoutout_id": shout["id"], "sender": user["name"]},
+        )
     return shout
 
 @api.get("/shoutouts")
@@ -1431,6 +1532,14 @@ async def issue_reward(body: RewardReq, admin=Depends(require_admin)):
     rew.pop("_id", None)
     if body.type == "points" and body.points:
         await db.users.update_one({"id": body.user_id}, {"$inc": {"points": body.points}})
+    await create_notification(
+        user_id=body.user_id,
+        kind="reward",
+        title=f"🎁 You got a reward from {admin['name']}!",
+        message=body.message[:160],
+        icon="🎁",
+        data={"reward_id": rew["id"], "type": body.type, "points": body.points or 0},
+    )
     return rew
 
 @api.get("/admin/rewards")
@@ -1561,6 +1670,24 @@ async def admin_create_quiz(body: QuizPayload, admin=Depends(require_admin)):
     quiz.pop("_id", None)
     return quiz
 
+@api.put("/admin/quizzes/{qid}")
+async def admin_update_quiz(qid: str, body: QuizPayload, admin=Depends(require_admin)):
+    for q in body.questions:
+        if not isinstance(q.get("options"), list) or len(q["options"]) < 2:
+            raise HTTPException(400, "Each question needs 2+ options")
+        if not isinstance(q.get("answer"), int) or q["answer"] < 0 or q["answer"] >= len(q["options"]):
+            raise HTTPException(400, "answer must be a valid index")
+    await db.custom_quizzes.update_one(
+        {"id": qid},
+        {"$set": {
+            "department": body.department,
+            "title": body.title or f"{body.department} Quiz",
+            "questions": body.questions,
+        }},
+    )
+    updated = await db.custom_quizzes.find_one({"id": qid}, {"_id": 0})
+    return updated
+
 @api.delete("/admin/quizzes/{qid}")
 async def admin_delete_quiz(qid: str, admin=Depends(require_admin)):
     await db.custom_quizzes.delete_one({"id": qid})
@@ -1594,6 +1721,17 @@ async def create_announcement(body: AnnouncementReq, admin=Depends(require_admin
     }
     await db.announcements.insert_one(ann)
     ann.pop("_id", None)
+    # push a notification entry for each recipient so it shows in the bell
+    kind_icon = {"info": "ℹ️", "alert": "⚠️", "party": "🎉"}.get(body.kind or "info", "📢")
+    for uid in recipient_ids:
+        await create_notification(
+            user_id=uid,
+            kind="announcement",
+            title=body.title,
+            message=body.message[:200],
+            icon=kind_icon,
+            data={"announcement_id": ann["id"], "from": admin["name"]},
+        )
     return ann
 
 @api.get("/admin/announcements")
