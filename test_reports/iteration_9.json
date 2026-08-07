@@ -1,0 +1,48 @@
+{
+  "summary": "Music Zone v2 (external links + playlists + trending) tested end-to-end. Backend: 26/26 pytest cases pass in /app/backend/tests/test_music_v2.py covering (a) POST /api/music/link for YouTube (oEmbed title/thumb populated, external_id=video-id) & Spotify (external_id starts with 'track:'), 400 on unsupported/empty URLs, (b) GET /api/music/stream/{id} correctly returns 400 for external tracks, (c) GET /api/music/trending aggregates play_history within window and returns plays count + thumbnail carried through, (d) full Playlist CRUD (private/shared/public), list scoping (owner sees own, public visible to all, shared only visible to shared_with users, private hidden from non-owners), can_edit flag correct, hydration returns ordered tracks, (e) add-track / duplicate returns {already:true} without duplication, remove-track, reorder persists new order and gracefully handles bogus & missing ids by preserving all real tracks, (f) ACL: non-owner blocked (403) from edit/add/reorder/delete of private, admin override works, non-shared user 403 on shared playlist. Frontend: /music renders trending row with real cover art & N-plays badges, sidebar PLAYLISTS section with create (+) button opens CreatePlaylistModal (name/desc/visibility toggles) and new playlist appears with correct visibility icon. Upload modal shows tab-file/tab-link tabs; Link tab accepts YouTube URL and adds track (title+thumb populated by backend oEmbed). Clicking YouTube track starts playback (music-player visible, player-title populated, play/pause toggle works). Add-to-playlist button on hover opens add-to-pl-modal; selecting a playlist adds the track (verified via playlist detail). Clicking playlist in sidebar opens PlaylistDetail (data-testid=playlist-detail-<id>) with cover, name, play-all, tracks list, drag handles, settings and delete buttons. Playlist settings modal edits name+visibility successfully persisting. Delete removes from sidebar and returns to home view; player persists across nav. Spotify track playback: iframe embed injected (verified https://open.spotify.com/embed/track/... iframe present in DOM) and title updates in player.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "MusicPlayer (Spotify branch)",
+        "issue": "When a Spotify track plays, the Spotify Iframe SDK throws an internal 'RangeError: Incorrect locale information provided' (embed-cdn.spotifycdn.com Next.js chunk) which propagates as an unhandled error and triggers the app-level 'Application error: a client-side exception has occurred' toast. Playback still works and the embed iframe still mounts, but the toast is user-visible and looks like an app crash. Recommend wrapping IFrameAPI.createController(...) and its 'playback_update' listener in try/catch, and adding a window.addEventListener('error'/'unhandledrejection') filter that ignores errors originating from spotifycdn.com scripts. Also worth passing an explicit locale (e.g. 'en') if the SDK supports it.",
+        "selector": "[data-testid=\"music-player\"]",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Playlist Settings modal",
+        "issue": "Pressing Escape does not close the pl-settings-modal (only the X button and Save close it). Minor UX inconsistency with other modals in the app; add an onKeyDown={Escape -> onClose} handler for parity.",
+        "selector": "[data-testid=\"pl-settings-modal\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_music_v2.py",
+    "/app/test_reports/pytest/music_v2_results.xml"
+  ],
+  "action_items": [
+    "Suppress/handle the RangeError thrown from the Spotify Iframe SDK to eliminate the 'Application error' toast when playing a Spotify track (wrap createController + listener in try/catch; add a global unhandledrejection filter for spotifycdn.com sources).",
+    "Make Playlist Settings modal dismissable via Escape key for consistency with other modals."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~2172 lines — well past the 700-line threshold. Music + Playlist routes (lines 1715-2122) should be split into /app/backend/routes/music.py and /app/backend/routes/playlists.py in a follow-up refactor.",
+    "Playlist reorder endpoint correctly appends missing existing tracks and drops bogus ids — good defensive behaviour verified by test_reorder_with_extra_and_missing.",
+    "Add-track endpoint returns {already:true} on duplicate instead of creating a duplicate — verified. Consider returning HTTP 200 with {already:true, playlist:{...}} for richer client UX.",
+    "oEmbed calls have a bounded 8s timeout and swallow exceptions — good, but log at debug level so title/thumbnail-miss issues can be traced.",
+    "Trending aggregation uses ISO-string date comparison ({'at': {'$gte': since_isoformat}}) which relies on ISO-8601 lexicographic ordering. This works while all timestamps use the same UTC ISO format (which they do via now_iso()); documented as a subtle contract for future maintainers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_music_v2.py",
+    "/app/frontend/src/components/MusicPlayer.jsx"
+  ],
+  "success_rate": {"backend": "100% (26/26)", "frontend": "100% (all v2 flagged scenarios; 1 medium + 1 low UI polish item)"},
+  "seed_data_creation": "During tests: ephemeral TEST_/UI_TEST_ playlists (Private/Public/Shared/AdminKill/ToKill*), plus YouTube (dQw4w9WgXcQ, 9bZkp7q19f0) and Spotify (4iV5W9uYEdYUVa79Axb7Rh, 11dFghVXANMlKmJXsNCbNl) linked tracks. All cleaned up post-run via /api/music/tracks and /api/playlists DELETE by admin.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "alex@demo.com / jamie@demo.com / sam@demo.com / admin@demo.com — all demo1234",
+  "context_for_next_testing_agent": "Music Zone v2 (links + playlists + trending) is fully green on backend (26/26) and functionally green on frontend. Only two remaining polish items: (1) suppress Spotify SDK's benign internal RangeError so the 'Application error' toast doesn't fire on Spotify playback, and (2) Escape-to-close on Playlist Settings modal. Fixed in this iteration: data-testid=\"spotify-embed\" was being stripped when Spotify SDK replaces the mount div with an <iframe>; moved the testid onto a stable outer wrapper in MusicPlayer.jsx (see lines ~262-268). v1 upload/streaming/like flows (iteration_8) NOT retested per instructions.",
+  "rca_of_the_issue": "Spotify 'Application error' toast RCA: Spotify's own iframe-api Next.js bundle (embed-cdn.spotifycdn.com/_next/static/chunks/4504-*.js) calls `new Locale(...)` inside an Array.map without validating the locale string, throwing RangeError. Because our React tree does not wrap the SDK integration in an error boundary and does not filter global unhandled errors originating from third-party origins, the app's global error handler surfaces this as an 'Application error' toast even though our own code path is fine and the iframe embed still mounts. Fix should be in the frontend by (a) try/catching the createController + listener callbacks and (b) filtering window.onerror / unhandledrejection by e.filename origin."
+}

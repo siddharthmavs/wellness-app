@@ -1850,6 +1850,415 @@ async def list_users(user=Depends(get_current_user)):
     users = await db.users.find({}, {"_id": 0, "password": 0}).sort("name", 1).to_list(500)
     return users
 
+# ---------- Music object storage (Emergent) ----------
+import requests as _req
+
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+APP_NAME = "wellness-garden"
+_storage_key = None
+
+def _init_storage(force=False):
+    global _storage_key
+    if _storage_key and not force:
+        return _storage_key
+    r = _req.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
+    r.raise_for_status()
+    _storage_key = r.json()["storage_key"]
+    return _storage_key
+
+def _put_object(path: str, data: bytes, content_type: str):
+    k = _init_storage()
+    r = _req.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k, "Content-Type": content_type}, data=data, timeout=180)
+    if r.status_code == 404:
+        k = _init_storage(force=True)
+        r = _req.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k, "Content-Type": content_type}, data=data, timeout=180)
+    r.raise_for_status()
+    return r.json()
+
+def _get_object(path: str):
+    k = _init_storage()
+    r = _req.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k}, timeout=120)
+    if r.status_code == 404:
+        k = _init_storage(force=True)
+        r = _req.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k}, timeout=120)
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "audio/mpeg")
+
+from fastapi import UploadFile, File, Form, Query
+from fastapi.responses import Response
+
+@api.post("/music/upload")
+async def music_upload(file: UploadFile = File(...), title: str = Form(None), artist: str = Form("Unknown"), user=Depends(get_current_user)):
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, "Max 50MB")
+    ct = file.content_type or "audio/mpeg"
+    if not ct.startswith("audio/"):
+        raise HTTPException(400, "Audio files only")
+    ext = (file.filename.rsplit(".", 1)[-1] if "." in file.filename else "mp3").lower()
+    path = f"{APP_NAME}/music/{user['id']}/{uuid.uuid4()}.{ext}"
+    try:
+        result = _put_object(path, data, ct)
+    except Exception as e:
+        raise HTTPException(500, f"Upload failed: {e}")
+    song = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "title": title or file.filename.rsplit(".", 1)[0],
+        "artist": artist or "Unknown",
+        "album": None,
+        "source": "upload",
+        "storage_path": result["path"],
+        "content_type": ct,
+        "size": result.get("size", len(data)),
+        "duration": None,
+        "is_deleted": False,
+        "created_at": now_iso(),
+    }
+    await db.songs.insert_one(song)
+    song.pop("_id", None)
+    return song
+
+@api.get("/music/tracks")
+async def list_tracks(user=Depends(get_current_user)):
+    items = await db.songs.find({"is_deleted": False}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    liked = await db.song_likes.find({"user_id": user["id"]}, {"_id": 0, "song_id": 1}).to_list(500)
+    liked_ids = {l["song_id"] for l in liked}
+    for s in items:
+        s["liked"] = s["id"] in liked_ids
+    return items
+
+@api.get("/music/stream/{song_id}")
+async def stream(song_id: str, auth: str = Query(None), authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    elif auth:
+        token = auth
+    if not token:
+        raise HTTPException(401, "Auth required")
+    try:
+        pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except Exception:
+        raise HTTPException(401, "Bad token")
+    song = await db.songs.find_one({"id": song_id, "is_deleted": False}, {"_id": 0})
+    if not song:
+        raise HTTPException(404, "Not found")
+    if song.get("source") != "upload" or not song.get("storage_path"):
+        raise HTTPException(400, "This is an external track — not streamable via storage")
+    try:
+        data, ct = _get_object(song["storage_path"])
+    except Exception as e:
+        raise HTTPException(500, f"Fetch failed: {e}")
+    return Response(content=data, media_type=song.get("content_type", ct))
+
+@api.delete("/music/tracks/{song_id}")
+async def delete_track(song_id: str, user=Depends(get_current_user)):
+    song = await db.songs.find_one({"id": song_id}, {"_id": 0})
+    if not song:
+        raise HTTPException(404, "Not found")
+    if song["user_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Not yours")
+    await db.songs.update_one({"id": song_id}, {"$set": {"is_deleted": True}})
+    return {"deleted": True}
+
+@api.post("/music/like/{song_id}")
+async def toggle_like(song_id: str, user=Depends(get_current_user)):
+    existing = await db.song_likes.find_one({"song_id": song_id, "user_id": user["id"]})
+    if existing:
+        await db.song_likes.delete_one({"song_id": song_id, "user_id": user["id"]})
+        return {"liked": False}
+    await db.song_likes.insert_one({"song_id": song_id, "user_id": user["id"], "at": now_iso()})
+    return {"liked": True}
+
+@api.get("/music/liked")
+async def liked_songs(user=Depends(get_current_user)):
+    likes = await db.song_likes.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
+    ids = [l["song_id"] for l in likes]
+    items = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(500)
+    for s in items:
+        s["liked"] = True
+    return items
+
+@api.post("/music/history/{song_id}")
+async def log_play(song_id: str, user=Depends(get_current_user)):
+    await db.play_history.insert_one({"id": str(uuid.uuid4()), "user_id": user["id"], "song_id": song_id, "at": now_iso()})
+    return {"ok": True}
+
+@api.get("/music/history/me")
+async def my_history(user=Depends(get_current_user)):
+    hist = await db.play_history.find({"user_id": user["id"]}, {"_id": 0}).sort("at", -1).to_list(50)
+    ids_seen = set()
+    unique_ids = []
+    for h in hist:
+        if h["song_id"] not in ids_seen:
+            ids_seen.add(h["song_id"])
+            unique_ids.append(h["song_id"])
+    songs = await db.songs.find({"id": {"$in": unique_ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
+    smap = {s["id"]: s for s in songs}
+    return [smap[i] for i in unique_ids if i in smap][:30]
+
+# ---------- Music: external links (YouTube / Spotify) ----------
+import re as _re
+from urllib.parse import quote_plus
+
+def _parse_yt_id(url: str):
+    if not url: return None
+    m = _re.search(r"(?:youtu\.be/|v=|/embed/|/shorts/)([A-Za-z0-9_-]{11})", url)
+    return m.group(1) if m else None
+
+def _parse_spotify(url: str):
+    if not url: return (None, None)
+    m = _re.search(r"open\.spotify\.com/(?:embed/)?(track|album|playlist|episode)/([A-Za-z0-9]+)", url)
+    if not m: return (None, None)
+    return (m.group(1), m.group(2))
+
+class LinkAddIn(BaseModel):
+    url: str
+    title: Optional[str] = None
+    artist: Optional[str] = None
+
+@api.post("/music/link")
+async def add_link(body: LinkAddIn, user=Depends(get_current_user)):
+    url = (body.url or "").strip()
+    if not url:
+        raise HTTPException(400, "URL required")
+    yt = _parse_yt_id(url)
+    sp_type, sp_id = _parse_spotify(url)
+    if not yt and not sp_id:
+        raise HTTPException(400, "Only YouTube or Spotify links supported")
+    title = body.title
+    artist = body.artist or "External"
+    thumbnail = None
+    if yt:
+        source = "youtube"
+        external_id = yt
+        link_url = f"https://www.youtube.com/watch?v={yt}"
+        thumbnail = f"https://img.youtube.com/vi/{yt}/hqdefault.jpg"
+        try:
+            r = _req.get(f"https://www.youtube.com/oembed?url={quote_plus(link_url)}&format=json", timeout=8)
+            if r.status_code == 200:
+                j = r.json()
+                title = title or j.get("title")
+                artist = body.artist or j.get("author_name") or artist
+                thumbnail = j.get("thumbnail_url") or thumbnail
+        except Exception:
+            pass
+    else:
+        source = "spotify"
+        external_id = f"{sp_type}:{sp_id}"
+        link_url = f"https://open.spotify.com/{sp_type}/{sp_id}"
+        try:
+            r = _req.get(f"https://open.spotify.com/oembed?url={quote_plus(link_url)}", timeout=8)
+            if r.status_code == 200:
+                j = r.json()
+                title = title or j.get("title")
+                thumbnail = j.get("thumbnail_url") or None
+        except Exception:
+            pass
+    song = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "title": title or "Untitled",
+        "artist": artist,
+        "album": None,
+        "source": source,
+        "external_id": external_id,
+        "link_url": link_url,
+        "thumbnail_url": thumbnail,
+        "storage_path": None,
+        "content_type": None,
+        "size": 0,
+        "duration": None,
+        "is_deleted": False,
+        "created_at": now_iso(),
+    }
+    await db.songs.insert_one(song)
+    song.pop("_id", None)
+    return song
+
+# ---------- Music: trending (last N days across team) ----------
+@api.get("/music/trending")
+async def trending(days: int = 7, limit: int = 8, user=Depends(get_current_user)):
+    since = (datetime.now(timezone.utc) - timedelta(days=max(1, days))).isoformat()
+    pipeline = [
+        {"$match": {"at": {"$gte": since}}},
+        {"$group": {"_id": "$song_id", "plays": {"$sum": 1}}},
+        {"$sort": {"plays": -1}},
+        {"$limit": max(1, min(limit, 50))},
+    ]
+    agg = await db.play_history.aggregate(pipeline).to_list(50)
+    ids = [a["_id"] for a in agg]
+    if not ids:
+        return []
+    songs = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
+    smap = {s["id"]: s for s in songs}
+    liked = await db.song_likes.find({"user_id": user["id"], "song_id": {"$in": ids}}, {"_id": 0, "song_id": 1}).to_list(200)
+    liked_ids = {l["song_id"] for l in liked}
+    out = []
+    for a in agg:
+        s = smap.get(a["_id"])
+        if s:
+            s["plays"] = a["plays"]
+            s["liked"] = s["id"] in liked_ids
+            out.append(s)
+    return out
+
+# ---------- Playlists ----------
+class PlaylistCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    visibility: Optional[str] = "private"   # private | shared | public
+    shared_with: Optional[List[str]] = []
+
+class PlaylistUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    visibility: Optional[str] = None
+    shared_with: Optional[List[str]] = None
+
+class PlaylistReorder(BaseModel):
+    track_ids: List[str]
+
+class PlaylistTrackAdd(BaseModel):
+    track_id: str
+
+def _pl_access_filter(user_id: str):
+    return {"$or": [
+        {"owner_id": user_id},
+        {"visibility": "public"},
+        {"visibility": "shared", "shared_with": user_id},
+    ]}
+
+def _pl_can_view(pl, user):
+    if pl["owner_id"] == user["id"]: return True
+    if pl.get("visibility") == "public": return True
+    if pl.get("visibility") == "shared" and user["id"] in (pl.get("shared_with") or []): return True
+    return user.get("role") == "admin"
+
+def _pl_can_edit(pl, user):
+    return pl["owner_id"] == user["id"] or user.get("role") == "admin"
+
+def _color_for(name: str):
+    palette = ["#1DB954", "#E1306C", "#FF5A5F", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#14B8A6"]
+    return palette[sum(ord(c) for c in (name or "P")) % len(palette)]
+
+@api.post("/playlists")
+async def create_playlist(body: PlaylistCreate, user=Depends(get_current_user)):
+    vis = body.visibility if body.visibility in ("private", "shared", "public") else "private"
+    pl = {
+        "id": str(uuid.uuid4()),
+        "owner_id": user["id"],
+        "owner_name": user["name"],
+        "name": (body.name or "New Playlist").strip()[:80],
+        "description": (body.description or "").strip()[:280],
+        "visibility": vis,
+        "shared_with": list(dict.fromkeys(body.shared_with or [])),
+        "track_ids": [],
+        "cover_color": _color_for(body.name or ""),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.playlists.insert_one(pl)
+    pl.pop("_id", None)
+    return pl
+
+@api.get("/playlists")
+async def list_playlists(user=Depends(get_current_user)):
+    items = await db.playlists.find(_pl_access_filter(user["id"]), {"_id": 0}).sort("updated_at", -1).to_list(200)
+    for p in items:
+        p["track_count"] = len(p.get("track_ids") or [])
+        p["can_edit"] = _pl_can_edit(p, user)
+    return items
+
+async def _hydrate_playlist(pl, user):
+    ids = pl.get("track_ids") or []
+    if not ids:
+        pl["tracks"] = []
+        return pl
+    songs = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(500)
+    smap = {s["id"]: s for s in songs}
+    liked = await db.song_likes.find({"user_id": user["id"], "song_id": {"$in": ids}}, {"_id": 0, "song_id": 1}).to_list(500)
+    liked_ids = {l["song_id"] for l in liked}
+    ordered = []
+    for tid in ids:
+        s = smap.get(tid)
+        if s:
+            s["liked"] = tid in liked_ids
+            ordered.append(s)
+    pl["tracks"] = ordered
+    return pl
+
+@api.get("/playlists/{pid}")
+async def get_playlist(pid: str, user=Depends(get_current_user)):
+    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
+    if not pl: raise HTTPException(404, "Not found")
+    if not _pl_can_view(pl, user): raise HTTPException(403, "No access")
+    pl["can_edit"] = _pl_can_edit(pl, user)
+    return await _hydrate_playlist(pl, user)
+
+@api.patch("/playlists/{pid}")
+async def update_playlist(pid: str, body: PlaylistUpdate, user=Depends(get_current_user)):
+    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
+    if not pl: raise HTTPException(404, "Not found")
+    if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
+    upd = {}
+    if body.name is not None: upd["name"] = body.name.strip()[:80]; upd["cover_color"] = _color_for(body.name)
+    if body.description is not None: upd["description"] = body.description.strip()[:280]
+    if body.visibility is not None and body.visibility in ("private","shared","public"): upd["visibility"] = body.visibility
+    if body.shared_with is not None: upd["shared_with"] = list(dict.fromkeys(body.shared_with))
+    upd["updated_at"] = now_iso()
+    await db.playlists.update_one({"id": pid}, {"$set": upd})
+    pl.update(upd)
+    return pl
+
+@api.delete("/playlists/{pid}")
+async def delete_playlist(pid: str, user=Depends(get_current_user)):
+    pl = await db.playlists.find_one({"id": pid})
+    if not pl: raise HTTPException(404, "Not found")
+    if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
+    await db.playlists.delete_one({"id": pid})
+    return {"deleted": True}
+
+@api.post("/playlists/{pid}/tracks")
+async def add_track_to_playlist(pid: str, body: PlaylistTrackAdd, user=Depends(get_current_user)):
+    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
+    if not pl: raise HTTPException(404, "Not found")
+    if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
+    song = await db.songs.find_one({"id": body.track_id, "is_deleted": False}, {"_id": 0})
+    if not song: raise HTTPException(404, "Track not found")
+    ids = pl.get("track_ids") or []
+    if body.track_id in ids:
+        return {"ok": True, "already": True}
+    ids.append(body.track_id)
+    await db.playlists.update_one({"id": pid}, {"$set": {"track_ids": ids, "updated_at": now_iso()}})
+    return {"ok": True}
+
+@api.delete("/playlists/{pid}/tracks/{track_id}")
+async def remove_track_from_playlist(pid: str, track_id: str, user=Depends(get_current_user)):
+    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
+    if not pl: raise HTTPException(404, "Not found")
+    if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
+    ids = [t for t in (pl.get("track_ids") or []) if t != track_id]
+    await db.playlists.update_one({"id": pid}, {"$set": {"track_ids": ids, "updated_at": now_iso()}})
+    return {"ok": True}
+
+@api.put("/playlists/{pid}/reorder")
+async def reorder_playlist(pid: str, body: PlaylistReorder, user=Depends(get_current_user)):
+    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
+    if not pl: raise HTTPException(404, "Not found")
+    if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
+    existing = set(pl.get("track_ids") or [])
+    new_ids = [t for t in body.track_ids if t in existing]
+    # Append any missing (to avoid loss)
+    for t in (pl.get("track_ids") or []):
+        if t not in new_ids: new_ids.append(t)
+    await db.playlists.update_one({"id": pid}, {"$set": {"track_ids": new_ids, "updated_at": now_iso()}})
+    return {"ok": True, "track_ids": new_ids}
+
 @api.get("/")
 async def root():
     return {"message": "Brutal Wellness API", "status": "alive"}

@@ -38,12 +38,13 @@ html, body, #root {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background-color: var(--cozy-bg);
   color: var(--cozy-text);
   font-family: "Nunito", "Plus Jakarta Sans", sans-serif;
   font-weight: 500;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: color 0.3s ease;
 }
+html { background-color: var(--cozy-bg); }
+#root { background: transparent; }
 
 /* ==========================================================
    PREMIUM HANDMADE PAPER BACKGROUND
@@ -85,6 +86,7 @@ html.dark body {
 
 .App { min-height: 100vh; background: transparent; }
 .min-h-screen.bg-white { background: transparent !important; }
+.min-h-screen { background: transparent !important; }
 
 h1, h2, h3, h4, h5 {
   font-family: "Fredoka", sans-serif;
