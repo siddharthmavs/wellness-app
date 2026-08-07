@@ -9,7 +9,6 @@ import {
  Megaphone, HandHelping, Shield, Music, Vote, Gamepad2, Brain,
  BookOpen, Cake, MoreHorizontal, Sun, Moon, Swords,
 } from "lucide-react";
-import NotificationBell from "./NotificationBell";
 
 const PRIMARY = [
  { to: "/", label: "Home", icon: Home },
