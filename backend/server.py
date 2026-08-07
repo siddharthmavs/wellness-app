@@ -1712,6 +1712,154 @@ async def list_users(user=Depends(get_current_user)):
     users = await db.users.find({}, {"_id": 0, "password": 0}).sort("name", 1).to_list(500)
     return users
 
+# ---------- Music object storage (Emergent) ----------
+import requests as _req
+
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+APP_NAME = "wellness-garden"
+_storage_key = None
+
+def _init_storage(force=False):
+    global _storage_key
+    if _storage_key and not force:
+        return _storage_key
+    r = _req.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")}, timeout=30)
+    r.raise_for_status()
+    _storage_key = r.json()["storage_key"]
+    return _storage_key
+
+def _put_object(path: str, data: bytes, content_type: str):
+    k = _init_storage()
+    r = _req.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k, "Content-Type": content_type}, data=data, timeout=180)
+    if r.status_code == 404:
+        k = _init_storage(force=True)
+        r = _req.put(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k, "Content-Type": content_type}, data=data, timeout=180)
+    r.raise_for_status()
+    return r.json()
+
+def _get_object(path: str):
+    k = _init_storage()
+    r = _req.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k}, timeout=120)
+    if r.status_code == 404:
+        k = _init_storage(force=True)
+        r = _req.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": k}, timeout=120)
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "audio/mpeg")
+
+from fastapi import UploadFile, File, Form, Query
+from fastapi.responses import Response
+
+@api.post("/music/upload")
+async def music_upload(file: UploadFile = File(...), title: str = Form(None), artist: str = Form("Unknown"), user=Depends(get_current_user)):
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, "Max 50MB")
+    ct = file.content_type or "audio/mpeg"
+    if not ct.startswith("audio/"):
+        raise HTTPException(400, "Audio files only")
+    ext = (file.filename.rsplit(".", 1)[-1] if "." in file.filename else "mp3").lower()
+    path = f"{APP_NAME}/music/{user['id']}/{uuid.uuid4()}.{ext}"
+    try:
+        result = _put_object(path, data, ct)
+    except Exception as e:
+        raise HTTPException(500, f"Upload failed: {e}")
+    song = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "title": title or file.filename.rsplit(".", 1)[0],
+        "artist": artist or "Unknown",
+        "album": None,
+        "source": "upload",
+        "storage_path": result["path"],
+        "content_type": ct,
+        "size": result.get("size", len(data)),
+        "duration": None,
+        "is_deleted": False,
+        "created_at": now_iso(),
+    }
+    await db.songs.insert_one(song)
+    song.pop("_id", None)
+    return song
+
+@api.get("/music/tracks")
+async def list_tracks(user=Depends(get_current_user)):
+    items = await db.songs.find({"is_deleted": False}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    liked = await db.song_likes.find({"user_id": user["id"]}, {"_id": 0, "song_id": 1}).to_list(500)
+    liked_ids = {l["song_id"] for l in liked}
+    for s in items:
+        s["liked"] = s["id"] in liked_ids
+    return items
+
+@api.get("/music/stream/{song_id}")
+async def stream(song_id: str, auth: str = Query(None), authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    elif auth:
+        token = auth
+    if not token:
+        raise HTTPException(401, "Auth required")
+    try:
+        pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except Exception:
+        raise HTTPException(401, "Bad token")
+    song = await db.songs.find_one({"id": song_id, "is_deleted": False}, {"_id": 0})
+    if not song:
+        raise HTTPException(404, "Not found")
+    try:
+        data, ct = _get_object(song["storage_path"])
+    except Exception as e:
+        raise HTTPException(500, f"Fetch failed: {e}")
+    return Response(content=data, media_type=song.get("content_type", ct))
+
+@api.delete("/music/tracks/{song_id}")
+async def delete_track(song_id: str, user=Depends(get_current_user)):
+    song = await db.songs.find_one({"id": song_id}, {"_id": 0})
+    if not song:
+        raise HTTPException(404, "Not found")
+    if song["user_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Not yours")
+    await db.songs.update_one({"id": song_id}, {"$set": {"is_deleted": True}})
+    return {"deleted": True}
+
+@api.post("/music/like/{song_id}")
+async def toggle_like(song_id: str, user=Depends(get_current_user)):
+    existing = await db.song_likes.find_one({"song_id": song_id, "user_id": user["id"]})
+    if existing:
+        await db.song_likes.delete_one({"song_id": song_id, "user_id": user["id"]})
+        return {"liked": False}
+    await db.song_likes.insert_one({"song_id": song_id, "user_id": user["id"], "at": now_iso()})
+    return {"liked": True}
+
+@api.get("/music/liked")
+async def liked_songs(user=Depends(get_current_user)):
+    likes = await db.song_likes.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
+    ids = [l["song_id"] for l in likes]
+    items = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(500)
+    for s in items:
+        s["liked"] = True
+    return items
+
+@api.post("/music/history/{song_id}")
+async def log_play(song_id: str, user=Depends(get_current_user)):
+    await db.play_history.insert_one({"id": str(uuid.uuid4()), "user_id": user["id"], "song_id": song_id, "at": now_iso()})
+    return {"ok": True}
+
+@api.get("/music/history/me")
+async def my_history(user=Depends(get_current_user)):
+    hist = await db.play_history.find({"user_id": user["id"]}, {"_id": 0}).sort("at", -1).to_list(50)
+    ids_seen = set()
+    unique_ids = []
+    for h in hist:
+        if h["song_id"] not in ids_seen:
+            ids_seen.add(h["song_id"])
+            unique_ids.append(h["song_id"])
+    songs = await db.songs.find({"id": {"$in": unique_ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
+    smap = {s["id"]: s for s in songs}
+    return [smap[i] for i in unique_ids if i in smap][:30]
+
 @api.get("/")
 async def root():
     return {"message": "Brutal Wellness API", "status": "alive"}
