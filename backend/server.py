@@ -1,17 +1,22 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
 from dotenv import load_dotenv
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import re
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt as pyjwt
 import random
+from pymongo import ReturnDocument
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -159,47 +164,46 @@ async def me(user=Depends(get_current_user)):
 # ---------- Activities / Points ----------
 POINTS_MAP = {"water": 10, "eye_care": 15, "stand": 10, "breathing": 20, "mood": 5, "post": 10}
 
-@api.post("/activities")
-async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
-    pc = await get_points_config()
-    pts = body.points or pc.get(body.type, 5)
-    activity = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "type": body.type,
-        "points": pts,
-        "created_at": now_iso(),
-    }
-    await db.activities.insert_one(activity)
-    activity.pop("_id", None)
+# Canonical activity categories (doc section 8). The `type` field keeps the historical
+# lowercase vocabulary so existing aggregations/leaderboards keep working; `category`
+# is the normalised label used by the wellness modules, dashboard and insights.
+WELLNESS_CATEGORY = {
+    "water": "WATER",
+    "eye_care": "EYE_BREAK",
+    "stand": "MOVE_RESET",
+    "breathing": "BREATHING",
+    "pomodoro": "POMODORO",
+}
+CATEGORY_TO_TYPE = {v: k for k, v in WELLNESS_CATEGORY.items()}
 
+def next_streak(user: dict, gc: dict) -> int:
+    """Streak: +1 on the first activity of a new calendar day; reset to 1 after a long gap."""
+    streak = user.get("streak", 0)
+    last = user.get("last_activity")
+    today = datetime.now(timezone.utc).date()
+    if not last:
+        return 1
+    try:
+        last_dt = datetime.fromisoformat(last)
+        delta_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
+        last_date = last_dt.date()
+        if delta_hours > gc.get("streak_gap_hours", 36):
+            return 1
+        if last_date < today:
+            # new day, continue streak
+            return max(streak, 0) + 1
+        # same day, keep
+        return max(streak, 1)
+    except Exception:
+        return max(streak, 1)
+
+async def apply_activity_rewards(user: dict, pts: int) -> dict:
+    """Persist points/level/wellness-score/streak progression for one logged activity."""
     gc = await get_game_config()
     new_points = user.get("points", 0) + pts
     new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
     new_score = min(100, user.get("wellness_score", 50) + gc.get("wellness_score_increment", 2))
-
-    # streak: increment on first activity of a new calendar day; reset if > 36h gap
-    streak = user.get("streak", 0)
-    last = user.get("last_activity")
-    today = datetime.now(timezone.utc).date()
-    if last:
-        try:
-            last_dt = datetime.fromisoformat(last)
-            delta_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
-            last_date = last_dt.date()
-            if delta_hours > 36:
-                streak = 1
-            elif last_date < today:
-                # new day, continue streak
-                streak = max(streak, 0) + 1
-            else:
-                # same day, keep
-                streak = max(streak, 1)
-        except Exception:
-            streak = max(streak, 1)
-    else:
-        streak = 1
-
+    streak = next_streak(user, gc)
     await db.users.update_one(
         {"id": user["id"]},
         {"$set": {
@@ -210,7 +214,26 @@ async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
             "last_activity": now_iso(),
         }},
     )
-    return {"activity": activity, "points": new_points, "level": new_level, "wellness_score": new_score, "streak": streak}
+    return {"points": new_points, "level": new_level, "wellness_score": new_score, "streak": streak}
+
+@api.post("/activities")
+async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
+    pc = await get_points_config()
+    pts = body.points or pc.get(body.type, 5)
+    activity = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "type": body.type,
+        "category": WELLNESS_CATEGORY.get(body.type, "OTHER"),
+        "action": "LOGGED",
+        "points": pts,
+        "xp_earned": pts,
+        "created_at": now_iso(),
+    }
+    await db.activities.insert_one(activity)
+    activity.pop("_id", None)
+    totals = await apply_activity_rewards(user, pts)
+    return {"activity": activity, **totals}
 
 @api.get("/activities/me")
 async def my_activities(user=Depends(get_current_user)):
@@ -829,6 +852,37 @@ async def weekly_insights(user=Depends(get_current_user)):
     idx = min(3, max(0, 3 - score_weighted // 3))
     message = messages[idx]
 
+    # ---- doc section 10 metrics, aggregated from the wellness logs ----
+    week_start = (now - timedelta(days=6)).date().isoformat()
+    day_filter = {"user_id": uid, "date": {"$gte": week_start}}
+
+    water_logs = await db.water_logs.find(day_filter, {"_id": 0}).to_list(31)
+    eye_logs = await db.eye_break_logs.find(day_filter, {"_id": 0}).to_list(31)
+    move_logs = await db.move_reset_logs.find(day_filter, {"_id": 0}).to_list(31)
+    breath_logs = await db.breathing_logs.find(day_filter, {"_id": 0}).to_list(31)
+
+    water_goals_completed = sum(1 for l in water_logs if l.get("completed"))
+    eye_breaks_completed = sum(int(l.get("completed") or 0) for l in eye_logs)
+    move_reset_completed = sum(int(l.get("completed") or 0) for l in move_logs)
+    breathing_sessions = sum(int(l.get("completed") or 0) for l in breath_logs)
+
+    week_activities = await db.activities.find(
+        {"user_id": uid, "created_at": {"$gte": this_start}}, {"_id": 0}
+    ).to_list(1000)
+    xp_earned = sum(a.get("xp_earned", a.get("points", 0)) or 0 for a in week_activities)
+
+    per_day = {}
+    for a in week_activities:
+        try:
+            d = datetime.fromisoformat(a["created_at"]).date().isoformat()
+        except (ValueError, KeyError, TypeError):
+            continue
+        per_day[d] = per_day.get(d, 0) + 1
+    best_day = max(per_day.items(), key=lambda x: x[1])[0] if per_day else None
+
+    streak_data = await compute_streaks(uid)
+    iso_year, iso_week, _ = now.isocalendar()
+
     return {
         "range": {"from": this_start, "to": now.isoformat()},
         "water": {"this": water_this, "last": water_last, "change_pct": water_change},
@@ -839,6 +893,18 @@ async def weekly_insights(user=Depends(get_current_user)):
         "streak": user.get("streak", 0),
         "wellness_score": user.get("wellness_score", 50),
         "message": message,
+        # --- wellness module rollup ---
+        "week": f"{iso_year}-W{iso_week:02d}",
+        "water_goals_completed": water_goals_completed,
+        "eye_breaks_completed": eye_breaks_completed,
+        "move_reset_completed": move_reset_completed,
+        "breathing_sessions": breathing_sessions,
+        "total_activities": len(week_activities),
+        "xp_earned": xp_earned,
+        "activities_per_day": per_day,
+        "best_day": best_day,
+        "current_streak": streak_data["current_streak"],
+        "longest_streak": streak_data["longest_streak"],
     }
 
 # ---------- Admin routes ----------
@@ -1381,16 +1447,36 @@ async def spotlight_current():
 
 # ---------- Learning Bites ----------
 LEARNING_BITES = [
-    {"id": "lb1", "department": "Engineering", "title": "Use --depth=1 in git clone for faster pulls", "body": "Shallow clone fetches only the latest commit — saves time on big repos.", "format": "text"},
-    {"id": "lb2", "department": "Engineering", "title": "Optimize MongoDB with compound indexes", "body": "Order matters: most-equality-first then range. Match your $sort fields too.", "format": "text"},
-    {"id": "lb3", "department": "Design", "title": "Use 8pt grid for spacing", "body": "Multiples of 8 (8/16/24/32) keep everything visually consistent across breakpoints.", "format": "text"},
-    {"id": "lb4", "department": "Design", "title": "Color contrast — aim for 4.5:1", "body": "Use Stark or Contrast Ratio plugin. Most a11y issues are color-related.", "format": "text"},
-    {"id": "lb5", "department": "Marketing", "title": "Write CTAs that lead with benefit", "body": "‘Get my 7-day plan’ beats ‘Submit’ — every time.", "format": "text"},
-    {"id": "lb6", "department": "HR", "title": "Run 1-on-1s as the report owns the agenda", "body": "Manager listens. Their cadence = relationship cadence.", "format": "text"},
-    {"id": "lb7", "department": "Product", "title": "Prioritize using RICE", "body": "Reach × Impact × Confidence ÷ Effort = score. Stack-rank ruthlessly.", "format": "text"},
-    {"id": "lb8", "department": "General", "title": "The 2-minute rule", "body": "If a task takes <2 mins, do it now. Saves the mental tax of a todo list.", "format": "text"},
-    {"id": "lb9", "department": "General", "title": "Stand for every meeting under 15 min", "body": "Better posture, faster decisions. Try it tomorrow.", "format": "text"},
-    {"id": "lb10", "department": "QA", "title": "Boundary value testing", "body": "Test at min, max, just-below, just-above. Most bugs hide at edges.", "format": "text"},
+    {"id": "lb1", "department": "Engineering", "title": "Use --depth=1 in git clone for faster pulls", "body": "Shallow clone fetches only the latest commit — saves time on big repos.", "format": "text",
+     "options": ["It rewrites the remote history.", "It fetches only the latest commit, so clones are much faster.", "It disables git hooks."], "correct_index": 1,
+     "resource_url": "https://git-scm.com/docs/git-clone"},
+    {"id": "lb2", "department": "Engineering", "title": "Optimize MongoDB with compound indexes", "body": "Order matters: most-equality-first then range. Match your $sort fields too.", "format": "text",
+     "options": ["Range fields first, then equality.", "Order never matters in a compound index.", "Equality fields first, then sort, then range."], "correct_index": 2,
+     "resource_url": "https://www.mongodb.com/docs/manual/core/indexes/index-types/index-compound/"},
+    {"id": "lb3", "department": "Design", "title": "Use 8pt grid for spacing", "body": "Multiples of 8 (8/16/24/32) keep everything visually consistent across breakpoints.", "format": "text",
+     "options": ["It makes spacing consistent across breakpoints.", "It makes fonts render faster.", "It is required by CSS."], "correct_index": 0,
+     "resource_url": "https://spec.fm/specifics/8-pt-grid"},
+    {"id": "lb4", "department": "Design", "title": "Color contrast — aim for 4.5:1", "body": "Use Stark or Contrast Ratio plugin. Most a11y issues are color-related.", "format": "text",
+     "options": ["3:1 for all body text.", "4.5:1 for normal body text.", "10:1 for everything."], "correct_index": 1,
+     "resource_url": "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html"},
+    {"id": "lb5", "department": "Marketing", "title": "Write CTAs that lead with benefit", "body": "‘Get my 7-day plan’ beats ‘Submit’ — every time.", "format": "text",
+     "options": ["Describe the action mechanically.", "Lead with the benefit the reader gets.", "Always use a single word."], "correct_index": 1,
+     "resource_url": "https://www.nngroup.com/articles/call-to-action-buttons/"},
+    {"id": "lb6", "department": "HR", "title": "Run 1-on-1s as the report owns the agenda", "body": "Manager listens. Their cadence = relationship cadence.", "format": "text",
+     "options": ["The manager owns the agenda.", "Nobody prepares an agenda.", "The report owns the agenda."], "correct_index": 2,
+     "resource_url": "https://about.gitlab.com/handbook/leadership/1-1/"},
+    {"id": "lb7", "department": "Product", "title": "Prioritize using RICE", "body": "Reach × Impact × Confidence ÷ Effort = score. Stack-rank ruthlessly.", "format": "text",
+     "options": ["Reach × Impact × Confidence ÷ Effort", "Revenue × Impact ÷ Cost", "Risk × Impact × Cost × Effort"], "correct_index": 0,
+     "resource_url": "https://www.intercom.com/blog/rice-simple-prioritization-for-product-managers/"},
+    {"id": "lb8", "department": "General", "title": "The 2-minute rule", "body": "If a task takes <2 mins, do it now. Saves the mental tax of a todo list.", "format": "text",
+     "options": ["Schedule it for next week.", "Do it immediately.", "Delegate it."], "correct_index": 1,
+     "resource_url": "https://jamesclear.com/how-to-stop-procrastinating"},
+    {"id": "lb9", "department": "General", "title": "Stand for every meeting under 15 min", "body": "Better posture, faster decisions. Try it tomorrow.", "format": "text",
+     "options": ["Meetings run longer.", "Posture and decision speed both improve.", "It has no measurable effect."], "correct_index": 1,
+     "resource_url": "https://hbr.org/2014/06/why-stand-up-meetings-work"},
+    {"id": "lb10", "department": "QA", "title": "Boundary value testing", "body": "Test at min, max, just-below, just-above. Most bugs hide at edges.", "format": "text",
+     "options": ["In the middle of the valid range.", "At and around the boundaries of the valid range.", "Only with random values."], "correct_index": 1,
+     "resource_url": "https://en.wikipedia.org/wiki/Boundary-value_analysis"},
 ]
 
 @api.get("/learning-bites")
@@ -1406,14 +1492,40 @@ async def get_bites(department: Optional[str] = None):
         out.append({**b, "tried_count": cnt})
     return out
 
+BITE_MODES = ("quiz", "reflect", "deepdive", "vouch")
+
+class BiteTriedReq(BaseModel):
+    mode: Optional[str] = None      # quiz | reflect | deepdive | vouch
+    meta: Optional[str] = None      # reflection text or tagged colleague handle
+
 @api.post("/learning-bites/{bite_id}/tried")
-async def tried_bite(bite_id: str, user=Depends(get_current_user)):
-    existing = await db.bite_tried.find_one({"bite_id": bite_id, "user_id": user["id"]})
+async def tried_bite(bite_id: str, body: BiteTriedReq = None, user=Depends(get_current_user)):
+    if not any(b["id"] == bite_id for b in LEARNING_BITES):
+        raise HTTPException(404, "Learning bite not found")
+    body = body or BiteTriedReq()
+    mode = (body.mode or "").strip().lower() or None
+    if mode and mode not in BITE_MODES:
+        raise HTTPException(400, f"mode must be one of: {', '.join(BITE_MODES)}")
+    if mode in ("reflect", "vouch") and not (body.meta or "").strip():
+        raise HTTPException(400, f"'{mode}' requires meta text")
+
+    existing = await db.bite_tried.find_one({"bite_id": bite_id, "user_id": user["id"]}, {"_id": 0})
     if existing:
-        return {"already": True}
-    await db.bite_tried.insert_one({"bite_id": bite_id, "user_id": user["id"], "at": now_iso()})
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 5}})
-    return {"awarded": 5}
+        return {"already": True, "mode": existing.get("mode")}
+
+    pc = await get_points_config()
+    pts = int(pc.get("bite_tried", 5))
+    await db.bite_tried.insert_one({
+        "id": str(uuid.uuid4()),
+        "bite_id": bite_id,
+        "user_id": user["id"],
+        "mode": mode,
+        "meta": (body.meta or "").strip()[:1000],
+        "points": pts,
+        "at": now_iso(),
+    })
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": pts}})
+    return {"awarded": pts, "already": False, "mode": mode}
 
 # ---------- Desk Plant Challenge ----------
 @api.post("/plants/optin")
@@ -1567,6 +1679,9 @@ DEFAULT_POINTS_CONFIG = {
     "shoutout_sender": 5, "shoutout_receiver": 10, "poll_vote": 2,
     "buddy_checkin": 10, "plant_checkin": 3, "bite_tried": 5,
     "fact_react": 2, "game_score_per_10": 1, "game_score_max": 20,
+    # Daily wellness goal bonuses, awarded at most once per module per day.
+    "water_goal_xp": 50, "eye_break_goal_xp": 50,
+    "move_reset_goal_xp": 50, "breathing_goal_xp": 50, "goal_coins": 5,
 }
 
 DEFAULT_GAME_CONFIG = {
@@ -2259,11 +2374,1438 @@ async def reorder_playlist(pid: str, body: PlaylistReorder, user=Depends(get_cur
     await db.playlists.update_one({"id": pid}, {"$set": {"track_ids": new_ids, "updated_at": now_iso()}})
     return {"ok": True, "track_ids": new_ids}
 
+# =========================================================================
+# Wellness modules — shared foundation
+# (doc sections 3-6 & 13: water / eye break / move & reset / breathing)
+# =========================================================================
+
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+# Day boundaries are evaluated in UTC unless the caller passes an explicit
+# `date` (YYYY-MM-DD), which lets the browser send its own local day.
+def parse_day(value: Optional[str] = None) -> str:
+    if not value:
+        return datetime.now(timezone.utc).date().isoformat()
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").date().isoformat()
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "date must be in YYYY-MM-DD format")
+
+def clean_schedule(times: Any, max_len: int = 24) -> List[str]:
+    """Validate a list of 24h HH:MM reminder times; de-duplicated and sorted."""
+    if not isinstance(times, list):
+        raise HTTPException(400, "schedule must be a list of HH:MM strings")
+    if len(times) > max_len:
+        raise HTTPException(400, f"schedule cannot hold more than {max_len} times")
+    out: List[str] = []
+    for t in times:
+        if not isinstance(t, str) or not TIME_RE.match(t.strip()):
+            raise HTTPException(400, f"Invalid schedule time '{t}'. Expected 24h HH:MM.")
+        v = t.strip()
+        if v not in out:
+            out.append(v)
+    return sorted(out)
+
+def clean_slot(slot: Optional[str]) -> Optional[str]:
+    if slot is None:
+        return None
+    if not isinstance(slot, str) or not TIME_RE.match(slot.strip()):
+        raise HTTPException(400, f"Invalid slot '{slot}'. Expected 24h HH:MM.")
+    return slot.strip()
+
+async def get_daily_log(coll, user_id: str, date: str, defaults: dict) -> dict:
+    """Fetch (or lazily create) the user's log document for one calendar day."""
+    seed = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "date": date,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        **defaults,
+    }
+    await coll.update_one(
+        {"user_id": user_id, "date": date},
+        {"$setOnInsert": seed},
+        upsert=True,
+    )
+    return await coll.find_one({"user_id": user_id, "date": date}, {"_id": 0})
+
+async def touch_daily_log(coll, user_id: str, date: str, changes: dict, push: dict = None):
+    update = {"$set": {**changes, "updated_at": now_iso()}}
+    if push:
+        update["$push"] = push
+    await coll.update_one({"user_id": user_id, "date": date}, update)
+    return await coll.find_one({"user_id": user_id, "date": date}, {"_id": 0})
+
+def history_range(days: int, start: Optional[str], end: Optional[str]) -> dict:
+    """Build a Mongo `date` filter from either an explicit range or a trailing window."""
+    if start or end:
+        q = {}
+        if start:
+            q["$gte"] = parse_day(start)
+        if end:
+            q["$lte"] = parse_day(end)
+        return q
+    days = max(1, min(365, days or 30))
+    first = (datetime.now(timezone.utc).date() - timedelta(days=days - 1)).isoformat()
+    return {"$gte": first}
+
+
+# =========================================================================
+# User settings (doc section 13.2)
+# =========================================================================
+
+DEFAULT_USER_SETTINGS: Dict[str, Any] = {
+    "notifications": {
+        "notifications_enabled": True,
+        "desktop_notifications": True,
+        "in_app_popup": True,
+        "sound": True,
+        "water": True,
+        "eye_care": True,
+        "move_reset": True,
+        "breathing": True,
+    },
+    "sound": {"enabled": True, "volume": 0.7},
+    "theme": "light",
+    "water": {"goal": 2000, "reminder_times": ["10:00", "13:00", "16:00"]},
+    "eye_break": {"goal": 3, "schedule": ["10:00", "13:00", "16:00", "18:00", "20:00", "21:00"]},
+    "move_reset": {"goal": 3, "schedule": ["10:30", "14:00", "17:00", "19:00", "21:00"]},
+    "breathing": {"goal": 3, "schedule": ["10:00", "14:00", "18:00", "20:00", "22:00"]},
+}
+
+def _merge_settings(base: dict, override: dict) -> dict:
+    out = {}
+    for k, v in base.items():
+        if isinstance(v, dict):
+            out[k] = _merge_settings(v, (override or {}).get(k) or {})
+        else:
+            out[k] = (override or {}).get(k, v)
+    # keep any extra keys the client stored that we don't model yet
+    for k, v in (override or {}).items():
+        if k not in out and k not in ("user_id", "id", "created_at", "updated_at"):
+            out[k] = v
+    return out
+
+async def get_user_settings(user_id: str) -> dict:
+    stored = await db.user_settings.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    return _merge_settings(DEFAULT_USER_SETTINGS, stored)
+
+async def save_user_settings(user_id: str, patch: dict) -> dict:
+    current = await get_user_settings(user_id)
+    merged = _merge_settings(current, patch or {})
+    await db.user_settings.update_one(
+        {"user_id": user_id},
+        {"$set": {**merged, "user_id": user_id, "updated_at": now_iso()},
+         "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now_iso()}},
+        upsert=True,
+    )
+    return merged
+
+async def module_setting(user_id: str, module: str, key: str, fallback):
+    settings = await get_user_settings(user_id)
+    return (settings.get(module) or {}).get(key, fallback)
+
+
+class SettingsPatch(BaseModel):
+    notifications: Optional[dict] = None
+    sound: Optional[dict] = None
+    theme: Optional[str] = None
+    water: Optional[dict] = None
+    eye_break: Optional[dict] = None
+    move_reset: Optional[dict] = None
+    breathing: Optional[dict] = None
+
+@api.get("/settings")
+async def read_settings(user=Depends(get_current_user)):
+    return await get_user_settings(user["id"])
+
+@api.put("/settings")
+async def update_settings(body: SettingsPatch, user=Depends(get_current_user)):
+    patch = body.model_dump(exclude_none=True)
+    if patch.get("theme") and patch["theme"] not in ("light", "dark"):
+        raise HTTPException(400, "theme must be 'light' or 'dark'")
+    for module, key in (("water", "reminder_times"), ("eye_break", "schedule"),
+                        ("move_reset", "schedule"), ("breathing", "schedule")):
+        if module in patch and key in (patch[module] or {}):
+            patch[module][key] = clean_schedule(patch[module][key])
+    for module, lo, hi in (("water", 500, 10000), ("eye_break", 1, 24),
+                           ("move_reset", 1, 24), ("breathing", 1, 24)):
+        if module in patch and "goal" in (patch[module] or {}):
+            patch[module]["goal"] = validate_goal(patch[module]["goal"], lo, hi)
+    return await save_user_settings(user["id"], patch)
+
+
+def validate_goal(value: Any, lo: int, hi: int) -> int:
+    try:
+        goal = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "goal must be a number")
+    if goal < lo or goal > hi:
+        raise HTTPException(400, f"goal must be between {lo} and {hi}")
+    return goal
+
+
+# =========================================================================
+# Rewards / XP service (doc section 7)
+#
+# XP is always computed here from validated server state — never trusted from
+# the client. `dedupe_key` makes every once-per-day bonus idempotent.
+# XP transactions live in `reward_transactions`; `rewards` stays reserved for
+# admin-issued rewards (coupons etc) already surfaced by /rewards/me.
+# =========================================================================
+
+REWARD_RULES = {
+    "water_goal": "water_goal_xp",
+    "eye_break_goal": "eye_break_goal_xp",
+    "move_reset_goal": "move_reset_goal_xp",
+    "breathing_goal": "breathing_goal_xp",
+}
+
+async def award_reward(user_id: str, source: str, xp: int, coins: int = 0,
+                       category: Optional[str] = None, meta: Optional[dict] = None,
+                       dedupe_key: Optional[str] = None) -> dict:
+    """Award XP/coins once, record the transaction and recompute level progression."""
+    if dedupe_key:
+        existing = await db.reward_transactions.find_one(
+            {"user_id": user_id, "dedupe_key": dedupe_key}, {"_id": 0}
+        )
+        if existing:
+            return {"awarded": False, "already_claimed": True, "transaction": existing}
+
+    gc = await get_game_config()
+    updated = await db.users.find_one_and_update(
+        {"id": user_id},
+        {"$inc": {"points": int(xp), "coins": int(coins)}},
+        projection={"_id": 0, "points": 1, "coins": 1, "level": 1},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        raise HTTPException(404, "User not found")
+
+    new_points = updated.get("points", 0)
+    new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
+    if new_level != updated.get("level"):
+        await db.users.update_one({"id": user_id}, {"$set": {"level": new_level}})
+
+    tx = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "type": source,
+        "source_activity": category,
+        "xp": int(xp),
+        "coins": int(coins),
+        "meta": meta or {},
+        "dedupe_key": dedupe_key,
+        "balance_after": new_points,
+        "level_after": new_level,
+        "created_at": now_iso(),
+    }
+    try:
+        await db.reward_transactions.insert_one(dict(tx))
+    except Exception:
+        # unique index on (user_id, dedupe_key) lost a race — the other writer won
+        existing = await db.reward_transactions.find_one(
+            {"user_id": user_id, "dedupe_key": dedupe_key}, {"_id": 0}
+        )
+        return {"awarded": False, "already_claimed": True, "transaction": existing}
+
+    level_up = new_level > (updated.get("level") or 1)
+    if level_up:
+        await create_notification(
+            user_id=user_id,
+            kind="reward",
+            title=f"⬆️ Level {new_level} unlocked!",
+            message=f"You reached level {new_level} with {new_points} XP.",
+            icon="⬆️",
+            data={"level": new_level, "xp": new_points},
+        )
+    return {
+        "awarded": True,
+        "xp": int(xp),
+        "coins": int(coins),
+        "total_xp": new_points,
+        "level": new_level,
+        "level_up": level_up,
+        "transaction": tx,
+    }
+
+async def log_wellness_activity(user_id: str, atype: str, action: str,
+                                value: Any = None, xp: int = 0) -> dict:
+    """Write one row into the central activity log (doc section 8)."""
+    activity = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "type": atype,
+        "category": WELLNESS_CATEGORY.get(atype, "OTHER"),
+        "action": action,
+        "value": value,
+        "points": int(xp),
+        "xp_earned": int(xp),
+        "created_at": now_iso(),
+    }
+    await db.activities.insert_one(dict(activity))
+    return activity
+
+async def record_wellness_event(user: dict, atype: str, action: str, value: Any = None,
+                                xp: Optional[int] = None) -> dict:
+    """Log an activity and apply the standard points/level/streak progression."""
+    pc = await get_points_config()
+    pts = pc.get(atype, 5) if xp is None else int(xp)
+    activity = await log_wellness_activity(user["id"], atype, action, value, pts)
+    totals = await apply_activity_rewards(user, pts)
+    return {"activity": activity, "xp_earned": pts, **totals}
+
+async def maybe_award_goal_bonus(user: dict, source: str, atype: str, date: str,
+                                 value: Any = None) -> Optional[dict]:
+    """Award the once-per-day goal-completion bonus, if it hasn't been awarded yet."""
+    pc = await get_points_config()
+    xp = int(pc.get(REWARD_RULES[source], 50))
+    result = await award_reward(
+        user_id=user["id"],
+        source=source,
+        xp=xp,
+        coins=int(pc.get("goal_coins", 5)),
+        category=WELLNESS_CATEGORY.get(atype, "OTHER"),
+        meta={"date": date, "value": value},
+        dedupe_key=f"{source}:{date}",
+    )
+    if not result.get("awarded"):
+        return None
+    await log_wellness_activity(user["id"], atype, "GOAL_COMPLETED", value, xp)
+    return result
+
+
+# =========================================================================
+# 3. Water tracking
+# =========================================================================
+
+MAX_DRINK_ML = 5000
+
+class WaterDrinkReq(BaseModel):
+    amount: int = Field(..., description="Millilitres consumed in this event")
+    date: Optional[str] = None
+
+class GoalReq(BaseModel):
+    goal: int
+    date: Optional[str] = None
+
+class ScheduleReq(BaseModel):
+    schedule: List[str]
+    date: Optional[str] = None
+
+class DayReq(BaseModel):
+    date: Optional[str] = None
+
+
+def water_view(log: dict) -> dict:
+    goal = max(1, int(log.get("goal") or 2000))
+    consumed = int(log.get("consumed") or 0)
+    return {
+        "user_id": log.get("user_id"),
+        "date": log.get("date"),
+        "goal": goal,
+        "consumed": consumed,
+        "remaining": max(0, goal - consumed),
+        "progress": round(min(100.0, (consumed / goal) * 100), 1),
+        "completed": bool(log.get("completed")),
+        "rewarded": bool(log.get("rewarded")),
+        "entries": log.get("entries") or [],
+    }
+
+async def water_log_for(user_id: str, date: str) -> dict:
+    goal = await module_setting(user_id, "water", "goal", 2000)
+    return await get_daily_log(db.water_logs, user_id, date, {
+        "goal": int(goal), "consumed": 0, "completed": False,
+        "rewarded": False, "entries": [],
+    })
+
+@api.get("/water/today")
+async def water_today(date: Optional[str] = None, user=Depends(get_current_user)):
+    return water_view(await water_log_for(user["id"], parse_day(date)))
+
+@api.post("/water/drink")
+async def water_drink(body: WaterDrinkReq, user=Depends(get_current_user)):
+    if body.amount <= 0 or body.amount > MAX_DRINK_ML:
+        raise HTTPException(400, f"amount must be between 1 and {MAX_DRINK_ML} ml")
+    date = parse_day(body.date)
+    log = await water_log_for(user["id"], date)
+
+    goal = max(1, int(log.get("goal") or 2000))
+    consumed = int(log.get("consumed") or 0) + body.amount
+    completed = consumed >= goal
+
+    log = await touch_daily_log(
+        db.water_logs, user["id"], date,
+        {"consumed": consumed, "completed": completed},
+        push={"entries": {"amount": body.amount, "at": now_iso()}},
+    )
+
+    event = await record_wellness_event(user, "water", "DRINK", body.amount)
+    bonus = None
+    if completed and not log.get("rewarded"):
+        fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+        bonus = await maybe_award_goal_bonus(fresh or user, "water_goal", "water", date, consumed)
+        if bonus:
+            log = await touch_daily_log(db.water_logs, user["id"], date, {"rewarded": True})
+
+    totals = await current_totals(user["id"])
+    return {**water_view(log), "activity": event["activity"], "xp_earned": event["xp_earned"],
+            "goal_bonus": bonus, **totals}
+
+@api.put("/water/goal")
+async def water_goal(body: GoalReq, user=Depends(get_current_user)):
+    goal = validate_goal(body.goal, 500, 10000)
+    date = parse_day(body.date)
+    await water_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"water": {"goal": goal}})
+    log = await db.water_logs.find_one({"user_id": user["id"], "date": date}, {"_id": 0})
+    consumed = int(log.get("consumed") or 0)
+    log = await touch_daily_log(db.water_logs, user["id"], date,
+                                {"goal": goal, "completed": consumed >= goal})
+    return water_view(log)
+
+@api.get("/water/history")
+async def water_history(days: int = 30, start: Optional[str] = None, end: Optional[str] = None,
+                        user=Depends(get_current_user)):
+    logs = await db.water_logs.find(
+        {"user_id": user["id"], "date": history_range(days, start, end)}, {"_id": 0}
+    ).sort("date", -1).to_list(400)
+    items = [water_view(l) for l in logs]
+    return {
+        "items": items,
+        "days_tracked": len(items),
+        "goals_completed": sum(1 for i in items if i["completed"]),
+        "total_consumed": sum(i["consumed"] for i in items),
+        "average_consumed": round(sum(i["consumed"] for i in items) / len(items)) if items else 0,
+    }
+
+@api.post("/water/reset")
+async def water_reset(body: DayReq = None, user=Depends(get_current_user)):
+    date = parse_day((body or DayReq()).date)
+    await water_log_for(user["id"], date)
+    log = await touch_daily_log(db.water_logs, user["id"], date, {
+        "consumed": 0, "completed": False, "rewarded": False, "entries": [],
+    })
+    return water_view(log)
+
+
+# =========================================================================
+# 4. Eye break
+# =========================================================================
+
+class EyeBreakCompleteReq(BaseModel):
+    slot: Optional[str] = None          # scheduled HH:MM this break belongs to
+    duration: Optional[int] = None      # seconds
+    date: Optional[str] = None
+
+
+def eye_break_view(log: dict) -> dict:
+    goal = max(1, int(log.get("goal") or 3))
+    completed = int(log.get("completed") or 0)
+    return {
+        "user_id": log.get("user_id"),
+        "date": log.get("date"),
+        "goal": goal,
+        "completed": completed,
+        "remaining": max(0, goal - completed),
+        "progress": round(min(100.0, (completed / goal) * 100), 1),
+        "schedule": log.get("schedule") or [],
+        "completed_slots": log.get("completed_slots") or [],
+        "sessions": log.get("sessions") or [],
+        "rewarded": bool(log.get("rewarded")),
+        "goal_reached": completed >= goal,
+    }
+
+async def eye_break_log_for(user_id: str, date: str) -> dict:
+    settings = await get_user_settings(user_id)
+    cfg = settings.get("eye_break") or {}
+    return await get_daily_log(db.eye_break_logs, user_id, date, {
+        "goal": int(cfg.get("goal", 3)),
+        "completed": 0,
+        "schedule": cfg.get("schedule") or [],
+        "completed_slots": [],
+        "sessions": [],
+        "rewarded": False,
+    })
+
+@api.get("/eye-break/today")
+async def eye_break_today(date: Optional[str] = None, user=Depends(get_current_user)):
+    return eye_break_view(await eye_break_log_for(user["id"], parse_day(date)))
+
+@api.post("/eye-break/complete")
+async def eye_break_complete(body: EyeBreakCompleteReq, user=Depends(get_current_user)):
+    date = parse_day(body.date)
+    slot = clean_slot(body.slot)
+    if body.duration is not None and (body.duration < 0 or body.duration > 3600):
+        raise HTTPException(400, "duration must be between 0 and 3600 seconds")
+    log = await eye_break_log_for(user["id"], date)
+
+    # A scheduled slot may only be counted once per day.
+    if slot and slot in (log.get("completed_slots") or []):
+        return {**eye_break_view(log), "already_completed": True}
+
+    completed = int(log.get("completed") or 0) + 1
+    changes = {"completed": completed}
+    push = {"sessions": {"slot": slot, "duration": body.duration or 0, "completed_at": now_iso()}}
+    if slot:
+        push["completed_slots"] = slot
+    log = await touch_daily_log(db.eye_break_logs, user["id"], date, changes, push=push)
+
+    event = await record_wellness_event(user, "eye_care", "BREAK_COMPLETED", body.duration or 1)
+    bonus = None
+    if completed >= int(log.get("goal") or 3) and not log.get("rewarded"):
+        fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+        bonus = await maybe_award_goal_bonus(fresh or user, "eye_break_goal", "eye_care", date, completed)
+        if bonus:
+            log = await touch_daily_log(db.eye_break_logs, user["id"], date, {"rewarded": True})
+
+    totals = await current_totals(user["id"])
+    return {**eye_break_view(log), "already_completed": False, "activity": event["activity"],
+            "xp_earned": event["xp_earned"], "goal_bonus": bonus, **totals}
+
+@api.put("/eye-break/goal")
+async def eye_break_goal(body: GoalReq, user=Depends(get_current_user)):
+    goal = validate_goal(body.goal, 1, 24)
+    date = parse_day(body.date)
+    await eye_break_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"eye_break": {"goal": goal}})
+    log = await touch_daily_log(db.eye_break_logs, user["id"], date, {"goal": goal})
+    return eye_break_view(log)
+
+@api.put("/eye-break/schedule")
+async def eye_break_schedule(body: ScheduleReq, user=Depends(get_current_user)):
+    schedule = clean_schedule(body.schedule)
+    date = parse_day(body.date)
+    await eye_break_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"eye_break": {"schedule": schedule}})
+    log = await touch_daily_log(db.eye_break_logs, user["id"], date, {"schedule": schedule})
+    return eye_break_view(log)
+
+@api.get("/eye-break/history")
+async def eye_break_history(days: int = 30, start: Optional[str] = None, end: Optional[str] = None,
+                            user=Depends(get_current_user)):
+    logs = await db.eye_break_logs.find(
+        {"user_id": user["id"], "date": history_range(days, start, end)}, {"_id": 0}
+    ).sort("date", -1).to_list(400)
+    items = [eye_break_view(l) for l in logs]
+    return {
+        "items": items,
+        "days_tracked": len(items),
+        "goals_completed": sum(1 for i in items if i["goal_reached"]),
+        "total_breaks": sum(i["completed"] for i in items),
+    }
+
+
+# =========================================================================
+# 5. Move & Reset
+# =========================================================================
+
+# Frontend activity ids (MoveResetCard) plus the labels used in the spec.
+MOVE_ACTIVITIES = {
+    "hands": "Hand & Wrist",
+    "finger": "Finger Stretch",
+    "neck": "Neck Relax",
+    "shoulder": "Shoulder Relax",
+    "walking": "Walking",
+    "stand": "Stand & Reset",
+}
+
+class MoveCompleteReq(BaseModel):
+    activity: str
+    slot: Optional[str] = None
+    duration: Optional[int] = None      # seconds
+    date: Optional[str] = None
+
+
+def move_reset_view(log: dict) -> dict:
+    goal = max(1, int(log.get("goal") or 3))
+    completed = int(log.get("completed") or 0)
+    return {
+        "user_id": log.get("user_id"),
+        "date": log.get("date"),
+        "goal": goal,
+        "completed": completed,
+        "remaining": max(0, goal - completed),
+        "progress": round(min(100.0, (completed / goal) * 100), 1),
+        "schedule": log.get("schedule") or [],
+        "completed_slots": log.get("completed_slots") or [],
+        "completed_activities": log.get("completed_activities") or [],
+        "rewarded": bool(log.get("rewarded")),
+        "goal_reached": completed >= goal,
+    }
+
+async def move_reset_log_for(user_id: str, date: str) -> dict:
+    settings = await get_user_settings(user_id)
+    cfg = settings.get("move_reset") or {}
+    return await get_daily_log(db.move_reset_logs, user_id, date, {
+        "goal": int(cfg.get("goal", 3)),
+        "completed": 0,
+        "schedule": cfg.get("schedule") or [],
+        "completed_slots": [],
+        "completed_activities": [],
+        "rewarded": False,
+    })
+
+@api.get("/move-reset/today")
+async def move_reset_today(date: Optional[str] = None, user=Depends(get_current_user)):
+    return move_reset_view(await move_reset_log_for(user["id"], parse_day(date)))
+
+@api.get("/move-reset/activities")
+async def move_reset_activities():
+    return [{"id": k, "name": v} for k, v in MOVE_ACTIVITIES.items()]
+
+@api.post("/move-reset/complete")
+async def move_reset_complete(body: MoveCompleteReq, user=Depends(get_current_user)):
+    activity = (body.activity or "").strip().lower()
+    if activity not in MOVE_ACTIVITIES:
+        raise HTTPException(400, f"activity must be one of: {', '.join(sorted(MOVE_ACTIVITIES))}")
+    if body.duration is not None and (body.duration < 0 or body.duration > 3600):
+        raise HTTPException(400, "duration must be between 0 and 3600 seconds")
+    date = parse_day(body.date)
+    slot = clean_slot(body.slot)
+    log = await move_reset_log_for(user["id"], date)
+
+    if slot and slot in (log.get("completed_slots") or []):
+        return {**move_reset_view(log), "already_completed": True}
+
+    completed = int(log.get("completed") or 0) + 1
+    push = {"completed_activities": {
+        "activity": activity,
+        "name": MOVE_ACTIVITIES[activity],
+        "slot": slot,
+        "duration": body.duration or 0,
+        "completed_at": now_iso(),
+    }}
+    if slot:
+        push["completed_slots"] = slot
+    log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"completed": completed}, push=push)
+
+    event = await record_wellness_event(user, "stand", "ACTIVITY_COMPLETED", activity)
+    bonus = None
+    if completed >= int(log.get("goal") or 3) and not log.get("rewarded"):
+        fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+        bonus = await maybe_award_goal_bonus(fresh or user, "move_reset_goal", "stand", date, completed)
+        if bonus:
+            log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"rewarded": True})
+
+    totals = await current_totals(user["id"])
+    return {**move_reset_view(log), "already_completed": False, "activity": event["activity"],
+            "xp_earned": event["xp_earned"], "goal_bonus": bonus, **totals}
+
+@api.put("/move-reset/goal")
+async def move_reset_goal(body: GoalReq, user=Depends(get_current_user)):
+    goal = validate_goal(body.goal, 1, 24)
+    date = parse_day(body.date)
+    await move_reset_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"move_reset": {"goal": goal}})
+    log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"goal": goal})
+    return move_reset_view(log)
+
+@api.put("/move-reset/schedule")
+async def move_reset_schedule(body: ScheduleReq, user=Depends(get_current_user)):
+    schedule = clean_schedule(body.schedule)
+    date = parse_day(body.date)
+    await move_reset_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"move_reset": {"schedule": schedule}})
+    log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"schedule": schedule})
+    return move_reset_view(log)
+
+@api.get("/move-reset/history")
+async def move_reset_history(days: int = 30, start: Optional[str] = None, end: Optional[str] = None,
+                             user=Depends(get_current_user)):
+    logs = await db.move_reset_logs.find(
+        {"user_id": user["id"], "date": history_range(days, start, end)}, {"_id": 0}
+    ).sort("date", -1).to_list(400)
+    items = [move_reset_view(l) for l in logs]
+    return {
+        "items": items,
+        "days_tracked": len(items),
+        "goals_completed": sum(1 for i in items if i["goal_reached"]),
+        "total_sessions": sum(i["completed"] for i in items),
+    }
+
+
+# =========================================================================
+# 6. Breathing
+# =========================================================================
+
+class BreathingSessionReq(BaseModel):
+    duration: Optional[int] = None      # seconds
+    slot: Optional[str] = None
+    date: Optional[str] = None
+
+
+def breathing_view(log: dict) -> dict:
+    goal = max(1, int(log.get("goal") or 3))
+    completed = int(log.get("completed") or 0)
+    sessions = log.get("sessions") or []
+    return {
+        "user_id": log.get("user_id"),
+        "date": log.get("date"),
+        "goal": goal,
+        "completed": completed,
+        "remaining": max(0, goal - completed),
+        "progress": round(min(100.0, (completed / goal) * 100), 1),
+        "schedule": log.get("schedule") or [],
+        "completed_slots": log.get("completed_slots") or [],
+        "sessions": sessions,
+        "total_duration": sum(int(s.get("duration") or 0) for s in sessions),
+        "rewarded": bool(log.get("rewarded")),
+        "goal_reached": completed >= goal,
+    }
+
+async def breathing_log_for(user_id: str, date: str) -> dict:
+    settings = await get_user_settings(user_id)
+    cfg = settings.get("breathing") or {}
+    return await get_daily_log(db.breathing_logs, user_id, date, {
+        "goal": int(cfg.get("goal", 3)),
+        "completed": 0,
+        "schedule": cfg.get("schedule") or [],
+        "completed_slots": [],
+        "sessions": [],
+        "rewarded": False,
+    })
+
+@api.get("/breathing/today")
+async def breathing_today(date: Optional[str] = None, user=Depends(get_current_user)):
+    return breathing_view(await breathing_log_for(user["id"], parse_day(date)))
+
+@api.post("/breathing/session")
+async def breathing_session(body: BreathingSessionReq, user=Depends(get_current_user)):
+    duration = int(body.duration or 60)
+    if duration < 1 or duration > 3600:
+        raise HTTPException(400, "duration must be between 1 and 3600 seconds")
+    date = parse_day(body.date)
+    slot = clean_slot(body.slot)
+    log = await breathing_log_for(user["id"], date)
+
+    if slot and slot in (log.get("completed_slots") or []):
+        return {**breathing_view(log), "already_completed": True}
+
+    completed = int(log.get("completed") or 0) + 1
+    push = {"sessions": {"duration": duration, "slot": slot, "completed_at": now_iso()}}
+    if slot:
+        push["completed_slots"] = slot
+    log = await touch_daily_log(db.breathing_logs, user["id"], date, {"completed": completed}, push=push)
+
+    event = await record_wellness_event(user, "breathing", "SESSION_COMPLETED", duration)
+    bonus = None
+    if completed >= int(log.get("goal") or 3) and not log.get("rewarded"):
+        fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+        bonus = await maybe_award_goal_bonus(fresh or user, "breathing_goal", "breathing", date, completed)
+        if bonus:
+            log = await touch_daily_log(db.breathing_logs, user["id"], date, {"rewarded": True})
+
+    totals = await current_totals(user["id"])
+    return {**breathing_view(log), "already_completed": False, "activity": event["activity"],
+            "xp_earned": event["xp_earned"], "goal_bonus": bonus, **totals}
+
+@api.put("/breathing/goal")
+async def breathing_goal(body: GoalReq, user=Depends(get_current_user)):
+    goal = validate_goal(body.goal, 1, 24)
+    date = parse_day(body.date)
+    await breathing_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"breathing": {"goal": goal}})
+    log = await touch_daily_log(db.breathing_logs, user["id"], date, {"goal": goal})
+    return breathing_view(log)
+
+@api.put("/breathing/schedule")
+async def breathing_schedule(body: ScheduleReq, user=Depends(get_current_user)):
+    schedule = clean_schedule(body.schedule)
+    date = parse_day(body.date)
+    await breathing_log_for(user["id"], date)
+    await save_user_settings(user["id"], {"breathing": {"schedule": schedule}})
+    log = await touch_daily_log(db.breathing_logs, user["id"], date, {"schedule": schedule})
+    return breathing_view(log)
+
+@api.get("/breathing/history")
+async def breathing_history(days: int = 30, start: Optional[str] = None, end: Optional[str] = None,
+                            user=Depends(get_current_user)):
+    logs = await db.breathing_logs.find(
+        {"user_id": user["id"], "date": history_range(days, start, end)}, {"_id": 0}
+    ).sort("date", -1).to_list(400)
+    items = [breathing_view(l) for l in logs]
+    return {
+        "items": items,
+        "days_tracked": len(items),
+        "goals_completed": sum(1 for i in items if i["goal_reached"]),
+        "total_sessions": sum(i["completed"] for i in items),
+        "total_duration": sum(i["total_duration"] for i in items),
+    }
+
+
+# =========================================================================
+# 7. Rewards / XP endpoints
+# =========================================================================
+
+async def current_totals(user_id: str) -> dict:
+    u = await db.users.find_one(
+        {"id": user_id},
+        {"_id": 0, "points": 1, "level": 1, "coins": 1, "streak": 1, "wellness_score": 1},
+    ) or {}
+    return {
+        "xp": u.get("points", 0),
+        "points": u.get("points", 0),
+        "level": u.get("level", 1),
+        "coins": u.get("coins", 0),
+        "streak": u.get("streak", 0),
+        "wellness_score": u.get("wellness_score", 50),
+    }
+
+@api.get("/rewards")
+async def rewards_summary(user=Depends(get_current_user)):
+    """Current XP / level / coins plus progress toward the next level (doc section 7)."""
+    gc = await get_game_config()
+    totals = await current_totals(user["id"])
+    threshold = max(1, gc.get("level_threshold", 200))
+    into_level = totals["xp"] % threshold
+    today = datetime.now(timezone.utc).date().isoformat()
+    claimed_today = await db.reward_transactions.distinct(
+        "type", {"user_id": user["id"], "dedupe_key": {"$regex": f":{today}$"}}
+    )
+    unclaimed = await db.rewards.count_documents({"user_id": user["id"], "claimed": False})
+    return {
+        **totals,
+        "level_threshold": threshold,
+        "xp_into_level": into_level,
+        "xp_to_next_level": threshold - into_level,
+        "claimed_today": claimed_today,
+        "pending_rewards": unclaimed,
+    }
+
+@api.get("/rewards/history")
+async def rewards_history(limit: int = 50, user=Depends(get_current_user)):
+    limit = max(1, min(200, limit))
+    items = await db.reward_transactions.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(limit)
+    total = sum(i.get("xp", 0) for i in items)
+    return {"items": items, "count": len(items), "xp_in_window": total}
+
+class RewardClaimReq(BaseModel):
+    source: str                          # water_goal | eye_break_goal | move_reset_goal | breathing_goal
+    date: Optional[str] = None
+
+@api.post("/rewards/claim")
+async def rewards_claim(body: RewardClaimReq, user=Depends(get_current_user)):
+    """Claim a wellness goal reward. The backend re-validates the goal from the
+    stored logs, so a client cannot claim XP it has not earned."""
+    source = (body.source or "").strip()
+    if source not in REWARD_RULES:
+        raise HTTPException(400, f"source must be one of: {', '.join(sorted(REWARD_RULES))}")
+    date = parse_day(body.date)
+
+    checks = {
+        "water_goal": (db.water_logs, lambda l: int(l.get("consumed") or 0) >= max(1, int(l.get("goal") or 1)), "water"),
+        "eye_break_goal": (db.eye_break_logs, lambda l: int(l.get("completed") or 0) >= max(1, int(l.get("goal") or 1)), "eye_care"),
+        "move_reset_goal": (db.move_reset_logs, lambda l: int(l.get("completed") or 0) >= max(1, int(l.get("goal") or 1)), "stand"),
+        "breathing_goal": (db.breathing_logs, lambda l: int(l.get("completed") or 0) >= max(1, int(l.get("goal") or 1)), "breathing"),
+    }
+    coll, is_done, atype = checks[source]
+    log = await coll.find_one({"user_id": user["id"], "date": date}, {"_id": 0})
+    if not log or not is_done(log):
+        raise HTTPException(400, "Goal has not been completed yet")
+
+    bonus = await maybe_award_goal_bonus(user, source, atype, date, log.get("completed") or log.get("consumed"))
+    if not bonus:
+        raise HTTPException(409, "Reward already claimed for this day")
+    await coll.update_one({"user_id": user["id"], "date": date},
+                          {"$set": {"rewarded": True, "updated_at": now_iso()}})
+    return {**bonus, **(await current_totals(user["id"]))}
+
+
+# =========================================================================
+# 8. Daily activity tracking / live feed
+# =========================================================================
+
+@api.get("/activities/feed")
+async def activity_feed(limit: int = 30, scope: str = "me", user=Depends(get_current_user)):
+    """Live activity feed. scope=me (default) or scope=all for the whole team."""
+    limit = max(1, min(100, limit))
+    q = {} if scope == "all" else {"user_id": user["id"]}
+    items = await db.activities.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    if scope == "all":
+        uids = list({i["user_id"] for i in items})
+        users = await db.users.find({"id": {"$in": uids}},
+                                    {"_id": 0, "id": 1, "name": 1, "avatar": 1}).to_list(len(uids) or 1)
+        by_id = {u["id"]: u for u in users}
+        for i in items:
+            i["user"] = by_id.get(i["user_id"])
+    return items
+
+@api.get("/activities/history")
+async def activity_history(days: int = 7, type: Optional[str] = None, category: Optional[str] = None,
+                           limit: int = 200, user=Depends(get_current_user)):
+    days = max(1, min(365, days))
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    q = {"user_id": user["id"], "created_at": {"$gte": since}}
+    if type:
+        q["type"] = type
+    if category:
+        q["category"] = category.upper()
+    items = await db.activities.find(q, {"_id": 0}).sort("created_at", -1).to_list(max(1, min(500, limit)))
+    by_category: Dict[str, int] = {}
+    for i in items:
+        key = i.get("category") or WELLNESS_CATEGORY.get(i.get("type"), "OTHER")
+        by_category[key] = by_category.get(key, 0) + 1
+    return {
+        "items": items,
+        "total": len(items),
+        "by_category": by_category,
+        "xp_earned": sum(i.get("xp_earned", i.get("points", 0)) or 0 for i in items),
+    }
+
+
+# =========================================================================
+# 11. Streaks
+# =========================================================================
+
+async def compute_streaks(user_id: str) -> dict:
+    """Derive the current/longest daily streak from dated activity records."""
+    stamps = await db.activities.distinct("created_at", {"user_id": user_id})
+    days = set()
+    for s in stamps:
+        try:
+            days.add(datetime.fromisoformat(s).date())
+        except (ValueError, TypeError):
+            continue
+    if not days:
+        return {"current_streak": 0, "longest_streak": 0, "active_today": False,
+                "last_active_date": None, "total_active_days": 0}
+
+    ordered = sorted(days)
+    longest = run = 1
+    for prev, cur in zip(ordered, ordered[1:]):
+        run = run + 1 if (cur - prev).days == 1 else 1
+        longest = max(longest, run)
+
+    today = datetime.now(timezone.utc).date()
+    active_today = today in days
+    # A streak survives until the end of the following day (yesterday still counts).
+    anchor = today if active_today else today - timedelta(days=1)
+    current = 0
+    if anchor in days:
+        cursor = anchor
+        while cursor in days:
+            current += 1
+            cursor -= timedelta(days=1)
+
+    return {
+        "current_streak": current,
+        "longest_streak": longest,
+        "active_today": active_today,
+        "last_active_date": ordered[-1].isoformat(),
+        "total_active_days": len(days),
+    }
+
+@api.get("/streaks")
+async def streaks(user=Depends(get_current_user)):
+    data = await compute_streaks(user["id"])
+    # Keep the denormalised counter on the user document in sync with the log.
+    if data["current_streak"] != user.get("streak"):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"streak": data["current_streak"]}})
+    return data
+
+
+# =========================================================================
+# 9. Dashboard aggregate
+# =========================================================================
+
+@api.get("/dashboard")
+async def dashboard(date: Optional[str] = None, user=Depends(get_current_user)):
+    """Single combined summary so the dashboard needs one request, not six."""
+    day = parse_day(date)
+    uid = user["id"]
+
+    water = water_view(await water_log_for(uid, day))
+    eye = eye_break_view(await eye_break_log_for(uid, day))
+    move = move_reset_view(await move_reset_log_for(uid, day))
+    breath = breathing_view(await breathing_log_for(uid, day))
+    totals = await current_totals(uid)
+    streak_data = await compute_streaks(uid)
+
+    since = f"{day}T00:00:00+00:00"
+    todays = await db.activities.find(
+        {"user_id": uid, "created_at": {"$gte": since}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+
+    modules = [water["completed"], eye["goal_reached"], move["goal_reached"], breath["goal_reached"]]
+    return {
+        "date": day,
+        "water": {"consumed": water["consumed"], "goal": water["goal"], "progress": water["progress"],
+                  "completed": water["completed"], "rewarded": water["rewarded"]},
+        "eye_break": {"completed": eye["completed"], "goal": eye["goal"], "progress": eye["progress"],
+                      "schedule": eye["schedule"], "completed_slots": eye["completed_slots"],
+                      "rewarded": eye["rewarded"]},
+        "move_reset": {"completed": move["completed"], "goal": move["goal"], "progress": move["progress"],
+                       "schedule": move["schedule"], "completed_slots": move["completed_slots"],
+                       "rewarded": move["rewarded"]},
+        "breathing": {"completed": breath["completed"], "goal": breath["goal"], "progress": breath["progress"],
+                      "schedule": breath["schedule"], "rewarded": breath["rewarded"]},
+        "xp": totals["xp"],
+        "points": totals["points"],
+        "level": totals["level"],
+        "coins": totals["coins"],
+        "wellness_score": totals["wellness_score"],
+        "streak": streak_data["current_streak"],
+        "longest_streak": streak_data["longest_streak"],
+        "modules_completed": sum(1 for m in modules if m),
+        "modules_total": len(modules),
+        "activities_today": len(todays),
+        "recent_activity": todays[:10],
+    }
+
+
+# =========================================================================
+# 12. Notification preferences, devices and scheduled reminders
+# =========================================================================
+
+NOTIFICATION_MODULES = {
+    "water": ("water", "reminder_times", "💧 Time to drink water!", "Hydrate or deteriorate, legend.", "🚰"),
+    "eye_care": ("eye_break", "schedule", "👀 Eye break time!", "20-20-20. Look away for 20 seconds.", "👀"),
+    "move_reset": ("move_reset", "schedule", "🧍 Move & reset!", "Stand up, stretch, shake it out.", "🧍"),
+    "breathing": ("breathing", "schedule", "🌬️ Breathing break!", "Slow it down. In... hold... out.", "🌬️"),
+}
+
+class NotificationSettingsReq(BaseModel):
+    notifications_enabled: Optional[bool] = None
+    desktop_notifications: Optional[bool] = None
+    in_app_popup: Optional[bool] = None
+    sound: Optional[bool] = None
+    water: Optional[bool] = None
+    eye_care: Optional[bool] = None
+    move_reset: Optional[bool] = None
+    breathing: Optional[bool] = None
+
+class DeviceReq(BaseModel):
+    token: str
+    platform: Optional[str] = "web"      # web | ios | android
+    provider: Optional[str] = "webpush"  # webpush | fcm | apns
+    label: Optional[str] = None
+
+
+def notifications_enabled_for(settings: dict, module: str) -> bool:
+    prefs = settings.get("notifications") or {}
+    if not prefs.get("notifications_enabled", True):
+        return False
+    return bool(prefs.get(module, True))
+
+@api.get("/notifications")
+async def notifications_list(limit: int = 50, unread_only: bool = False,
+                             user=Depends(get_current_user)):
+    """Notification history/status for the signed-in user (doc section 12)."""
+    limit = max(1, min(200, limit))
+    q = {"user_id": user["id"]}
+    if unread_only:
+        q["read"] = False
+    items = await db.notifications.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    unread = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"items": items, "count": len(items), "unread": unread}
+
+@api.get("/notifications/history")
+async def notifications_history(days: int = 30, kind: Optional[str] = None,
+                                user=Depends(get_current_user)):
+    days = max(1, min(365, days))
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    q = {"user_id": user["id"], "created_at": {"$gte": since}}
+    if kind:
+        q["kind"] = kind
+    items = await db.notifications.find(q, {"_id": 0}).sort("created_at", -1).to_list(300)
+    by_status: Dict[str, int] = {}
+    for i in items:
+        by_status[i.get("status", "sent")] = by_status.get(i.get("status", "sent"), 0) + 1
+    return {"items": items, "total": len(items), "by_status": by_status}
+
+@api.get("/notifications/settings")
+async def get_notification_settings(user=Depends(get_current_user)):
+    return (await get_user_settings(user["id"]))["notifications"]
+
+@api.put("/notifications/settings")
+async def put_notification_settings(body: NotificationSettingsReq, user=Depends(get_current_user)):
+    patch = body.model_dump(exclude_none=True)
+    if not patch:
+        raise HTTPException(400, "No notification settings supplied")
+    saved = await save_user_settings(user["id"], {"notifications": patch})
+    return saved["notifications"]
+
+@api.post("/notifications/register-device")
+async def register_device(body: DeviceReq, user=Depends(get_current_user)):
+    token = (body.token or "").strip()
+    if not token or len(token) > 4096:
+        raise HTTPException(400, "token is required and must be under 4096 characters")
+    if body.platform not in ("web", "ios", "android"):
+        raise HTTPException(400, "platform must be web, ios or android")
+    if body.provider not in ("webpush", "fcm", "apns"):
+        raise HTTPException(400, "provider must be webpush, fcm or apns")
+    device = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "token": token,
+        "platform": body.platform,
+        "provider": body.provider,
+        "label": (body.label or "")[:120],
+        "active": True,
+        "created_at": now_iso(),
+    }
+    # One row per token: re-registering refreshes ownership instead of duplicating.
+    await db.devices.update_one(
+        {"token": token},
+        {"$set": {k: v for k, v in device.items() if k not in ("id", "created_at")},
+         "$setOnInsert": {"id": device["id"], "created_at": device["created_at"]}},
+        upsert=True,
+    )
+    return await db.devices.find_one({"token": token}, {"_id": 0})
+
+@api.get("/notifications/devices")
+async def list_devices(user=Depends(get_current_user)):
+    return await db.devices.find({"user_id": user["id"], "active": True}, {"_id": 0}).to_list(50)
+
+@api.delete("/notifications/devices/{device_id}")
+async def delete_device(device_id: str, user=Depends(get_current_user)):
+    result = await db.devices.update_one(
+        {"id": device_id, "user_id": user["id"]}, {"$set": {"active": False}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Device not found")
+    return {"ok": True}
+
+@api.get("/notifications/schedule")
+async def notification_schedule(user=Depends(get_current_user)):
+    """The user's reminder timetable for today, with the next upcoming event."""
+    settings = await get_user_settings(user["id"])
+    now = datetime.now(timezone.utc)
+    current_minutes = now.hour * 60 + now.minute
+    events = []
+    for module, (section, key, title, message, icon) in NOTIFICATION_MODULES.items():
+        if not notifications_enabled_for(settings, module):
+            continue
+        for t in (settings.get(section) or {}).get(key) or []:
+            hh, mm = (int(x) for x in t.split(":"))
+            events.append({
+                "type": module,
+                "time": t,
+                "title": title,
+                "message": message,
+                "icon": icon,
+                "upcoming": (hh * 60 + mm) >= current_minutes,
+            })
+    events.sort(key=lambda e: e["time"])
+    upcoming = [e for e in events if e["upcoming"]]
+    return {
+        "enabled": (settings.get("notifications") or {}).get("notifications_enabled", True),
+        "events": events,
+        "next": upcoming[0] if upcoming else None,
+    }
+
+
+async def deliver_push(device: dict, title: str, message: str, data: dict = None) -> str:
+    """Hand a reminder to the configured push provider.
+
+    No provider credentials are configured in this environment, so delivery is
+    recorded as `queued`. Wiring FCM/APNs/WebPush here is the only change needed
+    to turn these into real pushes.
+    """
+    provider_key = os.environ.get("PUSH_PROVIDER_KEY")
+    if not provider_key:
+        logger.info("Push queued (no provider configured) for device %s: %s", device.get("id"), title)
+        return "queued"
+    try:
+        # Provider-specific delivery goes here.
+        return "sent"
+    except Exception as exc:  # pragma: no cover - depends on provider
+        logger.warning("Push delivery failed for device %s: %s", device.get("id"), exc)
+        return "failed"
+
+async def dispatch_due_reminders(window_minutes: int = 5) -> dict:
+    """Find reminders due in the current window and record/send them once each.
+
+    Idempotent per (user, type, time, day) via the `notification_dispatch` guard
+    collection, so it is safe to call from a cron/worker every minute.
+    """
+    now = datetime.now(timezone.utc)
+    day = now.date().isoformat()
+    current_minutes = now.hour * 60 + now.minute
+    window = max(1, min(60, window_minutes))
+
+    sent, skipped = 0, 0
+    # Only users who have saved settings are in scope: storing settings is the
+    # opt-in signal, so nobody gets reminders they never configured.
+    settings_docs = await db.user_settings.find({}, {"_id": 0}).to_list(2000)
+    user_ids = [s["user_id"] for s in settings_docs if s.get("user_id")]
+    for uid in user_ids:
+        settings = await get_user_settings(uid)
+        for module, (section, key, title, message, icon) in NOTIFICATION_MODULES.items():
+            if not notifications_enabled_for(settings, module):
+                skipped += 1
+                continue
+            for t in (settings.get(section) or {}).get(key) or []:
+                hh, mm = (int(x) for x in t.split(":"))
+                delta = current_minutes - (hh * 60 + mm)
+                if delta < 0 or delta >= window:
+                    continue
+                guard = {"user_id": uid, "type": module, "time": t, "date": day}
+                existing = await db.notification_dispatch.find_one(guard)
+                if existing:
+                    continue
+                await db.notification_dispatch.insert_one({**guard, "created_at": now_iso()})
+
+                devices = await db.devices.find({"user_id": uid, "active": True}, {"_id": 0}).to_list(20)
+                statuses = [await deliver_push(d, title, message, {"type": module}) for d in devices]
+                status = "sent" if "sent" in statuses else ("queued" if statuses else "in_app_only")
+
+                await db.notifications.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": uid,
+                    "kind": "wellness",
+                    "type": module,
+                    "title": title,
+                    "message": message,
+                    "icon": icon,
+                    "data": {"type": module, "slot": t},
+                    "scheduled_at": f"{day}T{t}:00+00:00",
+                    "sent_at": now_iso(),
+                    "status": status,
+                    "read": False,
+                    "created_at": now_iso(),
+                })
+                sent += 1
+    return {"dispatched": sent, "skipped": skipped, "at": now_iso()}
+
+@api.post("/notifications/dispatch")
+async def run_dispatch(window_minutes: int = 5, admin=Depends(require_admin)):
+    """Entry point for a cron/worker to fire the reminders that are due now."""
+    return await dispatch_due_reminders(window_minutes)
+
+
+# =========================================================================
+# Game Teams — bounties, wager challenges and occasion shuffle
+# (consumed by frontend/src/pages/GameTeams.jsx)
+# =========================================================================
+
+DEFAULT_BOUNTIES = [
+    {"title": "Coffee Machine Defense", "reward": 100},
+    {"title": "Ping Pong Championship Upset", "reward": 250},
+    {"title": "Desk Tidy Blitz", "reward": 75},
+    {"title": "Meeting Room Rescue", "reward": 120},
+]
+
+class BountyCreate(BaseModel):
+    title: str
+    reward: int = 100
+
+class BountyClaim(BaseModel):
+    team_id: str
+
+class TeamChallengeReq(BaseModel):
+    challenger_team_id: str
+    target_team_id: str
+    wager: int = 50
+
+class OccasionShuffleReq(BaseModel):
+    theme: Optional[str] = None
+    num_teams: int = 4
+    name_prefix: Optional[str] = None
+
+
+async def ensure_default_bounties():
+    if await db.game_bounties.count_documents({}) == 0:
+        await db.game_bounties.insert_many([{
+            "id": str(uuid.uuid4()),
+            "title": b["title"],
+            "reward": b["reward"],
+            "status": "OPEN",
+            "claimed_by": None,
+            "claimed_by_name": None,
+            "claimed_at": None,
+            "created_at": now_iso(),
+        } for b in DEFAULT_BOUNTIES])
+
+async def team_of(user_id: str) -> Optional[dict]:
+    return await db.game_teams.find_one({"members": user_id}, {"_id": 0})
+
+@api.get("/game-teams/bounties")
+async def list_bounties(user=Depends(get_current_user)):
+    await ensure_default_bounties()
+    return await db.game_bounties.find({}, {"_id": 0}).sort("created_at", 1).to_list(100)
+
+@api.post("/admin/game-teams/bounties")
+async def create_bounty(body: BountyCreate, admin=Depends(require_admin)):
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(400, "title is required")
+    if body.reward < 1 or body.reward > 1000:
+        raise HTTPException(400, "reward must be between 1 and 1000")
+    bounty = {
+        "id": str(uuid.uuid4()),
+        "title": title[:120],
+        "reward": body.reward,
+        "status": "OPEN",
+        "claimed_by": None,
+        "claimed_by_name": None,
+        "claimed_at": None,
+        "created_at": now_iso(),
+    }
+    await db.game_bounties.insert_one(dict(bounty))
+    return bounty
+
+@api.post("/game-teams/bounties/{bounty_id}/claim")
+async def claim_bounty(bounty_id: str, body: BountyClaim, user=Depends(get_current_user)):
+    bounty = await db.game_bounties.find_one({"id": bounty_id}, {"_id": 0})
+    if not bounty:
+        raise HTTPException(404, "Bounty not found")
+    if bounty.get("status") == "CLAIMED":
+        raise HTTPException(409, "Bounty has already been claimed")
+
+    team = await db.game_teams.find_one({"id": body.team_id}, {"_id": 0})
+    if not team:
+        raise HTTPException(404, "Team not found")
+    if user["id"] not in (team.get("members") or []):
+        raise HTTPException(403, "You can only claim bounties for your own team")
+
+    # Only the first writer flips OPEN -> CLAIMED.
+    result = await db.game_bounties.update_one(
+        {"id": bounty_id, "status": "OPEN"},
+        {"$set": {"status": "CLAIMED", "claimed_by": team["id"],
+                  "claimed_by_name": team["name"], "claimed_by_user": user["id"],
+                  "claimed_at": now_iso()}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(409, "Bounty has already been claimed")
+
+    await db.game_teams.update_one({"id": team["id"]}, {"$inc": {"team_points": bounty["reward"]}})
+    for uid in team.get("members") or []:
+        await create_notification(
+            user_id=uid,
+            kind="reward",
+            title=f"🎯 Bounty claimed: {bounty['title']}",
+            message=f"{user['name']} claimed +{bounty['reward']} team points for {team['name']}.",
+            icon="🎯",
+            data={"bounty_id": bounty_id, "team_id": team["id"], "reward": bounty["reward"]},
+        )
+    return await db.game_bounties.find_one({"id": bounty_id}, {"_id": 0})
+
+@api.get("/game-teams/challenges")
+async def list_challenges_teams(user=Depends(get_current_user)):
+    return await db.game_challenges.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+@api.post("/game-teams/challenge")
+async def challenge_team(body: TeamChallengeReq, user=Depends(get_current_user)):
+    if body.challenger_team_id == body.target_team_id:
+        raise HTTPException(400, "A team cannot challenge itself")
+    if body.wager < 10 or body.wager > 500:
+        raise HTTPException(400, "wager must be between 10 and 500 points")
+
+    challenger = await db.game_teams.find_one({"id": body.challenger_team_id}, {"_id": 0})
+    target = await db.game_teams.find_one({"id": body.target_team_id}, {"_id": 0})
+    if not challenger or not target:
+        raise HTTPException(404, "Team not found")
+    if user["id"] not in (challenger.get("members") or []):
+        raise HTTPException(403, "You can only challenge on behalf of your own team")
+
+    duplicate = await db.game_challenges.find_one({
+        "status": "PENDING",
+        "challenger_team_id": challenger["id"],
+        "target_team_id": target["id"],
+    })
+    if duplicate:
+        raise HTTPException(409, "A pending challenge between these teams already exists")
+
+    challenge = {
+        "id": str(uuid.uuid4()),
+        "challenger_team_id": challenger["id"],
+        "challenger_team_name": challenger["name"],
+        "target_team_id": target["id"],
+        "target_team_name": target["name"],
+        "wager": body.wager,
+        "status": "PENDING",
+        "winner_team_id": None,
+        "created_by": user["id"],
+        "created_at": now_iso(),
+    }
+    await db.game_challenges.insert_one(dict(challenge))
+    for uid in target.get("members") or []:
+        await create_notification(
+            user_id=uid,
+            kind="announcement",
+            title=f"⚔️ {challenger['name']} challenged {target['name']}!",
+            message=f"{body.wager} team points are on the line.",
+            icon="⚔️",
+            data={"challenge_id": challenge["id"], "wager": body.wager},
+        )
+    return challenge
+
+class ChallengeResolve(BaseModel):
+    winner_team_id: str
+
+@api.post("/admin/game-teams/challenges/{challenge_id}/resolve")
+async def resolve_challenge(challenge_id: str, body: ChallengeResolve, admin=Depends(require_admin)):
+    ch = await db.game_challenges.find_one({"id": challenge_id}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Challenge not found")
+    if ch["status"] != "PENDING":
+        raise HTTPException(409, "Challenge has already been resolved")
+    if body.winner_team_id not in (ch["challenger_team_id"], ch["target_team_id"]):
+        raise HTTPException(400, "winner_team_id must be one of the two teams")
+
+    loser_id = (ch["target_team_id"] if body.winner_team_id == ch["challenger_team_id"]
+                else ch["challenger_team_id"])
+    await db.game_teams.update_one({"id": body.winner_team_id}, {"$inc": {"team_points": ch["wager"]}})
+    await db.game_teams.update_one({"id": loser_id}, {"$inc": {"team_points": -ch["wager"]}})
+    await db.game_challenges.update_one(
+        {"id": challenge_id},
+        {"$set": {"status": "RESOLVED", "winner_team_id": body.winner_team_id,
+                  "resolved_at": now_iso(), "resolved_by": admin["id"]}},
+    )
+    return await db.game_challenges.find_one({"id": challenge_id}, {"_id": 0})
+
+@api.post("/game-teams/shuffle")
+async def occasion_shuffle(body: OccasionShuffleReq, admin=Depends(require_admin)):
+    """Admin-only re-allocation of everyone into fresh battalions for an occasion."""
+    theme = (body.theme or "").strip()
+    prefix = (body.name_prefix or theme or "Squad").strip()[:40] or "Squad"
+    teams = await shuffle_teams(ShuffleReq(num_teams=body.num_teams, name_prefix=prefix), admin)
+    if theme:
+        await db.game_teams.update_many({"auto_shuffled": True}, {"$set": {"theme": theme}})
+        for t in teams:
+            t["theme"] = theme
+        users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(1000)
+        for u in users:
+            await create_notification(
+                user_id=u["id"],
+                kind="announcement",
+                title=f"🎲 Teams reshuffled: {theme}",
+                message="Head to Game Teams to meet your new battalion.",
+                icon="🎲",
+                data={"theme": theme},
+            )
+    return {"theme": theme, "teams": teams}
+
+
 @api.get("/")
 async def root():
     return {"message": "Brutal Wellness API", "status": "alive"}
 
 app.include_router(api)
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    """Keep FastAPI's `detail` key and mirror it as `message` for the frontend."""
+    detail = exc.detail
+    body = detail if isinstance(detail, dict) else {"detail": detail}
+    body.setdefault("message", detail if isinstance(detail, str) else body.get("detail"))
+    return JSONResponse(status_code=exc.status_code, content=body, headers=getattr(exc, "headers", None))
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    errors = exc.errors()
+    first = errors[0] if errors else {}
+    field = ".".join(str(p) for p in first.get("loc", [])[1:]) or "request"
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(errors),
+                 "message": f"{field}: {first.get('msg', 'Invalid request')}"},
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -2273,11 +3815,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def ensure_indexes():
+    """Indexes for the wellness collections (doc section 13)."""
+    for coll in (db.water_logs, db.eye_break_logs, db.move_reset_logs, db.breathing_logs):
+        await coll.create_index([("user_id", 1), ("date", -1)], unique=True)
+    await db.user_settings.create_index("user_id", unique=True)
+    await db.reward_transactions.create_index(
+        [("user_id", 1), ("dedupe_key", 1)], unique=True,
+        partialFilterExpression={"dedupe_key": {"$type": "string"}},
+    )
+    await db.reward_transactions.create_index([("user_id", 1), ("created_at", -1)])
+    await db.activities.create_index([("user_id", 1), ("created_at", -1)])
+    await db.activities.create_index([("user_id", 1), ("type", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await db.devices.create_index("token", unique=True)
+    await db.devices.create_index([("user_id", 1), ("active", 1)])
+    await db.notification_dispatch.create_index(
+        [("user_id", 1), ("type", 1), ("time", 1), ("date", 1)], unique=True
+    )
+    await db.game_bounties.create_index("status")
+    await db.game_challenges.create_index([("status", 1), ("created_at", -1)])
+
 @app.on_event("startup")
 async def on_startup():
     # Migrate: ensure all users have role & dnd fields
     try:
         await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "employee", "dnd": False}})
+        await db.users.update_many({"coins": {"$exists": False}}, {"$set": {"coins": 0}})
+        try:
+            await ensure_indexes()
+        except Exception as e:
+            logger.warning(f"Index creation skipped: {e}")
         # Ensure demo users (including admin) exist — idempotent
         count = await db.users.count_documents({})
         await seed_data()
