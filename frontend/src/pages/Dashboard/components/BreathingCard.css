@@ -1,0 +1,868 @@
+/* =========================================================
+   BREATHING CARD
+========================================================= */
+
+.breathing-card {
+  position: relative;
+
+  min-height: 320px;
+  height: 100%;
+
+  padding: 16px;
+
+  display: flex;
+  flex-direction: column;
+
+  background: #dce8c8;
+  color: #374139;
+
+  border: 4px solid #000;
+  border-radius: 30px;
+
+  box-shadow: 8px 8px 0 #000;
+
+  box-sizing: border-box;
+
+  overflow: hidden;
+}
+
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.breathing-card-header {
+  min-height: 40px;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 10px;
+}
+
+.breathing-card-title {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  font-size: 17px;
+  font-weight: 900;
+
+  line-height: 1.2;
+
+  letter-spacing: 0.3px;
+}
+
+.breathing-card-subtitle {
+  margin-top: 5px;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  line-height: 1.3;
+
+  opacity: 0.72;
+}
+
+
+/* =========================================================
+   SETTINGS BUTTON
+========================================================= */
+
+.breathing-settings-button {
+  width: 34px;
+  height: 34px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #fff;
+
+  border: 3px solid #000;
+  border-radius: 50%;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.breathing-settings-button:hover {
+  background: #f4f4f4;
+
+  transform: rotate(10deg);
+}
+
+
+/* =========================================================
+   CARD VISUAL
+========================================================= */
+
+.breathing-card-visual {
+  height: 105px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-top: 2px;
+}
+
+.breathing-orb {
+  width: 48px;
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #a9c982;
+
+  border: 4px solid #000;
+  border-radius: 50%;
+
+  box-shadow:
+    0 0 0 7px rgba(169, 201, 130, 0.3);
+}
+
+.breathing-orb-inner {
+  width: 55%;
+  height: 55%;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.4);
+}
+
+
+/* =========================================================
+   PROGRESS
+========================================================= */
+
+.breathing-progress {
+  flex: 1;
+
+  margin-top: 2px;
+}
+
+.breathing-progress-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #374139; /* Deep, high-contrast text color */
+}
+
+/* Make the right-side counter fully opaque and bold */
+.breathing-progress-title span:last-child {
+  opacity: 1;
+  font-weight: 900;
+}
+
+/* Styled badge for the next schedule time */
+.breathing-next-time-badge {
+  font-size: 10px;
+  font-weight: 800;
+  background: #dcefdc;
+  color: #2d5a27;
+  padding: 2px 6px;
+  border: 1.5px solid #000;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+
+.breathing-progress-track {
+  width: 100%;
+  height: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.8);
+  border: 3px solid #000;
+  border-radius: 999px;
+  box-sizing: border-box;
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.1);
+}
+
+.breathing-progress-fill {
+  height: 100%;
+  background: #76a843; /* Darker, more vivid green for better visibility */
+  border-radius: 999px;
+}
+
+/* =========================================================
+   START BUTTON
+========================================================= */
+
+.breathing-start-button,
+.breathing-complete-state {
+  width: 72%;
+  max-width: 220px;
+
+  min-height: 44px;
+
+  margin: auto auto 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 7px;
+
+  border: 3px solid #000;
+  border-radius: 999px;
+
+  box-shadow: 0 4px 0 #000;
+
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.breathing-start-button {
+  background: #a9c982;
+
+  color: #000;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.breathing-start-button:hover {
+  background: #94b96c;
+}
+
+.breathing-start-button:active {
+  transform: translate(2px, 2px);
+
+  box-shadow: 1px 1px 0 #000;
+}
+
+.breathing-complete-state {
+  background: #a9c982;
+
+  cursor: default;
+}
+
+
+/* =========================================================
+   OVERLAY
+========================================================= */
+
+.breathing-overlay,
+.breathing-reward-overlay,
+.breathing-settings-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(30, 40, 35, 0.55);
+}
+
+
+/* =========================================================
+   BREATHING MODAL
+========================================================= */
+
+.breathing-modal {
+  position: relative;
+
+  width: min(430px, 94vw);
+  min-height: 540px;
+
+  padding: 35px 25px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+  background: #f5f7ed;
+
+  border: 4px solid #000;
+  border-radius: 28px;
+
+  box-shadow: 10px 10px 0 #000;
+
+  box-sizing: border-box;
+}
+
+
+/* =========================================================
+   CLOSE
+========================================================= */
+
+.breathing-close {
+  position: absolute;
+
+  top: 12px;
+  right: 12px;
+
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #fff;
+
+  border: 3px solid #000;
+  border-radius: 50%;
+
+  font-size: 20px;
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+.breathing-close:hover {
+  background: #dce8c8;
+}
+
+
+/* =========================================================
+   MODAL TEXT
+========================================================= */
+
+.breathing-modal-label {
+  font-size: 11px;
+
+  font-weight: 900;
+
+  letter-spacing: 1px;
+
+  opacity: 0.6;
+}
+
+.breathing-modal h2 {
+  margin: 6px 0 0;
+
+  font-size: 28px;
+
+  font-weight: 900;
+}
+
+.breathing-description {
+  margin: 5px 0 0;
+
+  font-size: 13px;
+
+  font-weight: 600;
+
+  opacity: 0.65;
+}
+
+
+/* =========================================================
+   MAIN BREATHING CIRCLE
+========================================================= */
+
+.breathing-modal-circle {
+  width: 190px;
+  height: 190px;
+
+  margin: 20px 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.breathing-main-orb {
+  width: 105px;
+  height: 105px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #a9c982;
+
+  border: 5px solid #000;
+  border-radius: 50%;
+
+  box-shadow:
+    0 0 0 10px rgba(169, 201, 130, 0.25);
+}
+
+.breathing-main-orb-inner {
+  width: 55%;
+  height: 55%;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.4);
+}
+
+
+/* =========================================================
+   ROUND
+========================================================= */
+
+.breathing-round {
+  font-size: 11px;
+
+  font-weight: 900;
+
+  letter-spacing: 1px;
+
+  opacity: 0.55;
+}
+
+
+/* =========================================================
+   PHASE INDICATORS
+========================================================= */
+
+.breathing-phases {
+  display: flex;
+
+  gap: 8px;
+
+  margin-top: 14px;
+}
+
+.breathing-phases span {
+  min-width: 55px;
+
+  padding: 6px 10px;
+
+  background: #f0f1eb;
+
+  border: 2px solid #000;
+  border-radius: 999px;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  opacity: 0.45;
+}
+
+.breathing-phases span.active {
+  background: #a9c982;
+
+  opacity: 1;
+}
+
+
+/* =========================================================
+   TIP
+========================================================= */
+
+.breathing-tip {
+  max-width: 280px;
+
+  margin-top: 16px;
+
+  font-size: 12px;
+
+  font-weight: 600;
+
+  opacity: 0.6;
+}
+
+
+/* =========================================================
+   REWARD
+========================================================= */
+
+.breathing-reward-popup {
+  width: min(380px, 92vw);
+
+  padding: 35px;
+
+  text-align: center;
+
+  background: #dce8c8;
+
+  border: 4px solid #000;
+  border-radius: 28px;
+
+  box-shadow: 10px 10px 0 #000;
+}
+
+.breathing-reward-icon {
+  font-size: 50px;
+}
+
+.breathing-reward-popup h2 {
+  margin: 8px 0;
+
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.breathing-reward-popup p {
+  font-weight: 600;
+}
+
+.breathing-xp {
+  margin: 18px 0;
+
+  font-size: 38px;
+  font-weight: 900;
+
+  color: #5c7841;
+}
+
+.breathing-reward-popup button {
+  padding: 10px 25px;
+
+  background: #a9c982;
+
+  border: 3px solid #000;
+  border-radius: 999px;
+
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   SETTINGS MODAL
+========================================================= */
+
+.breathing-settings-modal {
+  position: relative;
+
+  width: min(430px, 94vw);
+
+  max-height: 90vh;
+
+  overflow-y: auto;
+
+  padding: 25px;
+
+  background: #f5f7ed;
+
+  border: 4px solid #000;
+  border-radius: 28px;
+
+  box-shadow: 10px 10px 0 #000;
+
+  box-sizing: border-box;
+}
+
+.breathing-settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-bottom: 20px;
+}
+
+.breathing-settings-header h2 {
+  margin: 0;
+
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.breathing-settings-header p {
+  margin-top: 4px;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  opacity: 0.6;
+}
+
+.breathing-settings-header button {
+  width: 32px;
+  height: 32px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #fff;
+
+  border: 3px solid #000;
+  border-radius: 50%;
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   SETTINGS LABEL
+========================================================= */
+
+.breathing-settings-modal label {
+  display: block;
+
+  margin: 18px 0 8px;
+
+  font-size: 11px;
+  font-weight: 900;
+}
+
+
+/* =========================================================
+   GOAL BUTTONS
+========================================================= */
+
+.breathing-goal-buttons {
+  display: flex;
+
+  gap: 8px;
+}
+
+.breathing-goal-buttons button {
+  width: 42px;
+  height: 40px;
+
+  background: #fff;
+
+  border: 3px solid #000;
+  border-radius: 12px;
+
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+.breathing-goal-buttons button.selected {
+  background: #a9c982;
+}
+
+
+/* =========================================================
+   SAVE
+========================================================= */
+
+.breathing-save-button {
+  width: 100%;
+
+  min-height: 44px;
+
+  margin-top: 20px;
+
+  padding: 10px;
+
+  background: #a9c982;
+
+  border: 3px solid #000;
+  border-radius: 999px;
+
+  box-shadow: 4px 4px 0 #000;
+
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+.breathing-save-button:hover {
+  background: #94b96c;
+}
+
+
+/* =========================================================
+   RESET
+========================================================= */
+
+.breathing-reset-button {
+  width: 100%;
+
+  min-height: 40px;
+
+  margin-top: 10px;
+
+  padding: 9px;
+
+  background: #f4d6d0;
+  color: #a32121;
+
+  border: 3px solid #000;
+  border-radius: 999px;
+
+  font-size: 11px;
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+.breathing-reset-button:hover {
+  background: #efbeb5;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 600px) {
+  .breathing-card {
+    min-height: 310px;
+  }
+
+  .breathing-modal {
+    min-height: 520px;
+
+    padding: 30px 18px;
+  }
+
+  .breathing-modal h2 {
+    font-size: 24px;
+  }
+
+  .breathing-modal-circle {
+    width: 170px;
+    height: 170px;
+  }
+}
+
+/* =========================================================
+   INITIAL BREATHING PREVIEW
+========================================================= */
+
+.breathing-preview {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.breathing-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.breathing-preview-circle {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  border: 2px solid #000;
+}
+
+.breathing-preview-circle.inhale {
+  transform: scale(1.05);
+}
+
+.breathing-preview-circle.hold {
+  transform: scale(1.15);
+}
+
+.breathing-preview-circle.exhale {
+  transform: scale(0.9);
+}
+
+.breathing-preview-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breathing-preview-text strong {
+  font-size: 14px;
+}
+
+.breathing-preview-text span {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.breathing-preview-countdown {
+  width: 58px;
+  height: 58px;
+
+  margin: 4px auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 3px solid #000;
+  border-radius: 50%;
+
+  font-size: 24px;
+  font-weight: 800;
+
+  box-shadow: 4px 4px 0 #000;
+}
+
+
+/* =========================================================
+   ROUND PAUSE
+========================================================= */
+
+.breathing-pause-circle {
+  width: 150px;
+  height: 150px;
+
+  margin: 20px auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.5);
+
+  border: 3px solid #000;
+
+  box-shadow: 6px 6px 0 #000;
+
+  font-size: 48px;
+}
+
+.breathing-round-pause-countdown {
+  width: 58px;
+  height: 58px;
+
+  margin: 4px auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  border: 3px solid #000;
+
+  font-size: 24px;
+  font-weight: 800;
+
+  box-shadow: 4px 4px 0 #000;
+}
