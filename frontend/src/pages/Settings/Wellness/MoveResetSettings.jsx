@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import React, { useEffect, useState, useCallback } from "react";
+import { ArrowLeft, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const DEFAULT_GOAL = 3;
+const DEFAULT_REWARD_GOAL = 3;
 
 const DEFAULT_SCHEDULE = [
   "10:30",
@@ -12,60 +13,177 @@ const DEFAULT_SCHEDULE = [
   "21:00",
 ];
 
-const getToday = () => new Date().toDateString();
+const REWARD_CONFIG_KEY = "wellness-reward-config";
+const MOVE_GOAL_KEY = "moveResetGoal";
+const MOVE_SCHEDULE_KEY = "moveResetSchedule";
+
+/* =========================================================
+   REWARD GOAL PARSER
+========================================================= */
+
+const parseRewardGoal = (savedData) => {
+  try {
+    if (!savedData) {
+      return DEFAULT_REWARD_GOAL;
+    }
+
+    const parsed =
+      typeof savedData === "string"
+        ? JSON.parse(savedData)
+        : savedData;
+
+    const rawGoal =
+      parsed?.moveReset?.rewardGoal ??
+      parsed?.rewardGoal;
+
+    const parsedGoal = Number(rawGoal);
+
+    return Number.isFinite(parsedGoal) && parsedGoal > 0
+      ? parsedGoal
+      : DEFAULT_REWARD_GOAL;
+  } catch (error) {
+    console.error(
+      "Failed to parse movement reward goal:",
+      error
+    );
+
+    return DEFAULT_REWARD_GOAL;
+  }
+};
 
 const MoveResetSettings = () => {
   const navigate = useNavigate();
 
-  // Saved values (synced with actual state/storage)
-  const [savedGoal, setSavedGoal] = useState(DEFAULT_GOAL);
-  const [savedSchedule, setSavedSchedule] = useState(
-    DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL)
-  );
+  /* =========================================================
+     PERSONAL GOAL
+  ========================================================= */
 
-  // Selected values (local state before saving)
-  const [goal, setGoal] = useState(DEFAULT_GOAL);
-  const [schedule, setSchedule] = useState(
-    DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL)
-  );
+  const [savedGoal, setSavedGoal] = useState(() => {
+    const saved = Number(
+      localStorage.getItem(MOVE_GOAL_KEY)
+    );
+
+    return saved > 0 ? saved : DEFAULT_GOAL;
+  });
+
+  const [goal, setGoal] = useState(() => {
+    const saved = Number(
+      localStorage.getItem(MOVE_GOAL_KEY)
+    );
+
+    return saved > 0 ? saved : DEFAULT_GOAL;
+  });
+
+  /* =========================================================
+     PERSONAL SCHEDULE
+  ========================================================= */
+
+  const [savedSchedule, setSavedSchedule] = useState(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(MOVE_SCHEDULE_KEY)
+      );
+
+      return Array.isArray(saved) && saved.length > 0
+        ? saved
+        : DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
+    } catch {
+      return DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
+    }
+  });
+
+  const [schedule, setSchedule] = useState(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(MOVE_SCHEDULE_KEY)
+      );
+
+      return Array.isArray(saved) && saved.length > 0
+        ? saved
+        : DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
+    } catch {
+      return DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
+    }
+  });
+
+  /* =========================================================
+     ADMIN REWARD GOAL
+  ========================================================= */
+
+  const [rewardGoal, setRewardGoal] = useState(() => {
+    const saved = localStorage.getItem(
+      REWARD_CONFIG_KEY
+    );
+
+    return parseRewardGoal(saved);
+  });
 
   const [saved, setSaved] = useState(false);
   const [resetMessage, setResetMessage] = useState("");
 
   /* =========================================================
-     LOAD SETTINGS
+     LOAD ADMIN REWARD GOAL
   ========================================================= */
 
-  useEffect(() => {
-    const savedGoal = localStorage.getItem("moveResetGoal");
-    const savedSchedule = localStorage.getItem("moveResetSchedule");
+  const loadRewardGoal = useCallback(() => {
+    const stored = localStorage.getItem(
+      REWARD_CONFIG_KEY
+    );
 
-    if (savedGoal) {
-      const parsedGoal = Number(savedGoal);
-      if (parsedGoal >= 1) {
-        setSavedGoal(parsedGoal);
-        setGoal(parsedGoal);
-      }
-    }
-
-    if (savedSchedule) {
-      try {
-        const parsed = JSON.parse(savedSchedule);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSavedSchedule(parsed);
-          setSchedule(parsed);
-        }
-      } catch (error) {
-        console.error(
-          "Failed to load movement settings:",
-          error
-        );
-      }
-    }
+    setRewardGoal(parseRewardGoal(stored));
   }, []);
 
   /* =========================================================
-     CHANGE GOAL
+     SYNC ADMIN REWARD SETTINGS
+  ========================================================= */
+
+  useEffect(() => {
+    loadRewardGoal();
+
+    const handleRewardsUpdated = (event) => {
+      if (event?.detail) {
+        setRewardGoal(
+          parseRewardGoal(event.detail)
+        );
+      } else {
+        loadRewardGoal();
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (
+        !event?.key ||
+        event.key === REWARD_CONFIG_KEY
+      ) {
+        loadRewardGoal();
+      }
+    };
+
+    window.addEventListener(
+      "wellnessRewardsUpdated",
+      handleRewardsUpdated
+    );
+
+    window.addEventListener(
+      "storage",
+      handleStorage
+    );
+
+    return () => {
+      window.removeEventListener(
+        "wellnessRewardsUpdated",
+        handleRewardsUpdated
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+    };
+  }, [loadRewardGoal]);
+
+  /* =========================================================
+     CHANGE PERSONAL GOAL
   ========================================================= */
 
   const handleGoalChange = (newGoal) => {
@@ -77,7 +195,7 @@ const MoveResetSettings = () => {
       while (updated.length < newGoal) {
         const nextDefault =
           DEFAULT_SCHEDULE[updated.length] ||
-          "10:30";
+          "21:00";
 
         updated.push(nextDefault);
       }
@@ -87,51 +205,79 @@ const MoveResetSettings = () => {
   };
 
   /* =========================================================
-     CHANGE TIME
+     CHANGE SCHEDULE
   ========================================================= */
 
   const handleScheduleChange = (index, value) => {
     setSchedule((previous) => {
       const updated = [...previous];
+
       updated[index] = value;
+
       return updated;
     });
   };
 
   /* =========================================================
-     UNSAVED CHANGES CHECK
+     UNSAVED CHANGES
   ========================================================= */
+
+  const activeSchedule = schedule.slice(0, goal);
 
   const hasUnsavedChanges =
     goal !== savedGoal ||
-    JSON.stringify(schedule.slice(0, goal)) !== JSON.stringify(savedSchedule);
+    JSON.stringify(activeSchedule) !==
+      JSON.stringify(savedSchedule);
 
   /* =========================================================
-     SAVE SETTINGS
+     SAVE PERSONAL SETTINGS
   ========================================================= */
 
   const saveSettings = () => {
-    const activeSchedule = schedule.slice(0, goal);
+    const finalSchedule =
+      schedule.slice(0, goal);
 
-    localStorage.setItem("moveResetGoal", String(goal));
     localStorage.setItem(
-      "moveResetSchedule",
-      JSON.stringify(activeSchedule)
+      MOVE_GOAL_KEY,
+      String(goal)
+    );
+
+    localStorage.setItem(
+      MOVE_SCHEDULE_KEY,
+      JSON.stringify(finalSchedule)
     );
 
     setSavedGoal(goal);
-    setSavedSchedule(activeSchedule);
+    setSavedSchedule(finalSchedule);
 
     window.dispatchEvent(
-      new CustomEvent("wellnessSettingsUpdated", {
-        detail: {
-          goal,
-          schedule: activeSchedule,
-        },
-      })
+      new CustomEvent(
+        "wellnessSettingsUpdated",
+        {
+          detail: {
+            goal,
+            schedule: finalSchedule,
+          },
+        }
+      )
     );
 
-    window.dispatchEvent(new Event("wellness-settings-updated"));
+    window.dispatchEvent(
+      new Event("wellness-settings-updated")
+    );
+
+    /* Also notify MoveResetCard specifically */
+    window.dispatchEvent(
+      new CustomEvent(
+        "moveReset-settings-updated",
+        {
+          detail: {
+            goal,
+            schedule: finalSchedule,
+          },
+        }
+      )
+    );
 
     setSaved(true);
 
@@ -145,13 +291,47 @@ const MoveResetSettings = () => {
   ========================================================= */
 
   const resetToday = () => {
-    const today = getToday();
+    const today = new Date().toDateString();
 
-    localStorage.setItem("moveResetDate", today);
-    localStorage.setItem("moveResetCompleted", "0");
-    localStorage.removeItem("moveResetRewarded");
+    localStorage.setItem(
+      "moveResetDate",
+      today
+    );
 
-    window.dispatchEvent(new Event("moveResetTodayReset"));
+    localStorage.setItem(
+      "moveResetCompleted",
+      "0"
+    );
+
+    localStorage.removeItem(
+      "moveResetRewarded"
+    );
+
+    localStorage.removeItem(
+      "moveResetCompletedSlots"
+    );
+
+    localStorage.removeItem(
+      `moveResetRewardedMilestones-${today}`
+    );
+
+    /* Direct reset function if MoveResetCard provides it */
+    if (
+      typeof window.resetMoveResetToday ===
+      "function"
+    ) {
+      window.resetMoveResetToday();
+    }
+
+    /* Reset event */
+    window.dispatchEvent(
+      new Event("moveResetTodayReset")
+    );
+
+    /* Additional progress-reset event */
+    window.dispatchEvent(
+      new Event("moveReset-progress-reset")
+    );
 
     setResetMessage(
       "Today's movement progress has been reset."
@@ -166,10 +346,11 @@ const MoveResetSettings = () => {
     <div className="move-care-settings">
 
       {/* =====================================================
-          HEADER WITH BACK BUTTON
+          HEADER
       ===================================================== */}
 
       <div className="move-care-settings-header">
+
         <button
           type="button"
           onClick={() => navigate("/settings")}
@@ -181,14 +362,17 @@ const MoveResetSettings = () => {
 
         <div>
           <h2>Move & Reset</h2>
+
           <p>
-            Customize your daily movement goal and reminder schedule.
+            Customize your daily movement goal and
+            reminder schedule.
           </p>
         </div>
+
       </div>
 
       {/* =====================================================
-          DAILY GOAL
+          PERSONAL DAILY GOAL
       ===================================================== */}
 
       <div className="move-care-setting-card">
@@ -203,7 +387,8 @@ const MoveResetSettings = () => {
             <h3>Daily Movement Goal</h3>
 
             <p>
-              Choose how many movement breaks you want to complete each day.
+              Choose how many movement breaks you
+              want to complete each day.
             </p>
           </div>
 
@@ -216,9 +401,13 @@ const MoveResetSettings = () => {
               key={number}
               type="button"
               className={`goal-option ${
-                goal === number ? "active" : ""
+                goal === number
+                  ? "active"
+                  : ""
               }`}
-              onClick={() => handleGoalChange(number)}
+              onClick={() =>
+                handleGoalChange(number)
+              }
             >
               {number}
             </button>
@@ -227,7 +416,46 @@ const MoveResetSettings = () => {
         </div>
 
         <div className="goal-summary">
-          <strong>{goal}</strong> movement sessions per day
+          <strong>{goal}</strong>{" "}
+          movement sessions per day
+        </div>
+
+      </div>
+
+      {/* =====================================================
+          ADMIN REWARD GOAL
+      ===================================================== */}
+
+      <div className="move-care-setting-card reward-goal-card">
+
+        <div className="setting-header">
+
+          <div className="setting-icon reward-setting-icon">
+            <Trophy size={22} />
+          </div>
+
+          <div>
+            <h3>Reward Goal</h3>
+
+            <p>
+              Set by your organization to calculate
+              movement rewards.
+            </p>
+          </div>
+
+        </div>
+
+        <div className="reward-goal-display">
+
+          <div className="reward-goal-value">
+            {rewardGoal}{" "}
+            <span>sessions</span>
+          </div>
+
+          <div className="reward-goal-readonly">
+            🔒 Set by Admin
+          </div>
+
         </div>
 
       </div>
@@ -248,7 +476,8 @@ const MoveResetSettings = () => {
             <h3>Movement Schedule</h3>
 
             <p>
-              Set the time for each of your daily movement intervals.
+              Set the time for each of your daily
+              movement intervals.
             </p>
           </div>
 
@@ -292,10 +521,11 @@ const MoveResetSettings = () => {
       </div>
 
       {/* =====================================================
-          SAVE SECTION (Water Settings Style)
+          SAVE SECTION
       ===================================================== */}
 
       <div className="save-section">
+
         <p className="save-status-text">
           {hasUnsavedChanges
             ? "You have unsaved changes."
@@ -304,9 +534,15 @@ const MoveResetSettings = () => {
 
         <button
           type="button"
-          className={`save-button ${!hasUnsavedChanges && !saved ? "disabled" : ""}`}
+          className={`save-button ${
+            !hasUnsavedChanges && !saved
+              ? "disabled"
+              : ""
+          }`}
           onClick={saveSettings}
-          disabled={!hasUnsavedChanges && !saved}
+          disabled={
+            !hasUnsavedChanges && !saved
+          }
         >
           {saved
             ? "✓ Changes Saved"
@@ -314,6 +550,7 @@ const MoveResetSettings = () => {
             ? "Save Changes"
             : "✓ Saved"}
         </button>
+
       </div>
 
       {/* =====================================================
@@ -329,10 +566,14 @@ const MoveResetSettings = () => {
           </div>
 
           <div>
-            <h3>Reset Today's Movement</h3>
+            <h3>
+              Reset Today's Movement
+            </h3>
 
             <p>
-              Restart today's movement progress. Your goal and schedule will stay unchanged.
+              Restart today's movement progress.
+              Your goal and schedule will stay
+              unchanged.
             </p>
           </div>
 
@@ -456,6 +697,52 @@ const MoveResetSettings = () => {
           line-height: 1.5;
         }
 
+        /* =====================================================
+           REWARD GOAL
+        ===================================================== */
+
+        .reward-goal-card {
+          background: #fffbeb;
+        }
+
+        .reward-setting-icon {
+          background: #fef3c7;
+        }
+
+        .reward-goal-display {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px;
+          border: 2px solid #000;
+          border-radius: 16px;
+          background: #fff;
+        }
+
+        .reward-goal-value {
+          font-size: 30px;
+          font-weight: 800;
+        }
+
+        .reward-goal-value span {
+          font-size: 15px;
+          font-weight: 600;
+          color: #6b7280;
+        }
+
+        .reward-goal-readonly {
+          padding: 7px 12px;
+          border: 2px solid #000;
+          border-radius: 10px;
+          background: #f1f5f9;
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        /* =====================================================
+           GOAL OPTIONS
+        ===================================================== */
+
         .goal-options {
           display: flex;
           gap: 10px;
@@ -489,6 +776,10 @@ const MoveResetSettings = () => {
           color: #6b7280;
           font-size: 14px;
         }
+
+        /* =====================================================
+           SCHEDULE
+        ===================================================== */
 
         .schedule-list {
           display: flex;
@@ -537,6 +828,10 @@ const MoveResetSettings = () => {
           box-shadow: 3px 3px 0 #000;
         }
 
+        /* =====================================================
+           SAVE
+        ===================================================== */
+
         .save-section {
           display: flex;
           align-items: center;
@@ -574,7 +869,9 @@ const MoveResetSettings = () => {
           box-shadow: 2px 2px 0 #000;
         }
 
-        /* RESET TODAY */
+        /* =====================================================
+           RESET
+        ===================================================== */
 
         .reset-card {
           padding: 20px;
@@ -640,7 +937,12 @@ const MoveResetSettings = () => {
           font-weight: 600;
         }
 
+        /* =====================================================
+           MOBILE
+        ===================================================== */
+
         @media (max-width: 600px) {
+
           .move-care-setting-card {
             padding: 17px;
           }
@@ -661,6 +963,16 @@ const MoveResetSettings = () => {
 
           .save-button {
             width: 100%;
+          }
+
+          .reward-goal-display {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+
+          .reward-goal-readonly {
+            align-self: flex-start;
           }
         }
 

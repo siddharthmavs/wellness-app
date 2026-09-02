@@ -72,6 +72,11 @@ import EyeCareSettings from "./pages/Settings/Wellness/EyeCareSettings";
 import MoveResetSettings from "./pages/Settings/Wellness/MoveResetSettings";
 import BreathingSettings from "./pages/Settings/Wellness/BreathingSettings";
 
+/* ---------------- Admin Settings ---------------- */
+
+import OrganizationSettings from "./pages/Settings/Admin/OrganizationSettings";
+import WellnessDefaults from "./pages/Settings/Admin/WellnessDefaults";
+import RewardsSettings from "./pages/Settings/Admin/RewardsSettings";
 /* =========================================================
    PRIVATE LAYOUT
 ========================================================= */
@@ -170,16 +175,16 @@ function App() {
         {/* =================================================
             TOASTER
         ================================================= */}
-
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            className:
-              "!bg-white !border-[3px] !border-black " +
-              "!shadow-brutal !rounded-[2px] " +
-              "!font-black !uppercase !text-sm",
-          }}
-        />
+          <Toaster
+            position="bottom-right"
+            closeButton={true}
+            toastOptions={{
+              className:
+                "!bg-white !border-[3px] !border-black " +
+                "!shadow-brutal !rounded-[2px] " +
+                "!font-black !uppercase !text-base !p-4 !min-w-[300px]",
+            }}
+          />
 
         {/* =================================================
             APPLICATION ROUTES
@@ -452,7 +457,37 @@ function App() {
               </PrivateLayout>
             }
           />
+          {/* =================================================
+              ADMIN SETTINGS
+          ================================================= */}
 
+          <Route
+            path="/settings/admin/organization"
+            element={
+              <PrivateLayout adminOnly>
+                <OrganizationSettings />
+              </PrivateLayout>
+            }
+          />
+
+          <Route
+            path="/settings/admin/wellness-defaults"
+            element={
+              <PrivateLayout adminOnly>
+                <WellnessDefaults />
+              </PrivateLayout>
+            }
+          />
+
+          <Route
+            path="/settings/admin/rewards"
+            element={
+              <PrivateLayout adminOnly>
+                <RewardsSettings />
+              </PrivateLayout>
+            }
+          />
+          
           {/* =================================================
               FALLBACK
           ================================================= */}

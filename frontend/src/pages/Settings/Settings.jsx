@@ -11,8 +11,11 @@ import {
   PersonStanding,
   Wind,
   ChevronRight,
+  Shield,
+  Trophy,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "../../store"; // Make sure this path points to your store
 
 /* =========================================================
    GENERAL SETTINGS
@@ -77,6 +80,31 @@ const WELLNESS_SETTINGS = [
 ];
 
 /* =========================================================
+   ADMIN SETTINGS
+========================================================= */
+
+const ADMIN_SETTINGS = [
+  {
+    label: "Organization",
+    description: "Manage organization-wide wellness settings",
+    icon: Shield,
+    path: "/settings/admin/organization",
+  },
+  {
+    label: "Wellness Defaults",
+    description: "Configure default goals and schedules for employees",
+    icon: SettingsIcon,
+    path: "/settings/admin/wellness-defaults",
+  },
+  {
+    label: "Rewards & Gamification",
+    description: "Configure XP, reward thresholds, achievements and streaks",
+    icon: Trophy,
+    path: "/settings/admin/rewards",
+  },
+];
+
+/* =========================================================
    SETTING ITEM
 ========================================================= */
 
@@ -91,8 +119,7 @@ const SettingItem = ({ item }) => {
       whileTap={{ scale: 0.98 }}
       onClick={() => navigate(item.path)}
       className="w-full flex items-center gap-4 p-4 text-left transition-colors"
-      
-        >
+    >
       {/* ICON */}
       <div
         className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
@@ -162,6 +189,10 @@ const SettingsSection = ({ title, items }) => {
 ========================================================= */
 
 const Settings = () => {
+  // Use the actual auth store user state instead of manual localStorage hacks
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "admin";
+
   return (
     <main className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-12">
 
@@ -202,6 +233,14 @@ const Settings = () => {
           title="Wellness"
           items={WELLNESS_SETTINGS}
         />
+
+        {/* ADMINISTRATION */}
+        {isAdmin && (
+          <SettingsSection
+            title="Administration"
+            items={ADMIN_SETTINGS}
+          />
+        )}
 
       </div>
     </main>

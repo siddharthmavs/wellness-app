@@ -1,23 +1,29 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
+  Hand,
   PersonStanding,
   RotateCcw,
-  Hand,
   X,
 } from "lucide-react";
 
-import handStretching from "./assets/hand-stretch.png";
-import finger from "./assets/finger-exercise.png";
-import neck from "./assets/neck-stretch.png";
-import walking from "./assets/walking.png";
-import shoulder from "./assets/shoulder-rolling.png";
-
 import "./MoveResetCard.css";
 
+import handStretch from "./assets/hand-stretch.png";
+import fingerExercise from "./assets/finger-exercise.png";
+import neckStretch from "./assets/neck-stretch.png";
+import walking from "./assets/walking.png";
+import shoulderRolling from "./assets/shoulder-rolling.png";
+
 /* =========================================================
-   DEFAULT SETTINGS
+   CONSTANTS
 ========================================================= */
 
 const DEFAULT_GOAL = 3;
@@ -30,66 +36,71 @@ const DEFAULT_SCHEDULE = [
   "21:00",
 ];
 
-/* =========================================================
-   ACTIVITIES
-========================================================= */
+const REWARD_CONFIG_KEY = "wellness-reward-config";
+
+const DEFAULT_REWARD_GOAL = 3;
+
+const DEFAULT_REWARDS = [
+  { threshold: 50, xp: 10 },
+  { threshold: 75, xp: 20 },
+  { threshold: 100, xp: 50 },
+];
 
 const ACTIVITIES = [
   {
     name: "Hand Stretching",
-    type: "hands",
+    description: "Stretch your fingers and palms gently.",
     duration: 5,
-    image: handStretching,
-    description:
-      "Gently stretch your hands and wrists to release tension.",
+    image: handStretch,
   },
   {
     name: "Finger Stretch",
-    type: "finger",
+    description: "Relax and stretch each finger slowly.",
     duration: 5,
-    image: finger,
-    description:
-      "Slowly stretch and relax each finger to loosen your hands.",
+    image: fingerExercise,
   },
   {
     name: "Neck Relax",
-    type: "neck",
+    description: "Release tension from your neck and shoulders.",
     duration: 5,
-    image: neck,
-    description:
-      "Gently tilt your head from side to side. Keep your shoulders relaxed.",
+    image: neckStretch,
   },
   {
     name: "Shoulder Rolling",
-    type: "shoulder",
+    description: "Roll your shoulders slowly and relax.",
     duration: 5,
-    image: shoulder,
-    description:
-      "Slowly roll your shoulders backward and release any tension.",
+    image: shoulderRolling,
   },
   {
     name: "Walking",
-    type: "walking",
+    description: "Stand up and walk around for a moment.",
     duration: 5,
     image: walking,
-    description:
-      "Take a few easy steps to get your body moving and reset.",
   },
 ];
 
 /* =========================================================
-   HELPERS
+   STORAGE HELPERS
 ========================================================= */
 
-const getToday = () =>
-  new Date().toDateString();
+const getToday = () => {
+  const date = new Date();
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+};
 
 const getSavedGoal = () => {
-  const saved = Number(
+  const value = Number(
     localStorage.getItem("moveResetGoal")
   );
 
-  return saved > 0 ? saved : DEFAULT_GOAL;
+  return Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_GOAL;
 };
 
 const getSavedSchedule = () => {
@@ -102,10 +113,59 @@ const getSavedSchedule = () => {
       return saved;
     }
   } catch {
-    // Ignore invalid storage.
+    // Ignore invalid data.
   }
 
   return DEFAULT_SCHEDULE;
+};
+
+const getSavedRewardConfig = () => {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(REWARD_CONFIG_KEY)
+    );
+
+    const config = saved?.moveReset;
+
+    if (!config) {
+      return {
+        rewardGoal: DEFAULT_REWARD_GOAL,
+        milestones: DEFAULT_REWARDS,
+      };
+    }
+
+    const rewardGoal = Number(config.rewardGoal);
+
+    const milestones = Array.isArray(config.milestones)
+      ? config.milestones
+          .map((item) => ({
+            threshold: Number(item.threshold),
+            xp: Number(item.xp),
+          }))
+          .filter(
+            (item) =>
+              Number.isFinite(item.threshold) &&
+              Number.isFinite(item.xp)
+          )
+      : DEFAULT_REWARDS;
+
+    return {
+      rewardGoal:
+        Number.isFinite(rewardGoal) && rewardGoal > 0
+          ? rewardGoal
+          : DEFAULT_REWARD_GOAL,
+
+      milestones:
+        milestones.length > 0
+          ? milestones
+          : DEFAULT_REWARDS,
+    };
+  } catch {
+    return {
+      rewardGoal: DEFAULT_REWARD_GOAL,
+      milestones: DEFAULT_REWARDS,
+    };
+  }
 };
 
 const loadDailyData = () => {
@@ -115,80 +175,95 @@ const loadDailyData = () => {
     localStorage.getItem("moveResetDate");
 
   if (savedDate !== today) {
-    localStorage.setItem("moveResetDate", today);
-    localStorage.setItem("moveResetCompleted", "0");
-    localStorage.removeItem("moveResetRewarded");
+    localStorage.setItem(
+      "moveResetDate",
+      today
+    );
 
-    return {
-      completed: 0,
-      rewarded: false,
-    };
+    localStorage.setItem(
+      "moveResetCompleted",
+      "0"
+    );
+
+    localStorage.removeItem(
+      "moveResetRewarded"
+    );
+
+    localStorage.removeItem(
+      `moveResetRewardedMilestones-${today}`
+    );
   }
 
   const completed = Number(
-    localStorage.getItem("moveResetCompleted") || 0
+    localStorage.getItem("moveResetCompleted")
   );
 
-  const goal = getSavedGoal();
-  const rewarded = completed >= goal;
+  return Number.isFinite(completed) && completed >= 0
+    ? completed
+    : 0;
+};
 
-  return {
-    completed,
-    rewarded,
-  };
+const loadRewardedMilestones = () => {
+  const today = getToday();
+
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(
+        `moveResetRewardedMilestones-${today}`
+      )
+    );
+
+    return Array.isArray(saved)
+      ? saved
+          .map(Number)
+          .filter(Number.isFinite)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveRewardedMilestones = (milestones) => {
+  const today = getToday();
+
+  localStorage.setItem(
+    `moveResetRewardedMilestones-${today}`,
+    JSON.stringify(milestones)
+  );
 };
 
 /* =========================================================
-   SOUND
+   PROGRESS DATA
 ========================================================= */
 
-const playSound = (
-  frequency = 650,
-  duration = 0.12
+const createProgressItems = (
+  completed,
+  activeGoal,
+  schedule
 ) => {
-  try {
-    const AudioContext =
-      window.AudioContext ||
-      window.webkitAudioContext;
+  const safeGoal = Math.max(
+    Number(activeGoal) || 1,
+    1
+  );
 
-    if (!AudioContext) return;
+  const safeCompleted = Math.max(
+    Number(completed) || 0,
+    0
+  );
 
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-
-    oscillator.type = "sine";
-    oscillator.frequency.value = frequency;
-
-    gain.gain.setValueAtTime(
-      0.0001,
-      context.currentTime
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-      0.07,
-      context.currentTime + 0.02
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      context.currentTime + duration
-    );
-
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-
-    oscillator.start();
-    oscillator.stop(
-      context.currentTime + duration
-    );
-
-    setTimeout(() => {
-      context.close().catch(() => {});
-    }, duration * 1000 + 100);
-  } catch {
-    // Audio is optional.
-  }
+  return Array.from(
+    { length: safeGoal },
+    (_, index) => ({
+      index,
+      time:
+        schedule[index] ||
+        `MOVE ${index + 1}`,
+      completed:
+        index < safeCompleted,
+      current:
+        index === safeCompleted,
+    })
+  );
 };
 
 /* =========================================================
@@ -199,200 +274,756 @@ export default function MoveResetCard({
   onAction,
   onDailyGoalComplete,
 }) {
-  const dailyData = loadDailyData();
+  /* -------------------------------------------------------
+     USER SETTINGS
+  ------------------------------------------------------- */
 
-  /* =======================================================
-     SETTINGS
-  ========================================================= */
+  const [goal, setGoal] =
+    useState(getSavedGoal);
 
-  const [goal, setGoal] = useState(getSavedGoal);
-  const [schedule, setSchedule] = useState(getSavedSchedule);
+  const [schedule, setSchedule] =
+    useState(getSavedSchedule);
 
-  /* =======================================================
-     DAILY STATE
-  ========================================================= */
+  /* -------------------------------------------------------
+     REWARD SETTINGS
+  ------------------------------------------------------- */
 
-  const [completed, setCompleted] =
-    useState(dailyData.completed);
+  const initialRewardConfig =
+    getSavedRewardConfig();
 
-  const [rewarded, setRewarded] =
-    useState(dailyData.rewarded);
+  const rewardConfigRef =
+    useRef(initialRewardConfig);
 
-  /* =======================================================
-     UI STATE
-  ========================================================= */
-
-  const [showExercise, setShowExercise] =
-    useState(false);
-
-  const [showReward, setShowReward] =
-    useState(false);
-
-  /* =======================================================
-     EXERCISE STATE
-  ========================================================= */
-
-  const [activityIndex, setActivityIndex] =
-    useState(0);
-
-  const [remaining, setRemaining] =
+  const [rewardGoal, setRewardGoal] =
     useState(
-      ACTIVITIES[0].duration
+      initialRewardConfig.rewardGoal
     );
 
-  const [isPreparing, setIsPreparing] =
-    useState(false);
+  const [moveRewards, setMoveRewards] =
+    useState(
+      initialRewardConfig.milestones
+    );
 
-  const [isTransitioning, setIsTransitioning] =
-    useState(false);
+  /* -------------------------------------------------------
+     DAILY PROGRESS
+  ------------------------------------------------------- */
+
+  const [completed, setCompleted] =
+    useState(loadDailyData);
+
+  const [
+    rewardedMilestones,
+    setRewardedMilestones,
+  ] = useState(
+    loadRewardedMilestones
+  );
+
+  const rewardedMilestonesRef =
+    useRef(rewardedMilestones);
+
+  /* -------------------------------------------------------
+     REWARD MODE
+  ------------------------------------------------------- */
+
+  const [
+    workingTowardRewardGoal,
+    setWorkingTowardRewardGoal,
+  ] = useState(false);
+
+  /* -------------------------------------------------------
+     POPUPS
+  ------------------------------------------------------- */
+
+  const [
+    showGoalComplete,
+    setShowGoalComplete,
+  ] = useState(false);
+
+  const [
+    currentReward,
+    setCurrentReward,
+  ] = useState(null);
+
+  const [
+    showReward,
+    setShowReward,
+  ] = useState(false);
+
+  const [
+    pendingReward,
+    setPendingReward,
+  ] = useState(null);
+
+  /* -------------------------------------------------------
+     EXERCISE
+  ------------------------------------------------------- */
+
+  const [
+    showExercise,
+    setShowExercise,
+  ] = useState(false);
+
+  const [
+    activityIndex,
+    setActivityIndex,
+  ] = useState(0);
+
+  const [
+    remaining,
+    setRemaining,
+  ] = useState(0);
+
+  const [
+    isPreparing,
+    setIsPreparing,
+  ] = useState(false);
+
+  const [
+    isTransitioning,
+    setIsTransitioning,
+  ] = useState(false);
 
   const [
     transitionRemaining,
     setTransitionRemaining,
-  ] = useState(2);
+  ] = useState(0);
 
-  const currentActivity =
-    ACTIVITIES[activityIndex];
+  /* =======================================================
+     GOAL LOGIC
+  ======================================================= */
 
-  const nextActivity =
-    ACTIVITIES[activityIndex + 1];
+  const personalGoal =
+    Number(goal) || DEFAULT_GOAL;
 
-  /* =========================================================
-     SYNCHRONIZE WITH GLOBAL SETTINGS
-  ========================================================= */
+  const adminRewardGoal =
+    Number(rewardGoal) ||
+    DEFAULT_REWARD_GOAL;
+
+  const personalGoalComplete =
+    completed >= personalGoal;
+
+  const rewardGoalComplete =
+    completed >= adminRewardGoal;
+
+  const finalGoal = Math.max(
+    personalGoal,
+    adminRewardGoal
+  );
+
+  const allGoalsComplete =
+    completed >= finalGoal;
+
+  const activeProgressGoal =
+    workingTowardRewardGoal
+      ? adminRewardGoal
+      : personalGoal;
+
+  const safeActiveProgressGoal =
+    Math.max(
+      Number(activeProgressGoal) || 1,
+      1
+    );
+
+  const progress = Math.min(
+    Math.max(
+      (completed /
+        safeActiveProgressGoal) *
+        100,
+      0
+    ),
+    100
+  );
+
+  const progressItems = useMemo(
+    () =>
+      createProgressItems(
+        completed,
+        safeActiveProgressGoal,
+        schedule
+      ),
+    [
+      completed,
+      safeActiveProgressGoal,
+      schedule,
+    ]
+  );
+
+  const canContinueTowardReward =
+    personalGoalComplete &&
+    !rewardGoalComplete &&
+    personalGoal < adminRewardGoal;
+
+  /* =======================================================
+     LOAD SETTINGS
+  ======================================================= */
+
+  const loadSettings = useCallback(() => {
+    setGoal(getSavedGoal());
+    setSchedule(getSavedSchedule());
+    setCompleted(loadDailyData());
+  }, []);
+
+  /* =======================================================
+     LOAD REWARD SETTINGS
+  ======================================================= */
+
+  const loadRewardSettings =
+    useCallback(() => {
+      const config =
+        getSavedRewardConfig();
+
+      rewardConfigRef.current =
+        config;
+
+      setRewardGoal(
+        config.rewardGoal
+      );
+
+      setMoveRewards(
+        config.milestones
+      );
+    }, []);
+
+  /* =======================================================
+     SETTINGS EVENTS
+  ======================================================= */
 
   useEffect(() => {
-    const updateSettings = () => {
-      const newGoal = getSavedGoal();
-      const newSchedule = getSavedSchedule();
+    const handleSettingsUpdate =
+      (event) => {
+        loadSettings();
 
-      const today = getToday();
-      const savedDate =
-        localStorage.getItem("moveResetDate");
+        if (
+          event?.detail?.moveReset ||
+          event?.detail?.rewards
+        ) {
+          loadRewardSettings();
+        }
+      };
 
-      let currentCompleted = 0;
-
-      if (savedDate === today) {
-        currentCompleted = Number(
-          localStorage.getItem("moveResetCompleted") || 0
-        );
-      }
-
-      setGoal(newGoal);
-      setSchedule(newSchedule);
-      setCompleted(currentCompleted);
-
-      const goalIsComplete =
-        currentCompleted >= newGoal;
-
-      setRewarded(goalIsComplete);
-
-      if (goalIsComplete) {
-        localStorage.setItem(
-          "moveResetRewarded",
-          "true"
-        );
-      } else {
-        localStorage.removeItem(
-          "moveResetRewarded"
-        );
-        setShowReward(false);
+    const handleStorage = (event) => {
+      if (
+        event.key ===
+          "moveResetGoal" ||
+        event.key ===
+          "moveResetSchedule" ||
+        event.key ===
+          REWARD_CONFIG_KEY
+      ) {
+        loadSettings();
+        loadRewardSettings();
       }
     };
 
     window.addEventListener(
       "wellnessSettingsUpdated",
-      updateSettings
-    );
-    window.addEventListener(
-      "wellness-settings-updated",
-      updateSettings
-    );
-    window.addEventListener(
-      "focus",
-      updateSettings
-    );
-    window.addEventListener(
-      "visibilitychange",
-      updateSettings
+      handleSettingsUpdate
     );
 
-    updateSettings();
+    window.addEventListener(
+      "wellness-settings-updated",
+      handleSettingsUpdate
+    );
+
+    window.addEventListener(
+      "wellnessRewardsUpdated",
+      loadRewardSettings
+    );
+
+    window.addEventListener(
+      "storage",
+      handleStorage
+    );
+
+    window.addEventListener(
+      "focus",
+      loadSettings
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      loadSettings
+    );
 
     return () => {
       window.removeEventListener(
         "wellnessSettingsUpdated",
-        updateSettings
+        handleSettingsUpdate
       );
+
       window.removeEventListener(
         "wellness-settings-updated",
-        updateSettings
+        handleSettingsUpdate
       );
+
+      window.removeEventListener(
+        "wellnessRewardsUpdated",
+        loadRewardSettings
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+
       window.removeEventListener(
         "focus",
-        updateSettings
+        loadSettings
       );
-      window.removeEventListener(
+
+      document.removeEventListener(
         "visibilitychange",
-        updateSettings
+        loadSettings
       );
+    };
+  }, [
+    loadSettings,
+    loadRewardSettings,
+  ]);
+
+  /* =======================================================
+     NEW DAY CHECK
+  ======================================================= */
+
+  useEffect(() => {
+    const checkNewDay = () => {
+      const today = getToday();
+
+      const savedDate =
+        localStorage.getItem(
+          "moveResetDate"
+        );
+
+      if (savedDate !== today) {
+        const newCompleted =
+          loadDailyData();
+
+        const newMilestones =
+          loadRewardedMilestones();
+
+        setCompleted(newCompleted);
+
+        rewardedMilestonesRef.current =
+          newMilestones;
+
+        setRewardedMilestones(
+          newMilestones
+        );
+
+        setWorkingTowardRewardGoal(
+          false
+        );
+
+        setShowGoalComplete(false);
+        setShowReward(false);
+        setCurrentReward(null);
+        setPendingReward(null);
+      }
+    };
+
+    checkNewDay();
+
+    const interval = setInterval(
+      checkNewDay,
+      30_000
+    );
+
+    return () =>
+      clearInterval(interval);
+  }, []);
+
+  /* =======================================================
+     PERSIST PROGRESS
+  ======================================================= */
+
+  useEffect(() => {
+    localStorage.setItem(
+      "moveResetCompleted",
+      String(completed)
+    );
+
+    localStorage.setItem(
+      "moveResetDate",
+      getToday()
+    );
+  }, [completed]);
+
+  /* =======================================================
+     PERSIST REWARDS
+  ======================================================= */
+
+  useEffect(() => {
+    rewardedMilestonesRef.current =
+      rewardedMilestones;
+
+    saveRewardedMilestones(
+      rewardedMilestones
+    );
+  }, [rewardedMilestones]);
+
+  /* =======================================================
+     RESET EVENT
+  ======================================================= */
+
+  useEffect(() => {
+    const resetToday = () => {
+      localStorage.setItem(
+        "moveResetDate",
+        getToday()
+      );
+
+      localStorage.setItem(
+        "moveResetCompleted",
+        "0"
+      );
+
+      rewardedMilestonesRef.current =
+        [];
+
+      setCompleted(0);
+      setRewardedMilestones([]);
+
+      setWorkingTowardRewardGoal(
+        false
+      );
+
+      setShowGoalComplete(false);
+      setShowReward(false);
+      setCurrentReward(null);
+      setPendingReward(null);
+    };
+
+    window.resetMoveResetToday =
+      resetToday;
+
+    return () => {
+      delete window.resetMoveResetToday;
     };
   }, []);
 
-  /* =========================================================
-     KEEP REWARDED SYNCHRONIZED
-  ========================================================= */
+  /* =======================================================
+     REWARD MILESTONE CALCULATION
+  ======================================================= */
 
-  useEffect(() => {
-    if (completed >= goal) {
-      setRewarded(true);
-      localStorage.setItem(
-        "moveResetRewarded",
-        "true"
-      );
-    } else {
-      setRewarded(false);
-      localStorage.removeItem(
-        "moveResetRewarded"
-      );
-      setShowReward(false);
-    }
-  }, [completed, goal]);
+  const getReachedMilestones =
+    useCallback(
+      (
+        previousCompleted,
+        newCompleted
+      ) => {
+        const config =
+          rewardConfigRef.current;
 
-  /* =========================================================
+        const goal =
+          Number(config.rewardGoal) ||
+          DEFAULT_REWARD_GOAL;
+
+        if (goal <= 0) {
+          return [];
+        }
+
+        const previousPercentage =
+          (previousCompleted / goal) *
+          100;
+
+        const newPercentage =
+          (newCompleted / goal) *
+          100;
+
+        return config.milestones
+          .filter((milestone) => {
+            const threshold =
+              Number(
+                milestone.threshold
+              );
+
+            return (
+              threshold >
+                previousPercentage &&
+              threshold <=
+                newPercentage
+            );
+          })
+          .sort(
+            (a, b) =>
+              Number(a.threshold) -
+              Number(b.threshold)
+          );
+      },
+      []
+    );
+
+  /* =======================================================
+     SHOW REWARD
+  ======================================================= */
+
+  const openRewardPopup =
+    useCallback((milestone) => {
+      if (!milestone) return;
+
+      setCurrentReward({
+        threshold:
+          Number(
+            milestone.threshold
+          ),
+        xp: Number(milestone.xp),
+      });
+
+      setShowReward(true);
+    }, []);
+
+  /* =======================================================
      START EXERCISE
-  ========================================================= */
+  ======================================================= */
 
   const startExercise = () => {
-    setActivityIndex(0);
-    setRemaining(ACTIVITIES[0].duration);
+    if (allGoalsComplete) {
+      return;
+    }
+
+    const randomIndex =
+      Math.floor(
+        Math.random() *
+          ACTIVITIES.length
+      );
+
+    setActivityIndex(randomIndex);
+
+    setRemaining(
+      ACTIVITIES[randomIndex].duration
+    );
+
     setIsPreparing(true);
     setIsTransitioning(false);
-    setTransitionRemaining(3);
     setShowExercise(true);
-
-    playSound(750, 0.15);
   };
 
-  /* =========================================================
+  /* =======================================================
      CLOSE EXERCISE
-  ========================================================= */
+  ======================================================= */
 
   const closeExercise = () => {
     setShowExercise(false);
-    setActivityIndex(0);
-    setRemaining(ACTIVITIES[0].duration);
     setIsPreparing(false);
     setIsTransitioning(false);
-    setTransitionRemaining(2);
+    setRemaining(0);
+    setTransitionRemaining(0);
   };
 
-  /* =========================================================
-     ESCAPE KEY
-  ========================================================= */
+  /* =======================================================
+     COMPLETE SESSION
+  ======================================================= */
+
+  const completeSession =
+    useCallback(() => {
+      const previousCompleted =
+        Number(
+          localStorage.getItem(
+            "moveResetCompleted"
+          )
+        ) || 0;
+
+      const newCompleted =
+        previousCompleted + 1;
+
+      localStorage.setItem(
+        "moveResetCompleted",
+        String(newCompleted)
+      );
+
+      localStorage.setItem(
+        "moveResetDate",
+        getToday()
+      );
+
+      setCompleted(newCompleted);
+
+      onAction?.("stand");
+
+      /* -----------------------------------------------
+         PERSONAL GOAL
+      ------------------------------------------------ */
+
+      const crossedPersonalGoal =
+        previousCompleted <
+          personalGoal &&
+        newCompleted >=
+          personalGoal;
+
+      /* -----------------------------------------------
+         ADMIN REWARDS
+      ------------------------------------------------ */
+
+      const reachedMilestones =
+        getReachedMilestones(
+          previousCompleted,
+          newCompleted
+        );
+
+      const newMilestones =
+        reachedMilestones.filter(
+          (milestone) =>
+            !rewardedMilestonesRef.current.includes(
+              Number(
+                milestone.threshold
+              )
+            )
+        );
+
+      if (newMilestones.length > 0) {
+        const updated = [
+          ...rewardedMilestonesRef.current,
+          ...newMilestones.map(
+            (milestone) =>
+              Number(
+                milestone.threshold
+              )
+          ),
+        ];
+
+        rewardedMilestonesRef.current =
+          updated;
+
+        setRewardedMilestones(
+          updated
+        );
+
+        newMilestones.forEach(
+          (milestone) => {
+            onDailyGoalComplete?.({
+              type:
+                "move_reset_milestone",
+              threshold:
+                Number(
+                  milestone.threshold
+                ),
+              reward:
+                Number(
+                  milestone.xp
+                ),
+            });
+          }
+        );
+      }
+
+      const latestReward =
+        newMilestones.length > 0
+          ? newMilestones[
+              newMilestones.length - 1
+            ]
+          : null;
+
+      /* -----------------------------------------------
+         PERSONAL GOAL POPUP
+      ------------------------------------------------ */
+
+      if (
+        crossedPersonalGoal &&
+        personalGoal <
+          adminRewardGoal &&
+        newCompleted <
+          adminRewardGoal
+      ) {
+        setPendingReward(
+          latestReward
+        );
+
+        setShowGoalComplete(true);
+
+        return;
+      }
+
+      /* -----------------------------------------------
+         REWARD POPUP
+      ------------------------------------------------ */
+
+      if (latestReward) {
+        openRewardPopup(
+          latestReward
+        );
+      }
+    }, [
+      adminRewardGoal,
+      getReachedMilestones,
+      onAction,
+      onDailyGoalComplete,
+      openRewardPopup,
+      personalGoal,
+    ]);
+
+  /* =======================================================
+     EXERCISE TIMER
+  ======================================================= */
 
   useEffect(() => {
-    if (!showExercise) return;
+    if (!showExercise) {
+      return;
+    }
+
+    if (isPreparing) {
+      const timer = setTimeout(() => {
+        setIsPreparing(false);
+
+        setRemaining(
+          ACTIVITIES[
+            activityIndex
+          ].duration
+        );
+      }, 1000);
+
+      return () =>
+        clearTimeout(timer);
+    }
+
+    if (isTransitioning) {
+      if (transitionRemaining <= 1) {
+        completeSession();
+        closeExercise();
+
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        setTransitionRemaining(
+          (value) => value - 1
+        );
+      }, 1000);
+
+      return () =>
+        clearTimeout(timer);
+    }
+
+    if (remaining > 0) {
+      const timer = setTimeout(() => {
+        setRemaining(
+          (value) => value - 1
+        );
+      }, 1000);
+
+      return () =>
+        clearTimeout(timer);
+    }
+
+    setIsTransitioning(true);
+    setTransitionRemaining(1);
+  }, [
+    showExercise,
+    isPreparing,
+    isTransitioning,
+    transitionRemaining,
+    remaining,
+    activityIndex,
+    completeSession,
+  ]);
+
+  /* =======================================================
+     ESCAPE KEY
+  ======================================================= */
+
+  useEffect(() => {
+    if (!showExercise) {
+      return;
+    }
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
@@ -405,275 +1036,305 @@ export default function MoveResetCard({
       handleKeyDown
     );
 
-    return () => {
+    return () =>
       window.removeEventListener(
         "keydown",
         handleKeyDown
       );
-    };
   }, [showExercise]);
 
-  /* =========================================================
-     EXERCISE TIMER
-  ========================================================= */
+  /* =======================================================
+     CONTINUE
+  ======================================================= */
 
-  useEffect(() => {
-    if (!showExercise) return;
+  const continueTowardRewardGoal =
+    () => {
+      setShowGoalComplete(false);
 
-    if (isPreparing) {
-      if (transitionRemaining > 0) {
-        playSound(
-          transitionRemaining === 1 ? 900 : 550
-        );
-
-        const timer = setTimeout(() => {
-          setTransitionRemaining(
-            (value) => value - 1
-          );
-        }, 1000);
-
-        return () => clearTimeout(timer);
-      }
-
-      setIsPreparing(false);
-      setRemaining(ACTIVITIES[0].duration);
-      return;
-    }
-
-    if (isTransitioning) {
-      if (transitionRemaining > 0) {
-        playSound(
-          transitionRemaining === 1 ? 900 : 550
-        );
-
-        const timer = setTimeout(() => {
-          setTransitionRemaining(
-            (value) => value - 1
-          );
-        }, 1000);
-
-        return () => clearTimeout(timer);
-      }
-
-      const nextIndex = activityIndex + 1;
-
-      if (nextIndex >= ACTIVITIES.length) {
-        return;
-      }
-
-      setActivityIndex(nextIndex);
-      setRemaining(ACTIVITIES[nextIndex].duration);
-      setIsTransitioning(false);
-      return;
-    }
-
-    if (remaining > 0) {
-      playSound(
-        remaining === 1 ? 950 : 650
+      setWorkingTowardRewardGoal(
+        true
       );
 
-      const timer = setTimeout(() => {
-        setRemaining(
-          (value) => value - 1
+      if (pendingReward) {
+        openRewardPopup(
+          pendingReward
         );
-      }, 1000);
 
-      return () => clearTimeout(timer);
-    }
+        setPendingReward(null);
+      }
+    };
 
-    if (activityIndex < ACTIVITIES.length - 1) {
-      playSound(1100, 0.25);
-      setIsTransitioning(true);
-      setTransitionRemaining(2);
-      return;
-    }
+  /* =======================================================
+     FINISH TODAY
+  ======================================================= */
 
-    completeSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    showExercise,
-    remaining,
-    activityIndex,
-    isPreparing,
-    isTransitioning,
-    transitionRemaining,
-  ]);
+  const finishForToday = () => {
+    setShowGoalComplete(false);
 
-  /* =========================================================
-     COMPLETE SESSION
-  ========================================================= */
-
-  const completeSession = () => {
-    setShowExercise(false);
-    setIsPreparing(false);
-    setIsTransitioning(false);
-
-    const newCompleted = completed + 1;
-    setCompleted(newCompleted);
-
-    localStorage.setItem(
-      "moveResetCompleted",
-      String(newCompleted)
-    );
-
-    if (onAction) {
-      onAction("stand");
-    }
-
-    if (newCompleted >= goal && !rewarded) {
-      setRewarded(true);
-      localStorage.setItem(
-        "moveResetRewarded",
-        "true"
+    if (pendingReward) {
+      openRewardPopup(
+        pendingReward
       );
 
-      setShowReward(true);
-
-      if (onDailyGoalComplete) {
-        onDailyGoalComplete({
-          type: "move_reset_daily_goal",
-          reward: 50,
-        });
-      }
+      setPendingReward(null);
     }
   };
 
-  /* =========================================================
+  /* =======================================================
+     RESET
+  ======================================================= */
+
+  const resetToday = () => {
+    localStorage.setItem(
+      "moveResetDate",
+      getToday()
+    );
+
+    localStorage.setItem(
+      "moveResetCompleted",
+      "0"
+    );
+
+    rewardedMilestonesRef.current =
+      [];
+
+    setCompleted(0);
+    setRewardedMilestones([]);
+
+    setWorkingTowardRewardGoal(
+      false
+    );
+
+    setShowGoalComplete(false);
+    setShowReward(false);
+    setCurrentReward(null);
+    setPendingReward(null);
+  };
+
+  /* =======================================================
      RENDER
-  ========================================================= */
+  ======================================================= */
 
   return (
     <>
-      <motion.div
-        className="move-reset-card"
-        whileHover={{
-          scale: 1.02,
-        }}
-      >
+      {/* ===================================================
+          MAIN CARD
+      =================================================== */}
+
+      <div className="move-reset-card">
+
+        {/* HEADER */}
+
         <div className="move-card-header">
           <div>
             <div className="move-card-title">
-              <PersonStanding size={20} />
-              MOVE & RESET
+              <PersonStanding
+                size={20}
+                strokeWidth={3}
+              />
+
+              <span>
+                MOVE & RESET
+              </span>
             </div>
 
-            <div className="move-card-subtitle">
-              A little movement goes a long way.
-            </div>
+            <p className="move-card-subtitle">
+              Take a short movement break.
+            </p>
           </div>
+
+          <button
+            type="button"
+            className="move-settings-button"
+            onClick={resetToday}
+            title="Reset today's progress"
+          >
+            <RotateCcw size={16} />
+          </button>
         </div>
 
+        {/* =================================================
+            PROGRESS
+        ================================================= */}
+
         <div className="move-activity-progress">
+
           <div className="move-progress-title">
-            <span>TODAY'S MOVEMENT</span>
             <span>
-              {completed} / {goal}
+              {workingTowardRewardGoal
+                ? "REWARD GOAL PROGRESS"
+                : "TODAY'S MOVEMENT"}
+            </span>
+
+            <span>
+              {completed} /{" "}
+              {safeActiveProgressGoal}
             </span>
           </div>
 
           <div className="move-activity-icons">
-            {schedule
-              .slice(0, goal)
-              .map((time, index) => {
-                const done = index < completed;
-                const next = index === completed;
 
+            {progressItems.map(
+              (item) => {
                 const Icon =
-                  index === 0
+                  item.index === 0
                     ? PersonStanding
-                    : index === 1
+                    : item.index === 1
                     ? RotateCcw
                     : Hand;
 
                 return (
-                  <React.Fragment key={index}>
+                  <React.Fragment
+                    key={item.index}
+                  >
+
                     <div className="move-progress-item">
-                      <div className="move-time">
-                        {time}
-                      </div>
+
+                      <span className="move-time">
+                        {item.time}
+                      </span>
 
                       <motion.div
                         className={`move-progress-circle ${
-                          done
+                          item.completed
                             ? "completed"
-                            : next
+                            : item.current
                             ? "current"
                             : ""
                         }`}
                         animate={
-                          next
+                          item.current
                             ? {
-                                scale: [1, 1.08, 1],
+                                scale: [
+                                  1,
+                                  1.08,
+                                  1,
+                                ],
                               }
                             : {
                                 scale: 1,
                               }
                         }
-                        transition={
-                          next
-                            ? {
-                                duration: 1.5,
-                                repeat: Infinity,
-                              }
-                            : {}
-                        }
+                        transition={{
+                          duration: 1.2,
+                          repeat:
+                            item.current
+                              ? Infinity
+                              : 0,
+                        }}
                       >
-                        {done ? (
-                          <Check size={16} />
+                        {item.completed ? (
+                          <Check
+                            size={18}
+                            strokeWidth={3}
+                          />
                         ) : (
-                          <Icon size={17} />
+                          <Icon
+                            size={18}
+                            strokeWidth={2.5}
+                          />
                         )}
                       </motion.div>
 
-                      <div
+                      <span
                         className={`move-status ${
-                          done
+                          item.completed
                             ? "done"
-                            : next
+                            : item.current
                             ? "next"
                             : ""
                         }`}
                       >
-                        {done
+                        {item.completed
                           ? "DONE"
-                          : next
+                          : item.current
                           ? "NEXT"
-                          : "UPCOMING"}
-                      </div>
+                          : ""}
+                      </span>
                     </div>
 
-                    {index < goal - 1 && (
+                    {item.index <
+                      safeActiveProgressGoal - 1 && (
                       <div
                         className={`move-connector ${
-                          index < completed
+                          item.index < completed
                             ? "completed"
                             : ""
                         }`}
                       />
                     )}
+
                   </React.Fragment>
                 );
-              })}
+              }
+            )}
+
           </div>
         </div>
 
-        {!rewarded ? (
-          <motion.button
+        {/* =================================================
+            STATUS
+        ================================================= */}
+
+        <div className="move-status-message">
+          {allGoalsComplete ? (
+            "🎉 All movement goals completed!"
+          ) : workingTowardRewardGoal ? (
+            `Keep going! ${
+              adminRewardGoal -
+              completed
+            } more to reach the reward goal.`
+          ) : personalGoalComplete ? (
+            "Daily movement goal completed!"
+          ) : (
+            <>
+              {personalGoal -
+                completed}{" "}
+              movement{" "}
+              {personalGoal -
+                completed ===
+              1
+                ? "break"
+                : "breaks"}{" "}
+              remaining
+            </>
+          )}
+        </div>
+
+        {/* =================================================
+            START BUTTON
+        ================================================= */}
+
+        {!allGoalsComplete ? (
+          <button
+            type="button"
             className="move-start-button"
             onClick={startExercise}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.96 }}
           >
-            <PersonStanding size={17} />
-            START MOVE
-          </motion.button>
+            <PersonStanding
+              size={18}
+              strokeWidth={3}
+            />
+
+            {workingTowardRewardGoal
+              ? "KEEP MOVING"
+              : "START MOVE BREAK"}
+          </button>
         ) : (
           <div className="move-complete-state">
-            <Check size={16} />
-            DAILY GOAL COMPLETE
+            <Check
+              size={18}
+              strokeWidth={3}
+            />
+
+            COMPLETED FOR TODAY
           </div>
         )}
-      </motion.div>
+      </div>
+
+      {/* ===================================================
+          EXERCISE MODAL
+      =================================================== */}
 
       <AnimatePresence>
         {showExercise && (
@@ -682,21 +1343,27 @@ export default function MoveResetCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={closeExercise}
           >
             <motion.div
               className="move-exercise-modal"
-              initial={{ scale: 0.88, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.88, opacity: 0 }}
-              onClick={(event) =>
-                event.stopPropagation()
-              }
+              initial={{
+                scale: 0.9,
+                opacity: 0,
+              }}
+              animate={{
+                scale: 1,
+                opacity: 1,
+              }}
+              exit={{
+                scale: 0.9,
+                opacity: 0,
+              }}
             >
+
               <button
+                type="button"
                 className="move-exercise-close"
                 onClick={closeExercise}
-                aria-label="Close exercise"
               >
                 <X size={20} />
               </button>
@@ -706,77 +1373,107 @@ export default function MoveResetCard({
                   <div className="move-small-label">
                     GET READY
                   </div>
-                  <h2>{ACTIVITIES[0].name}</h2>
-                  <div className="move-mascot-wrapper">
-                    <motion.img
-                      src={ACTIVITIES[0].image}
-                      alt={ACTIVITIES[0].name}
-                      className="move-exercise-mascot"
-                    />
-                  </div>
+
+                  <h2>
+                    Prepare to move!
+                  </h2>
+
                   <div className="move-countdown">
-                    {transitionRemaining}
+                    1
                   </div>
-                  <p>Get ready for your first movement.</p>
+
+                  <p>
+                    Get into a comfortable
+                    position.
+                  </p>
                 </>
-              ) : isTransitioning && nextActivity ? (
+              ) : isTransitioning ? (
                 <>
                   <div className="move-small-label">
-                    NEXT MOVEMENT
+                    GREAT JOB!
                   </div>
-                  <h2>{nextActivity.name}</h2>
-                  <div className="move-mascot-wrapper">
-                    <motion.img
-                      src={nextActivity.image}
-                      alt={nextActivity.name}
-                      className="move-exercise-mascot"
-                    />
+
+                  <h2>
+                    Movement Complete
+                  </h2>
+
+                  <div className="move-countdown transition-countdown">
+                    ✓
                   </div>
-                  <div className="move-countdown">
-                    {transitionRemaining}
-                  </div>
-                  <p>Get ready for the next movement.</p>
+
+                  <p>
+                    Saving your progress...
+                  </p>
                 </>
               ) : (
                 <>
                   <div className="move-small-label">
                     MOVE & RESET
                   </div>
-                  <h2>{currentActivity.name}</h2>
-                  <div className="move-mascot-wrapper">
-                    <motion.img
-                      src={currentActivity.image}
-                      alt={currentActivity.name}
-                      className="move-exercise-mascot"
-                    />
-                  </div>
+
+                  <h2>
+                    {
+                      ACTIVITIES[
+                        activityIndex
+                      ].name
+                    }
+                  </h2>
+
+                  <img
+                    src={
+                      ACTIVITIES[
+                        activityIndex
+                      ].image
+                    }
+                    alt={
+                      ACTIVITIES[
+                        activityIndex
+                      ].name
+                    }
+                    className="move-exercise-image"
+                  />
+
                   <div className="move-countdown">
-                    {remaining}s
+                    {remaining}
                   </div>
+
+                  <div className="move-exercise-description">
+                    {
+                      ACTIVITIES[
+                        activityIndex
+                      ].description
+                    }
+                  </div>
+
                   <div className="move-exercise-dots">
-                    {ACTIVITIES.map((_, index) => (
-                      <span
-                        key={index}
-                        className={
-                          index <= activityIndex
-                            ? "active"
-                            : ""
-                        }
-                      />
-                    ))}
+                    {ACTIVITIES.map(
+                      (_, index) => (
+                        <span
+                          key={index}
+                          className={
+                            index ===
+                            activityIndex
+                              ? "active"
+                              : ""
+                          }
+                        />
+                      )
+                    )}
                   </div>
-                  <p className="move-exercise-description">
-                    {currentActivity.description}
-                  </p>
                 </>
               )}
+
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* ===================================================
+          PERSONAL GOAL COMPLETE
+      =================================================== */}
+
       <AnimatePresence>
-        {showReward && (
+        {showGoalComplete && (
           <motion.div
             className="move-reward-overlay"
             initial={{ opacity: 0 }}
@@ -785,23 +1482,150 @@ export default function MoveResetCard({
           >
             <motion.div
               className="move-reward-popup"
-              initial={{ scale: 0.7, y: 30 }}
-              animate={{ scale: 1, y: 0 }}
+              initial={{
+                scale: 0.9,
+                opacity: 0,
+              }}
+              animate={{
+                scale: 1,
+                opacity: 1,
+              }}
+              exit={{
+                scale: 0.9,
+                opacity: 0,
+              }}
             >
-              <div className="reward-mascot">
-                <img src={shoulder} alt="Happy mascot" />
+
+              <div className="reward-person">
+                🎉
               </div>
-              <h2>NICE WORK!</h2>
-              <p>You completed your daily movement goal.</p>
-              <div className="move-xp">+50 XP</div>
-              <button
-                onClick={() => setShowReward(false)}
-              >
-                AWESOME!
-              </button>
+
+              <h2>
+                Daily Goal Complete!
+              </h2>
+
+              <p>
+                You completed your personal
+                movement goal of{" "}
+                <strong>
+                  {personalGoal}
+                </strong>
+                .
+              </p>
+
+              {canContinueTowardReward ? (
+                <>
+                  <p>
+                    Continue to{" "}
+                    <strong>
+                      {adminRewardGoal}
+                    </strong>{" "}
+                    to unlock more rewards.
+                  </p>
+
+                  <div className="move-goal-actions">
+
+                    <button
+                      type="button"
+                      onClick={
+                        continueTowardRewardGoal
+                      }
+                    >
+                      CONTINUE
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={
+                        finishForToday
+                      }
+                    >
+                      FINISH FOR TODAY
+                    </button>
+
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={
+                    finishForToday
+                  }
+                >
+                  DONE
+                </button>
+              )}
+
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* ===================================================
+          REWARD POPUP
+      =================================================== */}
+
+      <AnimatePresence>
+        {showReward &&
+          currentReward && (
+            <motion.div
+              className="move-reward-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="move-reward-popup"
+                initial={{
+                  scale: 0.9,
+                  opacity: 0,
+                }}
+                animate={{
+                  scale: 1,
+                  opacity: 1,
+                }}
+                exit={{
+                  scale: 0.9,
+                  opacity: 0,
+                }}
+              >
+
+                <div className="reward-person">
+                  🏆
+                </div>
+
+                <h2>
+                  Reward Unlocked!
+                </h2>
+
+                <p>
+                  You reached{" "}
+                  <strong>
+                    {
+                      currentReward.threshold
+                    }
+                    %
+                  </strong>{" "}
+                  of your admin reward goal.
+                </p>
+
+                <div className="move-xp">
+                  +{currentReward.xp} XP
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReward(false);
+                    setCurrentReward(null);
+                  }}
+                >
+                  AWESOME
+                </button>
+
+              </motion.div>
+            </motion.div>
+          )}
       </AnimatePresence>
     </>
   );

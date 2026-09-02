@@ -75,3 +75,18 @@ export const useThemeStore = create(
  { name: "brutal-theme" }
  )
 );
+
+
+
+export const useTimerStore = create(
+  persist(
+    (set) => ({
+      secs: 3,
+      phase: "ready", // 'ready' | 'work' | 'break'
+      running: true,
+      endTime: Date.now() + 3 * 1000,
+      setTimerState: (newState) => set((state) => ({ ...state, ...newState })),
+    }),
+    { name: "brutal-timer" }
+  )
+);
