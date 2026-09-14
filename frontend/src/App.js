@@ -31,6 +31,7 @@ import { startNotificationScheduler } from "./notifications/notificationSchedule
 
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import AcceptInvite from "./pages/AcceptInvite";
 
 /* =========================================================
    MAIN PAGES
@@ -605,6 +606,17 @@ function App() {
                 <Navigate to="/" replace />
               ) : (
                 <Signup />
+              )
+            }
+          />
+
+          <Route
+            path="/accept-invite/:token"
+            element={
+              token ? (
+                <Navigate to="/" replace />
+              ) : (
+                <AcceptInvite />
               )
             }
           />

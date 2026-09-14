@@ -8,7 +8,7 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 
 export default function Signup() {
- const [form, setForm] = useState({ name: "", email: "", password: "", department: "Engineering" });
+ const [form, setForm] = useState({ org_name: "", name: "", email: "", password: "" });
  const [loading, setLoading] = useState(false);
  const setAuth = useAuthStore((s) => s.setAuth);
  const nav = useNavigate();
@@ -35,34 +35,37 @@ export default function Signup() {
  <div className="max-w-md w-full relative z-10">
  <div className="text-center mb-6">
  <div className="flex justify-center"><CompanionMascot state="idle" size={140} /></div>
- <h1 className="font-display text-4xl mt-2" style={{ color: "var(--cozy-primary-dark)" }}>Start your journey</h1>
- <p className="font-hand text-lg mt-1" style={{ color: "var(--cozy-muted)" }}>your wellness companion awaits</p>
+ <h1 className="font-display text-4xl mt-2" style={{ color: "var(--cozy-primary-dark)" }}>Create your organization</h1>
+ <p className="font-hand text-lg mt-1" style={{ color: "var(--cozy-muted)" }}>you'll be the first Admin — invite your team after</p>
  </div>
 
  <div className="bg-cozy-surface shadow-cozy-lg p-8" style={{ borderRadius: 28, border: "1px solid var(--cozy-border)" }}>
  <form onSubmit={submit} className="space-y-4">
  <div>
- <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Name</label>
+ <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Organization name</label>
+ <BrutalInput data-testid="signup-org-name" required value={form.org_name} onChange={(e) => setForm({ ...form, org_name: e.target.value })} placeholder="Acme Inc." />
+ </div>
+ <div>
+ <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Your name</label>
  <BrutalInput data-testid="signup-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="What can we call you?" />
  </div>
  <div>
- <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Email</label>
+ <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Work email</label>
  <BrutalInput data-testid="signup-email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" />
  </div>
  <div>
  <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Password</label>
  <BrutalInput data-testid="signup-password" type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 6 characters" />
  </div>
- <div>
- <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Team</label>
- <BrutalInput data-testid="signup-dept" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
- </div>
  <BrutalButton data-testid="signup-submit" type="submit" color="primary" size="lg" className="w-full" disabled={loading}>
- {loading ? "One sec..." : "Plant your seed "}
+ {loading ? "One sec..." : "Plant your garden "}
  </BrutalButton>
  </form>
  <p className="text-center mt-5 text-sm" style={{ color: "var(--cozy-muted)" }}>
  Already have an account? <Link className="font-semibold text-cozy-primary-dark underline" to="/login" data-testid="link-login">Sign in</Link>
+ </p>
+ <p className="text-center mt-2 text-xs" style={{ color: "var(--cozy-muted)" }}>
+ Got an invite link from your admin? Open it directly to join their organization.
  </p>
  </div>
  </div>

@@ -1108,8 +1108,13 @@ async def update_organization(body: OrganizationPatch, admin=Depends(require_adm
     return await db.organizations.find_one({"id": admin.get("org_id")}, {"_id": 0})
 
 def _invite_public(inv: dict) -> dict:
+    """Admin-only view of one of their own org's invitations — the accept link (which embeds
+    the token) is included so the admin can always re-copy/share it, not just at creation."""
     inv = {**inv, "status": invite_status(inv)}
-    inv.pop("token", None)
+    token = inv.pop("token", None)
+    if token and inv["status"] in ("pending", "expired"):
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+        inv["accept_link"] = f"{frontend_url}/accept-invite/{token}"
     return inv
 
 @api.get("/admin/invitations")

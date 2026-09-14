@@ -139,59 +139,27 @@ export default function AdminDashboard() {
 // PEOPLE & ACCESS
 // ============================================================
 
-const PEOPLE_ORG_KEY = "wellness-organization-settings";
-const PEOPLE_INVITES_KEY = "wellness-organization-invitations";
+const EMPTY_ORG = { name: "", support_email: "", work_email_domain: "" };
 
-const DEFAULT_ORGANIZATION = {
-  name: "Wellness Garden Inc.",
-  supportEmail: "hr@wellnessgarden.com",
-  workEmailDomain: "wellnessgarden.com",
-};
-
-const DEFAULT_INVITATIONS = [
-  {
-    id: "demo-1",
-    name: "John Smith",
-    email: "john@wellnessgarden.com",
-    role: "Employee",
-    status: "Pending",
-    invitedAt: "Today",
-  },
-  {
-    id: "demo-2",
-    name: "Sarah Thomas",
-    email: "sarah@wellnessgarden.com",
-    role: "Employee",
-    status: "Accepted",
-    invitedAt: "Yesterday",
-  },
-];
-
-const readStoredJSON = (key, fallback) => {
+const copyToClipboard = async (text) => {
   try {
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
+    await navigator.clipboard.writeText(text);
+    toast.success("Accept link copied.");
   } catch {
-    return fallback;
+    toast.error("Could not copy link — copy it manually.");
   }
 };
 
 const UsersTab = () => {
   const [users, setUsers] = useState([]);
-  const [org, setOrg] = useState(() =>
-    readStoredJSON(PEOPLE_ORG_KEY, DEFAULT_ORGANIZATION)
-  );
-  const [savedOrg, setSavedOrg] = useState(() =>
-    readStoredJSON(PEOPLE_ORG_KEY, DEFAULT_ORGANIZATION)
-  );
+  const [org, setOrg] = useState(EMPTY_ORG);
+  const [savedOrg, setSavedOrg] = useState(EMPTY_ORG);
   const [invite, setInvite] = useState({
     name: "",
     email: "",
-    role: "Employee",
+    role: "employee",
   });
-  const [invitations, setInvitations] = useState(() =>
-    readStoredJSON(PEOPLE_INVITES_KEY, DEFAULT_INVITATIONS)
-  );
+  const [invitations, setInvitations] = useState([]);
   const [savingOrg, setSavingOrg] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
   const { openDelete, deleteModal } = useDeleteConfirmation();
@@ -206,13 +174,35 @@ const UsersTab = () => {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  const loadOrg = async () => {
+    try {
+      const { data } = await api.get("/admin/organization");
+      const next = {
+        name: data.name || "",
+        support_email: data.support_email || "",
+        work_email_domain: data.work_email_domain || "",
+      };
+      setOrg(next);
+      setSavedOrg(next);
+    } catch (error) {
+      console.error("Failed to load organization:", error);
+    }
+  };
+
+  const loadInvitations = async () => {
+    try {
+      const { data } = await api.get("/admin/invitations");
+      setInvitations(data || []);
+    } catch (error) {
+      console.error("Failed to load invitations:", error);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem(PEOPLE_INVITES_KEY, JSON.stringify(invitations));
-  }, [invitations]);
+    load();
+    loadOrg();
+    loadInvitations();
+  }, []);
 
   const setRole = async (user, role) => {
     try {
@@ -222,6 +212,18 @@ const UsersTab = () => {
     } catch (error) {
       console.error("Failed to update role:", error);
       toast.error("Could not update role.");
+    }
+  };
+
+  const toggleStatus = async (user) => {
+    const nextStatus = user.status === "deactivated" ? "active" : "deactivated";
+    try {
+      await api.patch(`/admin/users/${user.id}`, { status: nextStatus });
+      toast.success(`${user.name} ${nextStatus === "active" ? "reactivated" : "deactivated"}.`);
+      load();
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      toast.error("Could not update status.");
     }
   };
 
@@ -237,12 +239,12 @@ const UsersTab = () => {
       return;
     }
 
-    if (!org.supportEmail.includes("@")) {
+    if (!org.support_email.includes("@")) {
       toast.error("Enter a valid support email.");
       return;
     }
 
-    if (!org.workEmailDomain.trim()) {
+    if (!org.work_email_domain.trim()) {
       toast.error("Work email domain is required.");
       return;
     }
@@ -250,9 +252,18 @@ const UsersTab = () => {
     setSavingOrg(true);
 
     try {
-      localStorage.setItem(PEOPLE_ORG_KEY, JSON.stringify(org));
-      setSavedOrg({ ...org });
+      const { data } = await api.put("/admin/organization", org);
+      const next = {
+        name: data.name || "",
+        support_email: data.support_email || "",
+        work_email_domain: data.work_email_domain || "",
+      };
+      setOrg(next);
+      setSavedOrg(next);
       toast.success("Organization settings saved.");
+    } catch (error) {
+      console.error("Failed to save organization:", error);
+      toast.error(error.response?.data?.detail || "Could not save organization.");
     } finally {
       setSavingOrg(false);
     }
@@ -261,7 +272,6 @@ const UsersTab = () => {
   const sendInvitation = async () => {
     const name = invite.name.trim();
     const email = invite.email.trim().toLowerCase();
-    const domain = org.workEmailDomain.trim().toLowerCase().replace(/^@/, "");
 
     if (!name) {
       toast.error("Please enter the employee's name.");
@@ -273,56 +283,35 @@ const UsersTab = () => {
       return;
     }
 
-    if (email.split("@")[1] !== domain) {
-      toast.error(`Please use a ${domain} work email address.`);
-      return;
-    }
-
-    const existingUser = users.some(
-      (user) => String(user.email || "").toLowerCase() === email
-    );
-    const pendingInvite = invitations.some(
-      (item) => item.email.toLowerCase() === email && item.status === "Pending"
-    );
-
-    if (existingUser) {
-      toast.error("This employee is already a member.");
-      return;
-    }
-
-    if (pendingInvite) {
-      toast.error("This employee already has a pending invitation.");
-      return;
-    }
-
-    const newInvitation = {
-      id: `invite-${Date.now()}`,
-      name,
-      email,
-      role: invite.role,
-      status: "Pending",
-      invitedAt: "Just now",
-    };
-
     setSendingInvite(true);
 
     try {
-      setInvitations((prev) => [newInvitation, ...prev]);
+      const { data } = await api.post("/admin/invitations", {
+        name, email, role: invite.role,
+      });
+      setInvitations((prev) => [data, ...prev]);
       toast.success(`Invitation prepared for ${email}`);
-      setInvite({ name: "", email: "", role: "Employee" });
+      setInvite({ name: "", email: "", role: "employee" });
+      if (data.accept_link) copyToClipboard(data.accept_link);
+    } catch (error) {
+      console.error("Failed to send invitation:", error);
+      toast.error(error.response?.data?.detail || "Could not send invitation.");
     } finally {
       setSendingInvite(false);
     }
   };
 
-  const deleteInvitation = (id) => {
-    const invitation = invitations.find((item) => item.id === id);
-    if (!invitation || invitation.status !== "Pending") return;
+  const deleteInvitation = (invitation) => {
+    if (invitation.status !== "pending" && invitation.status !== "expired") return;
     openDelete(
-      "Delete Invitation?",
-      `Are you sure you want to delete the pending invitation for ${invitation.name}?`,
-      async () => { setInvitations((prev) => prev.filter((item) => item.id !== id)); toast.success("Invitation deleted."); },
-      "Could not delete invitation."
+      "Cancel Invitation?",
+      `Are you sure you want to cancel the invitation for ${invitation.name || invitation.email}?`,
+      async () => {
+        await api.delete(`/admin/invitations/${invitation.id}`);
+        toast.success("Invitation cancelled.");
+        loadInvitations();
+      },
+      "Could not cancel invitation."
     );
   };
 
@@ -335,8 +324,16 @@ const UsersTab = () => {
     );
   };
 
-  const resendInvitation = (invitation) => {
-    toast.success(`Invitation resent to ${invitation.email}`);
+  const resendInvitation = async (invitation) => {
+    try {
+      const { data } = await api.post(`/admin/invitations/${invitation.id}/resend`);
+      toast.success(`Invitation link refreshed for ${invitation.email}`);
+      if (data.accept_link) copyToClipboard(data.accept_link);
+      loadInvitations();
+    } catch (error) {
+      console.error("Failed to resend invitation:", error);
+      toast.error("Could not resend invitation.");
+    }
   };
 
   const hasOrgChanges = JSON.stringify(org) !== JSON.stringify(savedOrg);
@@ -378,8 +375,8 @@ const UsersTab = () => {
               </label>
               <BrutalInput
                 type="email"
-                value={org.supportEmail}
-                onChange={(e) => setOrg({ ...org, supportEmail: e.target.value })}
+                value={org.support_email}
+                onChange={(e) => setOrg({ ...org, support_email: e.target.value })}
               />
             </div>
 
@@ -390,11 +387,11 @@ const UsersTab = () => {
               <div className="flex items-center gap-2">
                 <Mail className="w-5 h-5 shrink-0" />
                 <BrutalInput
-                  value={org.workEmailDomain}
+                  value={org.work_email_domain}
                   onChange={(e) =>
                     setOrg({
                       ...org,
-                      workEmailDomain: e.target.value.replace("@", ""),
+                      work_email_domain: e.target.value.replace("@", ""),
                     })
                   }
                   placeholder="company.com"
@@ -452,7 +449,7 @@ const UsersTab = () => {
                 type="email"
                 value={invite.email}
                 onChange={(e) => setInvite({ ...invite, email: e.target.value })}
-                placeholder={`employee@${org.workEmailDomain}`}
+                placeholder={`employee@${org.work_email_domain || "company.com"}`}
               />
             </div>
 
@@ -465,9 +462,9 @@ const UsersTab = () => {
                 onChange={(e) => setInvite({ ...invite, role: e.target.value })}
                 className="w-full border-[3px] border-black px-3 py-3 font-bold uppercase bg-white"
               >
-                <option value="Employee">Employee</option>
-                <option value="HR">HR</option>
-                <option value="Manager">Manager</option>
+                <option value="employee">Employee</option>
+                <option value="team_lead">Team Lead</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
 
@@ -510,39 +507,53 @@ const UsersTab = () => {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 border-[3px] border-black bg-brutal-green flex items-center justify-center font-display font-black shrink-0">
-                  {invitation.name.charAt(0).toUpperCase()}
+                  {(invitation.name || invitation.email).charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-black uppercase truncate">{invitation.name}</div>
+                  <div className="font-black uppercase truncate">{invitation.name || invitation.email}</div>
                   <div className="text-xs font-bold truncate">{invitation.email}</div>
                   <div className="text-[10px] font-bold uppercase opacity-60">
-                    {invitation.role} · {invitation.invitedAt}
+                    {invitation.role} · {new Date(invitation.invited_at).toLocaleDateString()}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {invitation.status === "Accepted" ? (
+                {invitation.status === "accepted" ? (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black bg-brutal-green text-xs font-black uppercase">
                     <Check className="w-3 h-3" /> Accepted
                   </span>
+                ) : invitation.status === "cancelled" ? (
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black bg-white text-xs font-black uppercase opacity-60">
+                    <X className="w-3 h-3" /> Cancelled
+                  </span>
                 ) : (
                   <>
-                    <span className="inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black bg-brutal-yellow text-xs font-black uppercase">
-                      <Clock className="w-3 h-3" /> Pending
+                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black text-xs font-black uppercase ${invitation.status === "expired" ? "bg-brutal-pink" : "bg-brutal-yellow"}`}>
+                      <Clock className="w-3 h-3" /> {invitation.status === "expired" ? "Expired" : "Pending"}
                     </span>
+                    {invitation.accept_link && (
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(invitation.accept_link)}
+                        title="Copy accept link"
+                        className="border-[3px] border-black bg-white p-2 shadow-brutal-sm"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => resendInvitation(invitation)}
-                      title="Resend invitation"
+                      title="Refresh invitation link"
                       className="border-[3px] border-black bg-white p-2 shadow-brutal-sm"
                     >
                       <RotateCcw className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteInvitation(invitation.id)}
-                      title="Delete invitation"
+                      onClick={() => deleteInvitation(invitation)}
+                      title="Cancel invitation"
                       className="border-[3px] border-black bg-brutal-pink p-2 shadow-brutal-sm"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -590,7 +601,12 @@ const UsersTab = () => {
               />
 
               <div className="flex-1 min-w-0">
-                <div className="font-black uppercase truncate">{user.name}</div>
+                <div className="font-black uppercase truncate flex items-center gap-2">
+                  {user.name}
+                  {user.status === "deactivated" && (
+                    <span className="text-[9px] px-1.5 py-0.5 border-[2px] border-black bg-brutal-pink">DEACTIVATED</span>
+                  )}
+                </div>
                 <div className="text-xs font-bold truncate">
                   {user.email} · {user.department || "General"} · {user.points ?? 0} pts
                 </div>
@@ -606,6 +622,16 @@ const UsersTab = () => {
                 <option value="team_lead">Team Lead</option>
                 <option value="admin">Admin</option>
               </select>
+
+              <button
+                data-testid={`status-${user.id}`}
+                type="button"
+                onClick={() => toggleStatus(user)}
+                title={user.status === "deactivated" ? "Reactivate user" : "Deactivate user"}
+                className="bg-white border-[3px] border-black p-2 shadow-brutal-sm"
+              >
+                {user.status === "deactivated" ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+              </button>
 
               <button
                 data-testid={`delete-${user.id}`}
