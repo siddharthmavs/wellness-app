@@ -1,23 +1,23 @@
 {
   "C:\\Projects\\wellness-app\\backend\\server.py": {
-    "mtime": 1780924665.0729778,
-    "ast_hash": "989a722421d52125232698f6cac81395",
-    "semantic_hash": "989a722421d52125232698f6cac81395"
+    "mtime": 1789381668.1311586,
+    "ast_hash": "343ae25895c76d6c128850f70d2adbb4",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\backend\\tests\\backend_test.py": {
-    "mtime": 1778138735.1172752,
-    "ast_hash": "1361b2f95fc80ad2a87a179057c997ee",
-    "semantic_hash": "1361b2f95fc80ad2a87a179057c997ee"
+    "mtime": 1789380137.0694044,
+    "ast_hash": "6a6ea415415f4d6c622f6ef61a26de79",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\backend\\tests\\test_chunk2.py": {
-    "mtime": 1778138735.1182764,
-    "ast_hash": "802e6035d41db18c29fcc1188d87ffed",
-    "semantic_hash": "802e6035d41db18c29fcc1188d87ffed"
+    "mtime": 1789380149.2782938,
+    "ast_hash": "d89d71f727a9399374c762ceec6f32a3",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\backend\\tests\\test_chunk3.py": {
-    "mtime": 1778138735.1192744,
-    "ast_hash": "a7aa57244dc7fecca2c1ed441828d671",
-    "semantic_hash": "a7aa57244dc7fecca2c1ed441828d671"
+    "mtime": 1789380337.4522026,
+    "ast_hash": "94fb974acc8b0cc0c4cc79b0253d2879",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\backend\\tests\\test_chunk4.py": {
     "mtime": 1778138735.1202757,
@@ -39,15 +39,10 @@
     "ast_hash": "be0ff4ecf25ee5e6102008c268bedd79",
     "semantic_hash": "be0ff4ecf25ee5e6102008c268bedd79"
   },
-  "C:\\Projects\\wellness-app\\frontend\\jsconfig.json": {
-    "mtime": 1778138735.125788,
-    "ast_hash": "ab2698309edf6fb0e69b424ddf30fdd5",
-    "semantic_hash": "ab2698309edf6fb0e69b424ddf30fdd5"
-  },
   "C:\\Projects\\wellness-app\\frontend\\package.json": {
-    "mtime": 1778139689.6534958,
-    "ast_hash": "d9f9e691b83cb1c663454acbed8e071d",
-    "semantic_hash": "d9f9e691b83cb1c663454acbed8e071d"
+    "mtime": 1786343444.4991984,
+    "ast_hash": "4373dfec0866dc35ef745826b4fbfa93",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\plugins\\health-check\\health-endpoints.js": {
     "mtime": 1778138735.1284916,
@@ -65,84 +60,84 @@
     "semantic_hash": "762a94d1749c8e97eebf3f94102e8eb2"
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\App.js": {
-    "mtime": 1778138735.133486,
-    "ast_hash": "dcb732e83f9f3794f9fe7a1515300e15",
-    "semantic_hash": "dcb732e83f9f3794f9fe7a1515300e15"
+    "mtime": 1789381694.4906945,
+    "ast_hash": "194a40aa0d8fa07aea540e7063d6cdcf",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\BottomNav.jsx": {
-    "mtime": 1778138735.1344852,
-    "ast_hash": "bd3145fa6ac42f37c113a70cbe78a4a2",
-    "semantic_hash": "bd3145fa6ac42f37c113a70cbe78a4a2"
+    "mtime": 1789380956.963451,
+    "ast_hash": "c0b2bb457e8c3d2b3ca5f6e65871122c",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\BuddyAndPlant.jsx": {
-    "mtime": 1778138735.1344852,
-    "ast_hash": "2c3c442963e7d075020cbb2b55bba2cc",
-    "semantic_hash": "2c3c442963e7d075020cbb2b55bba2cc"
+    "mtime": 1789381073.1369865,
+    "ast_hash": "8331196811956a575820d266814f1cf1",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\DashboardCards.jsx": {
-    "mtime": 1778138735.1359923,
-    "ast_hash": "ee5c984d9c4440933f70893ce39b4d7a",
-    "semantic_hash": "ee5c984d9c4440933f70893ce39b4d7a"
+    "mtime": 1789381084.1302328,
+    "ast_hash": "13de377c0110a90786f369edcd78dd61",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\EyeCareTimer.jsx": {
-    "mtime": 1778138735.1370008,
-    "ast_hash": "d1e4a3fefd830144224d4ee2276a2660",
-    "semantic_hash": "d1e4a3fefd830144224d4ee2276a2660"
+    "mtime": 1789378238.789936,
+    "ast_hash": "969fd7fb417b22dd8a5507a45358d933",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\MentionInput.jsx": {
-    "mtime": 1778138735.1380007,
-    "ast_hash": "5fb7d1a502813b4b921764e0d0442caa",
-    "semantic_hash": "5fb7d1a502813b4b921764e0d0442caa"
+    "mtime": 1789381140.7362134,
+    "ast_hash": "20b6a0d6a6cbe1f96a8d2966f70c99b1",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\Navbar.jsx": {
-    "mtime": 1778149269.019893,
-    "ast_hash": "7af19d5f8b890e84083d2c1a04e030db",
-    "semantic_hash": "7af19d5f8b890e84083d2c1a04e030db"
+    "mtime": 1789380952.8554046,
+    "ast_hash": "fa857e0a4795cb4ffc805935913193e9",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\NotificationBell.jsx": {
-    "mtime": 1778149253.5690835,
-    "ast_hash": "a15cceaffeafa1378da7d090cbca6109",
-    "semantic_hash": "a15cceaffeafa1378da7d090cbca6109"
+    "mtime": 1786343444.5401802,
+    "ast_hash": "b723070ee765e9635f48224b325a4d2c",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\RewardsSection.jsx": {
-    "mtime": 1778138735.140012,
-    "ast_hash": "348de698da2ec1f39fa1656aedb945b5",
-    "semantic_hash": "348de698da2ec1f39fa1656aedb945b5"
+    "mtime": 1786343444.5437105,
+    "ast_hash": "101b2a346bc4603fb64028732393155f",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\Skeleton.jsx": {
-    "mtime": 1778138735.140012,
-    "ast_hash": "82e0b567ce20301741dfde7fbadfd685",
-    "semantic_hash": "82e0b567ce20301741dfde7fbadfd685"
+    "mtime": 1786343444.5477035,
+    "ast_hash": "844283744cf6ecdfdf8f5bfc918c4b97",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\WeeklyInsightsCard.jsx": {
-    "mtime": 1778138735.1410007,
-    "ast_hash": "60aa292052c52ac88ca2b22870ed0de7",
-    "semantic_hash": "60aa292052c52ac88ca2b22870ed0de7"
+    "mtime": 1786343444.5497007,
+    "ast_hash": "325ffc92cf741c7dd0db0985e07d71ea",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\WellnessPopup.jsx": {
-    "mtime": 1778138735.1420038,
-    "ast_hash": "27e58ddb81589fac887ba8fc5d0407d5",
-    "semantic_hash": "27e58ddb81589fac887ba8fc5d0407d5"
+    "mtime": 1786343444.5537062,
+    "ast_hash": "a00690cdaad14c653a437dce8ba6a848",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\brutal.jsx": {
-    "mtime": 1778138735.1426723,
-    "ast_hash": "ee6b1a6cedb53c89499ce7859a1b8f6e",
-    "semantic_hash": "ee6b1a6cedb53c89499ce7859a1b8f6e"
+    "mtime": 1786343444.5567148,
+    "ast_hash": "0f106b1b0c5ab031c183e8c27cab4d3e",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\accordion.jsx": {
-    "mtime": 1778138735.1446817,
-    "ast_hash": "415118b06768feb81fcfe52b4e5b7b7d",
-    "semantic_hash": "415118b06768feb81fcfe52b4e5b7b7d"
+    "mtime": 1786343444.5597043,
+    "ast_hash": "283aed9aa075a047935d04a4920ab1f8",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\alert-dialog.jsx": {
-    "mtime": 1778138735.1446817,
-    "ast_hash": "9a4bd38fdadaeea6bebeb13e466b96df",
-    "semantic_hash": "9a4bd38fdadaeea6bebeb13e466b96df"
+    "mtime": 1786343444.5647037,
+    "ast_hash": "c758736acbdd2c92c725d65f4e975288",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\alert.jsx": {
-    "mtime": 1778138735.1446817,
-    "ast_hash": "207fa30ee81ff024e0a05301bcf60626",
-    "semantic_hash": "207fa30ee81ff024e0a05301bcf60626"
+    "mtime": 1786343444.5667026,
+    "ast_hash": "925dc40f25fbcb9b6d2f178b9f900b88",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\aspect-ratio.jsx": {
     "mtime": 1778138735.1461906,
@@ -150,44 +145,44 @@
     "semantic_hash": "114d53f29a18d0e8b5e48f5ff3811e15"
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\avatar.jsx": {
-    "mtime": 1778138735.147202,
-    "ast_hash": "b8020660ae3bc17a28ed77352cf0ede1",
-    "semantic_hash": "b8020660ae3bc17a28ed77352cf0ede1"
+    "mtime": 1786343444.5717132,
+    "ast_hash": "202e0cc63e370e48853a2c6914a04efd",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\badge.jsx": {
-    "mtime": 1778138735.147202,
-    "ast_hash": "6d218c99805c24961981e4dba98fdf13",
-    "semantic_hash": "6d218c99805c24961981e4dba98fdf13"
+    "mtime": 1786343444.5737033,
+    "ast_hash": "e95619e55945999f7a2dc85039dbfb28",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\breadcrumb.jsx": {
-    "mtime": 1778138735.148198,
-    "ast_hash": "5b4a8a8dff8cb41298081baa26dbf191",
-    "semantic_hash": "5b4a8a8dff8cb41298081baa26dbf191"
+    "mtime": 1786343444.5787075,
+    "ast_hash": "d493b6f86eaef649ae51635c991c0f89",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\button.jsx": {
-    "mtime": 1778138735.148198,
-    "ast_hash": "5702a92b8fc7a82e15d0cd72a8d7c890",
-    "semantic_hash": "5702a92b8fc7a82e15d0cd72a8d7c890"
+    "mtime": 1786343444.580702,
+    "ast_hash": "441bb03828be756446496ffdc7926310",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\calendar.jsx": {
-    "mtime": 1778138735.149198,
-    "ast_hash": "31053e4f709a580135c338c7f5c537ef",
-    "semantic_hash": "31053e4f709a580135c338c7f5c537ef"
+    "mtime": 1786343444.5847094,
+    "ast_hash": "74b5bcb6404e5f316ae5b02f3f1c3351",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\card.jsx": {
-    "mtime": 1778138735.149198,
-    "ast_hash": "cebc57b73ad5f141f5367b43148ec83e",
-    "semantic_hash": "cebc57b73ad5f141f5367b43148ec83e"
+    "mtime": 1786343444.5887015,
+    "ast_hash": "0c6e8adce21a5e6d9df43746d658f08d",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\carousel.jsx": {
-    "mtime": 1778138735.1501975,
-    "ast_hash": "6fa103c35cadf783abf6004a1de06fe7",
-    "semantic_hash": "6fa103c35cadf783abf6004a1de06fe7"
+    "mtime": 1786343444.5907028,
+    "ast_hash": "a8409acaba21ba3a68a7a4d21e9bef78",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\checkbox.jsx": {
-    "mtime": 1778138735.1511984,
-    "ast_hash": "36f395a09cf7e827df6c148739416a80",
-    "semantic_hash": "36f395a09cf7e827df6c148739416a80"
+    "mtime": 1786343444.5937035,
+    "ast_hash": "d2fe09003ac80172afcc1593a4f89340",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\collapsible.jsx": {
     "mtime": 1778138735.1511984,
@@ -195,279 +190,274 @@
     "semantic_hash": "1048c23a2aadd5fdbbde0b04ec61e5cf"
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\command.jsx": {
-    "mtime": 1778138735.1522012,
-    "ast_hash": "1e0805fc80b7ef6481a75691971812a1",
-    "semantic_hash": "1e0805fc80b7ef6481a75691971812a1"
+    "mtime": 1786343444.5967047,
+    "ast_hash": "73b87e7471a26da8c4c50ec5b03c4dc0",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\context-menu.jsx": {
-    "mtime": 1778138735.1531973,
-    "ast_hash": "927b1973717287163faa47d78d81c9ae",
-    "semantic_hash": "927b1973717287163faa47d78d81c9ae"
+    "mtime": 1786343444.599702,
+    "ast_hash": "eb3aec37c5303de077f98b58d0956424",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\dialog.jsx": {
-    "mtime": 1778138735.1531973,
-    "ast_hash": "c29e6b997d5463bdef50d15e3f7504e5",
-    "semantic_hash": "c29e6b997d5463bdef50d15e3f7504e5"
+    "mtime": 1786343444.6037073,
+    "ast_hash": "a6ef06725b5c8dbb1d3ad1879fe30314",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\drawer.jsx": {
-    "mtime": 1778138735.154202,
-    "ast_hash": "b701be48abdc1fb95bfc5887e20dde7e",
-    "semantic_hash": "b701be48abdc1fb95bfc5887e20dde7e"
+    "mtime": 1786343444.6057065,
+    "ast_hash": "bbaec01358001c0d822c315bb6691f1f",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\dropdown-menu.jsx": {
-    "mtime": 1778138735.1552002,
-    "ast_hash": "c0dd3c80defc0470002568a5c720023c",
-    "semantic_hash": "c0dd3c80defc0470002568a5c720023c"
+    "mtime": 1786343444.6087039,
+    "ast_hash": "37fce4b3decb526625b6079bbfe7bae0",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\form.jsx": {
-    "mtime": 1778138735.1552002,
-    "ast_hash": "e547b559587f82b6a0936121fa4c3ed5",
-    "semantic_hash": "e547b559587f82b6a0936121fa4c3ed5"
+    "mtime": 1786343444.6117036,
+    "ast_hash": "f6f361e36c86e7da1d83c1cfea8908ac",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\hover-card.jsx": {
-    "mtime": 1778138735.1567192,
-    "ast_hash": "76add5fbadc929ab262588dd7294bd58",
-    "semantic_hash": "76add5fbadc929ab262588dd7294bd58"
+    "mtime": 1786343444.6157017,
+    "ast_hash": "8eb8668627c981522431fcd71cb37c56",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\input-otp.jsx": {
-    "mtime": 1778138735.1577291,
-    "ast_hash": "3d1077cc27ba2cedb8fb8ba4bdd836c1",
-    "semantic_hash": "3d1077cc27ba2cedb8fb8ba4bdd836c1"
+    "mtime": 1786343444.618719,
+    "ast_hash": "7f7af47ff16f35266222d73472f69fd7",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\input.jsx": {
-    "mtime": 1778138735.1584046,
-    "ast_hash": "68a1da1b9b9a119ee11aec426ba59a93",
-    "semantic_hash": "68a1da1b9b9a119ee11aec426ba59a93"
+    "mtime": 1786343444.6217024,
+    "ast_hash": "61f6d3844661d6b294909b16455f95c1",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\label.jsx": {
-    "mtime": 1778138735.1594226,
-    "ast_hash": "cb2728638eb562697631e4ea71e33450",
-    "semantic_hash": "cb2728638eb562697631e4ea71e33450"
+    "mtime": 1786343444.6236994,
+    "ast_hash": "6de53b0d39140cd0c0d370191d923007",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\menubar.jsx": {
-    "mtime": 1778138735.1594226,
-    "ast_hash": "4fdb8d382f1655c48f831ac35c947ccb",
-    "semantic_hash": "4fdb8d382f1655c48f831ac35c947ccb"
+    "mtime": 1786343444.6266997,
+    "ast_hash": "adc9a54e7f1ee4402b097cd774e3e9bc",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\navigation-menu.jsx": {
-    "mtime": 1778138735.1604142,
-    "ast_hash": "73a7af62957b30be1d0e70e94c6e0f7b",
-    "semantic_hash": "73a7af62957b30be1d0e70e94c6e0f7b"
+    "mtime": 1786343444.628717,
+    "ast_hash": "23515243cb3af22aca522dc2aa8f4c79",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\pagination.jsx": {
-    "mtime": 1778138735.1614196,
-    "ast_hash": "75fb604ebfe91687867cf5f38a44cce7",
-    "semantic_hash": "75fb604ebfe91687867cf5f38a44cce7"
+    "mtime": 1786343444.6317177,
+    "ast_hash": "c8dd9ee401a81616230db4d61ae7ef53",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\popover.jsx": {
-    "mtime": 1778138735.1624143,
-    "ast_hash": "fe57a241245dfe88825c7d9082fe54e3",
-    "semantic_hash": "fe57a241245dfe88825c7d9082fe54e3"
+    "mtime": 1786343444.6357322,
+    "ast_hash": "779e1092863ff4fef27f803a472fab59",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\progress.jsx": {
-    "mtime": 1778138735.1624143,
-    "ast_hash": "f1e8b9ebd676f0fc11b71f3dfdb72ef8",
-    "semantic_hash": "f1e8b9ebd676f0fc11b71f3dfdb72ef8"
+    "mtime": 1786343444.6397183,
+    "ast_hash": "3e01a41ba0e205e2349d1f18a9d60bf0",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\radio-group.jsx": {
-    "mtime": 1778138735.16342,
-    "ast_hash": "9247a41d5b67c4dc8dd8a7c062bdc355",
-    "semantic_hash": "9247a41d5b67c4dc8dd8a7c062bdc355"
+    "mtime": 1786343444.6427345,
+    "ast_hash": "a473f1df7062ff780e927751b8009285",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\resizable.jsx": {
-    "mtime": 1778138735.16342,
-    "ast_hash": "624b0e0046ff4da6d6c5f1197e4c924e",
-    "semantic_hash": "624b0e0046ff4da6d6c5f1197e4c924e"
+    "mtime": 1786343444.646269,
+    "ast_hash": "9a478bc0a5e64ed4f0b42e37cbdf5088",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\scroll-area.jsx": {
-    "mtime": 1778138735.1644175,
-    "ast_hash": "3a1fc9eb76c5ec28b1f4c2fb0f3ac5ac",
-    "semantic_hash": "3a1fc9eb76c5ec28b1f4c2fb0f3ac5ac"
+    "mtime": 1786343444.6482666,
+    "ast_hash": "557b30c9212eaf4ff98e924a0d603dfc",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\select.jsx": {
-    "mtime": 1778138735.1644175,
-    "ast_hash": "59bc251efe75fe983aaaac9069dfc48d",
-    "semantic_hash": "59bc251efe75fe983aaaac9069dfc48d"
+    "mtime": 1786343444.6542628,
+    "ast_hash": "979c30a82c4dc0cb2acdc0d85707d9fe",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\separator.jsx": {
-    "mtime": 1778138735.165422,
-    "ast_hash": "53ad02ebb72b239bfb1ded455ddec492",
-    "semantic_hash": "53ad02ebb72b239bfb1ded455ddec492"
+    "mtime": 1786343444.6572623,
+    "ast_hash": "03ac9fe27626f07d01831a1637842947",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\sheet.jsx": {
-    "mtime": 1778138735.165422,
-    "ast_hash": "6b2f7344da8130aaf9f12a60b25e61ee",
-    "semantic_hash": "6b2f7344da8130aaf9f12a60b25e61ee"
+    "mtime": 1786343444.6592667,
+    "ast_hash": "d687cd57c9b7f9eec07ee1b2dba11465",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\skeleton.jsx": {
-    "mtime": 1778138735.1669328,
-    "ast_hash": "21ae0c4be942e1905c6a405b430bf890",
-    "semantic_hash": "21ae0c4be942e1905c6a405b430bf890"
+    "mtime": 1786343444.6632633,
+    "ast_hash": "d32e8a2005709472b633a88d6823e124",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\slider.jsx": {
-    "mtime": 1778138735.1669328,
-    "ast_hash": "080b174fd379884828befa7ba89701fd",
-    "semantic_hash": "080b174fd379884828befa7ba89701fd"
+    "mtime": 1786343444.6652656,
+    "ast_hash": "3d636ac3f281200d77f63e6f8c9f5851",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\sonner.jsx": {
-    "mtime": 1778138735.1679468,
-    "ast_hash": "fddad34374a9f873d72eae68cb244d08",
-    "semantic_hash": "fddad34374a9f873d72eae68cb244d08"
+    "mtime": 1786343444.669273,
+    "ast_hash": "3be8d39c6f0031978c1b69247aa73d72",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\switch.jsx": {
-    "mtime": 1778138735.1691751,
-    "ast_hash": "d3280805fe8f47cccbe5b623ca95956b",
-    "semantic_hash": "d3280805fe8f47cccbe5b623ca95956b"
+    "mtime": 1786343444.672266,
+    "ast_hash": "4409de9a99442d8763cad5c4ef0f2f8f",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\table.jsx": {
-    "mtime": 1778138735.1691751,
-    "ast_hash": "c62cc8e3aee43f709186522a3097db88",
-    "semantic_hash": "c62cc8e3aee43f709186522a3097db88"
+    "mtime": 1786343444.674263,
+    "ast_hash": "2ccf768a38034f7b116a68a5a6c93ebb",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\tabs.jsx": {
-    "mtime": 1778138735.1701763,
-    "ast_hash": "1b3bfe26cd4927db2f8d9059e85bd87a",
-    "semantic_hash": "1b3bfe26cd4927db2f8d9059e85bd87a"
+    "mtime": 1786343444.6782637,
+    "ast_hash": "47a84a94675866d01fa9be62ad1a8fe5",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\textarea.jsx": {
-    "mtime": 1778138735.1711793,
-    "ast_hash": "17dee4732837794fb334d53fe61c0446",
-    "semantic_hash": "17dee4732837794fb334d53fe61c0446"
+    "mtime": 1786343444.6812632,
+    "ast_hash": "3a25794e62851a6a1d4f4861733542b3",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\toast.jsx": {
-    "mtime": 1778138735.1721864,
-    "ast_hash": "86c01a786d2938523b5bcaa8d20375a9",
-    "semantic_hash": "86c01a786d2938523b5bcaa8d20375a9"
+    "mtime": 1786343444.6832733,
+    "ast_hash": "c8dc5a8fb0b190dcc9f2236b2ededc4a",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\toaster.jsx": {
-    "mtime": 1778138735.1721864,
-    "ast_hash": "61315896aeebfd88a80b5a9cede21063",
-    "semantic_hash": "61315896aeebfd88a80b5a9cede21063"
+    "mtime": 1786343444.6882665,
+    "ast_hash": "6424ea73197ed1989046dd26e1106116",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\toggle-group.jsx": {
-    "mtime": 1778138735.173187,
-    "ast_hash": "b664f5e0e42e645618c73d7045ed6690",
-    "semantic_hash": "b664f5e0e42e645618c73d7045ed6690"
+    "mtime": 1786343444.6912668,
+    "ast_hash": "66153803879c65146215ab2e1777797b",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\toggle.jsx": {
-    "mtime": 1778138735.1738057,
-    "ast_hash": "00fd341e7d7fbce4e9c2b14a2cd861aa",
-    "semantic_hash": "00fd341e7d7fbce4e9c2b14a2cd861aa"
+    "mtime": 1786343444.6952686,
+    "ast_hash": "9c4bbaa101e9d623645f7df0893b9be3",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\components\\ui\\tooltip.jsx": {
-    "mtime": 1778138735.1748161,
-    "ast_hash": "0e4e8301d3f1b4645d55b070597909b2",
-    "semantic_hash": "0e4e8301d3f1b4645d55b070597909b2"
+    "mtime": 1786343444.6992648,
+    "ast_hash": "605d9114abd5d9522e8456771fe6faa9",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\hooks\\use-toast.js": {
-    "mtime": 1778138735.1758184,
-    "ast_hash": "df175c0decacd63ca6c11a7449465d6b",
-    "semantic_hash": "df175c0decacd63ca6c11a7449465d6b"
+    "mtime": 1786343444.8048131,
+    "ast_hash": "be0a5b47e4e373d50fffca32c7c9e9d3",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\index.js": {
-    "mtime": 1778138735.1783412,
-    "ast_hash": "e78967d93dd135557181306e6eb42632",
-    "semantic_hash": "e78967d93dd135557181306e6eb42632"
+    "mtime": 1789381807.4608445,
+    "ast_hash": "ed0bfdb7a378e6f74949a2c6b1458e0c",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\lib\\api.js": {
-    "mtime": 1778138735.179344,
-    "ast_hash": "329db08c4f894b1574107c2d7ac50972",
-    "semantic_hash": "329db08c4f894b1574107c2d7ac50972"
+    "mtime": 1789381043.8131452,
+    "ast_hash": "c9b316f27cec4cd751963feddfffa28d",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\lib\\utils.js": {
-    "mtime": 1778138735.179344,
-    "ast_hash": "eff53006b93cfdef4aef148f202f1c3c",
-    "semantic_hash": "eff53006b93cfdef4aef148f202f1c3c"
+    "mtime": 1786343444.8148096,
+    "ast_hash": "515c78eb25dfd70eae587814ce0e0295",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\AdminDashboard.jsx": {
-    "mtime": 1778147702.887362,
-    "ast_hash": "8ed6968a1f3c6bbb64091d15baba089c",
-    "semantic_hash": "8ed6968a1f3c6bbb64091d15baba089c"
-  },
-  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard.jsx": {
-    "mtime": 1778138735.1813421,
-    "ast_hash": "c357dde1839d13a874e0429c599b1ae2",
-    "semantic_hash": "c357dde1839d13a874e0429c599b1ae2"
+    "mtime": 1789381097.285952,
+    "ast_hash": "23f59ad7fce3d4d973b6495103bbfb9d",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Events.jsx": {
-    "mtime": 1778138735.1823504,
-    "ast_hash": "af50f1e40afdd983dcc13163fd1e6f9c",
-    "semantic_hash": "af50f1e40afdd983dcc13163fd1e6f9c"
+    "mtime": 1789381128.9408948,
+    "ast_hash": "d22f2545125d71e0e6a0e2879721a474",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\FunWall.jsx": {
-    "mtime": 1778138735.1833415,
-    "ast_hash": "8d38e502cab18126d561a4bd2876f5d6",
-    "semantic_hash": "8d38e502cab18126d561a4bd2876f5d6"
+    "mtime": 1789381134.88557,
+    "ast_hash": "7c0969efb748bdeca51403cd1c29d553",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Games.jsx": {
-    "mtime": 1778138735.184341,
-    "ast_hash": "99c8142d6a0ce9cab1eb2ea916c2a45f",
-    "semantic_hash": "99c8142d6a0ce9cab1eb2ea916c2a45f"
+    "mtime": 1786343444.834837,
+    "ast_hash": "e8c3c188b4a106436b1cff4d51d1a076",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\HelpBoard.jsx": {
-    "mtime": 1778138735.1853445,
-    "ast_hash": "533314ed8ebfc521b490590e96cbbdf3",
-    "semantic_hash": "533314ed8ebfc521b490590e96cbbdf3"
+    "mtime": 1789381139.2094443,
+    "ast_hash": "45f533794a9a03a1ddeb5a285647858d",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Leaderboard.jsx": {
-    "mtime": 1778138735.186345,
-    "ast_hash": "09f92048dd5fc5f68eb12a403ffeda31",
-    "semantic_hash": "09f92048dd5fc5f68eb12a403ffeda31"
+    "mtime": 1789381129.7765408,
+    "ast_hash": "4fc58146e4fa0cf9e06ab1bd5c122a4d",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Learn.jsx": {
-    "mtime": 1778138735.186345,
-    "ast_hash": "efb5e2713e02d2cbbc6a40ec942f86d9",
-    "semantic_hash": "efb5e2713e02d2cbbc6a40ec942f86d9"
+    "mtime": 1787140058.0152678,
+    "ast_hash": "c7d4890c5764f0d9925fa4674809e231",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Login.jsx": {
-    "mtime": 1778138735.1878512,
-    "ast_hash": "e50e474b3576abdd2fe2b7e3e76abade",
-    "semantic_hash": "e50e474b3576abdd2fe2b7e3e76abade"
+    "mtime": 1786343444.845362,
+    "ast_hash": "cffdab627105e128e9f29baab327cc82",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Mood.jsx": {
-    "mtime": 1778138735.1878512,
-    "ast_hash": "ec946829a6c9090095eda2005379e1e7",
-    "semantic_hash": "ec946829a6c9090095eda2005379e1e7"
+    "mtime": 1789378238.808998,
+    "ast_hash": "81537c3fc0be53ecf2178e0b342f2cf2",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Music.jsx": {
-    "mtime": 1778138735.189427,
-    "ast_hash": "198f489ffa0d124df5e1218abf2f6859",
-    "semantic_hash": "198f489ffa0d124df5e1218abf2f6859"
+    "mtime": 1786343444.8543541,
+    "ast_hash": "516153b0eef9f0f76a5dadf083029576",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Polls.jsx": {
-    "mtime": 1778138735.1904452,
-    "ast_hash": "4f55ed6c4343473034343d56dc117211",
-    "semantic_hash": "4f55ed6c4343473034343d56dc117211"
+    "mtime": 1786343444.857353,
+    "ast_hash": "fa12a792aa751bb137a264bb8ec32fda",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Profile.jsx": {
-    "mtime": 1778138735.1914406,
-    "ast_hash": "5fdc50843a3fa068c9c7958cebfd4e36",
-    "semantic_hash": "5fdc50843a3fa068c9c7958cebfd4e36"
+    "mtime": 1789381192.8625188,
+    "ast_hash": "7f92fedd2c9ee62ed340584768b524a1",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Quiz.jsx": {
-    "mtime": 1778138735.1914406,
-    "ast_hash": "5db0b24ee0ce97796994c5afa740868b",
-    "semantic_hash": "5db0b24ee0ce97796994c5afa740868b"
+    "mtime": 1786343444.8633723,
+    "ast_hash": "b3467ac70126bd117ef1c100db350958",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Shoutouts.jsx": {
-    "mtime": 1778138735.1924388,
-    "ast_hash": "0a561123d61337b3b81430cc8162a207",
-    "semantic_hash": "0a561123d61337b3b81430cc8162a207"
+    "mtime": 1789381140.225592,
+    "ast_hash": "9317bd8754569c089b5154fba6a0c557",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Signup.jsx": {
-    "mtime": 1778138735.1924388,
-    "ast_hash": "5d7bb55979467ac91b45f4411ab56eba",
-    "semantic_hash": "5d7bb55979467ac91b45f4411ab56eba"
+    "mtime": 1789380574.3623445,
+    "ast_hash": "c28fb1ee92773434d158e235d03e132a",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\src\\store.js": {
-    "mtime": 1778138735.193441,
-    "ast_hash": "4ac15a08830fcc98f94edd290a609b90",
-    "semantic_hash": "4ac15a08830fcc98f94edd290a609b90"
+    "mtime": 1789378174.773513,
+    "ast_hash": "5874c3b5e36aed5ef71416f2e0dcb79f",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\tailwind.config.js": {
-    "mtime": 1778138735.193441,
-    "ast_hash": "20fc78bc270c43745e0282103bfd531f",
-    "semantic_hash": "20fc78bc270c43745e0282103bfd531f"
+    "mtime": 1786343444.8763535,
+    "ast_hash": "56e970529881bddeb760d8fd184c7827",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\test_reports\\iteration_1.json": {
     "mtime": 1778138735.1964436,
@@ -495,17 +485,17 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "C:\\Projects\\wellness-app\\.copilot\\skills\\graphify\\SKILL.md": {
-    "mtime": 1780925674.930269,
-    "ast_hash": "a0ebe13d2429257dcee57e06cf2d6ed5",
-    "semantic_hash": "a0ebe13d2429257dcee57e06cf2d6ed5"
+    "mtime": 1786343444.4501693,
+    "ast_hash": "81d3aa415bde5c7dd55d770d4f28d397",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\.emergent\\emergent.yml": {
-    "mtime": 1778138735.108105,
-    "ast_hash": "4c638b5471b1863d590f06e9af112ab1",
-    "semantic_hash": "4c638b5471b1863d590f06e9af112ab1"
+    "mtime": 1786343444.472173,
+    "ast_hash": "b2886e1a5b8e878e27f78d9840310cbd",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\.github\\copilot-instructions.md": {
-    "mtime": 1778147109.5891674,
+    "mtime": 1786107218.2845309,
     "ast_hash": "01b823db63a400a9875925786fe669d1",
     "semantic_hash": "01b823db63a400a9875925786fe669d1"
   },
@@ -515,9 +505,9 @@
     "semantic_hash": "df178fb244b72e66fae172c514ef36f5"
   },
   "C:\\Projects\\wellness-app\\backend\\requirements.txt": {
-    "mtime": 1778139416.5381005,
-    "ast_hash": "6d040649dc1aa815828e19aea500d93a",
-    "semantic_hash": "6d040649dc1aa815828e19aea500d93a"
+    "mtime": 1789380412.914032,
+    "ast_hash": "b073c1a49f859b231e05e7d19d53809c",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\frontend\\README.md": {
     "mtime": 1778138735.1232746,
@@ -525,18 +515,333 @@
     "semantic_hash": "47731d5d79e63873f27a86d4c4933a47"
   },
   "C:\\Projects\\wellness-app\\frontend\\public\\index.html": {
-    "mtime": 1778138735.1314852,
-    "ast_hash": "67f49f3eb552d0897b4ec2e6d659eab6",
-    "semantic_hash": "67f49f3eb552d0897b4ec2e6d659eab6"
+    "mtime": 1786343444.5021894,
+    "ast_hash": "3cfce5fec57f7601a72bfab12f3aed5b",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\memory\\PRD.md": {
-    "mtime": 1778138735.1954386,
-    "ast_hash": "df167273f288f7559b18a4bcee857925",
-    "semantic_hash": "df167273f288f7559b18a4bcee857925"
+    "mtime": 1789381995.1257071,
+    "ast_hash": "366b0feaf90927f3912a073ca26ea159",
+    "semantic_hash": ""
   },
   "C:\\Projects\\wellness-app\\test_result.md": {
     "mtime": 1778138735.2019787,
     "ast_hash": "260454560649db9093cc68db2c331e68",
     "semantic_hash": "260454560649db9093cc68db2c331e68"
+  },
+  "C:\\Projects\\wellness-app\\.claude\\launch.json": {
+    "mtime": 1786343444.4326286,
+    "ast_hash": "8edc7fc170cc7a0b36f81bf68c63f0c3",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\.claude\\settings.local.json": {
+    "mtime": 1786427115.3527126,
+    "ast_hash": "4eaa2c06d81e0259104389d1b46a5f86",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\.emergent\\cron\\dispatch_webhook.sh": {
+    "mtime": 1786343444.45717,
+    "ast_hash": "e8e3e99cd520575dc0f905135a9ad684",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\.emergent\\cron\\watch_crons.sh": {
+    "mtime": 1786343444.4601784,
+    "ast_hash": "19105239f77c4ed81d98f062bfd8d9b3",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\.emergent\\cron\\webhook_crond.sh": {
+    "mtime": 1786343444.468169,
+    "ast_hash": "8f6abec4e3f213d94357d28391254a40",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\backend\\tests\\test_chunk5.py": {
+    "mtime": 1789380130.8822548,
+    "ast_hash": "b4584c47bfaf154f9f60728697cfe67b",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\backend\\tests\\test_music.py": {
+    "mtime": 1786343444.4891918,
+    "ast_hash": "ecdc0776cba085dae88892948ba83bf3",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\backend\\tests\\test_music_v2.py": {
+    "mtime": 1786343444.49217,
+    "ast_hash": "cba9a5105c73fa3b81b18007914f940e",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\backend\\tests\\test_wellness.py": {
+    "mtime": 1789380025.0879195,
+    "ast_hash": "d6d86ea23182357db74298785bd74b78",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\components\\CompanionMascot.jsx": {
+    "mtime": 1786343444.5151715,
+    "ast_hash": "793bd3281cb1aa4becf0b51c9bb1d199",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\components\\HandDrawn.jsx": {
+    "mtime": 1786343444.5251694,
+    "ast_hash": "a704569d165e688c625b744327923541",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\components\\MusicPlayer.jsx": {
+    "mtime": 1786343444.5321846,
+    "ast_hash": "4b5a6c30391af5d61d92bfdcceeba922",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\GameLauncher.jsx": {
+    "mtime": 1786343444.7082613,
+    "ast_hash": "6ad34199cc5968e0c355bcf139af61ee",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\config\\constants.ts": {
+    "mtime": 1786343444.7132719,
+    "ast_hash": "cd4b7ca294569a1de977e02499f0fa40",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\entities\\Player.ts": {
+    "mtime": 1786343444.7202644,
+    "ast_hash": "e8958661c14a58751ca6f32ea7442191",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\index.ts": {
+    "mtime": 1786343444.7242668,
+    "ast_hash": "65969accbe698611cfee355b6655f53f",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\levels\\index.ts": {
+    "mtime": 1786343444.7312837,
+    "ast_hash": "9c11adf538358f95e253ef685f3f0990",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\levels\\types.ts": {
+    "mtime": 1786343444.7352867,
+    "ast_hash": "2ec4ef15c0b100a37c1e7d32f9d5645f",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\scenes\\BootScene.ts": {
+    "mtime": 1786343444.7412837,
+    "ast_hash": "26e01b87a9459a4950ad0547a0f609ea",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\scenes\\GameScene.ts": {
+    "mtime": 1786343444.747811,
+    "ast_hash": "940872576847c4b937511f1243440f72",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\scenes\\HudScene.ts": {
+    "mtime": 1786343444.7538097,
+    "ast_hash": "469cf298621b55d435523679d82424a8",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\scenes\\LevelSelectScene.ts": {
+    "mtime": 1786343444.7598076,
+    "ast_hash": "f3f070bf383ae459523aedd5be55d195",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\AudioSystem.ts": {
+    "mtime": 1786343444.7668066,
+    "ast_hash": "45c3d145cb1c8d961e8cdc1017b0bc4c",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\InputSystem.ts": {
+    "mtime": 1786343444.7728043,
+    "ast_hash": "8c47797d251f64d89481d694ae6a5d33",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\LevelBuilder.ts": {
+    "mtime": 1786343444.7808046,
+    "ast_hash": "7250c802a16e0f102e32fd74cbf83b1b",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\SaveManager.ts": {
+    "mtime": 1786343444.7878127,
+    "ast_hash": "e4ec6238f6a16c4ee81b693cbc49fc8d",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\TextureFactory.ts": {
+    "mtime": 1786343444.7928088,
+    "ast_hash": "ed7b56c764e3af36b5526b3c99143d00",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\TrapSystem.ts": {
+    "mtime": 1786343444.7978077,
+    "ast_hash": "cb9c5fdecab799be92208e29c0e85312",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\games\\platformer\\systems\\context.ts": {
+    "mtime": 1786343444.7998047,
+    "ast_hash": "ceb99fad03092e340604681a29522cf8",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\notifications\\notificationScheduler.js": {
+    "mtime": 1787140057.9627397,
+    "ast_hash": "179a3612d7121ca080660bffabc95f72",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\notifications\\notificationService.js": {
+    "mtime": 1787140057.9637394,
+    "ast_hash": "ea022a120391d5010b5840d273524482",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\Dashboard.jsx": {
+    "mtime": 1789378238.7984529,
+    "ast_hash": "95c3f92e87d2300d59e9296e50efbe59",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\ActionCards.jsx": {
+    "mtime": 1787140057.969762,
+    "ast_hash": "e6505d9b9a25f09ba2ab5fa2c6441994",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\BreathingCard.jsx": {
+    "mtime": 1789378238.800632,
+    "ast_hash": "14a04f777bab4cb07d1c3b293163355e",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\EyeBreakCard.jsx": {
+    "mtime": 1789378174.7376714,
+    "ast_hash": "b87d427b0e246d40bd5454956af26ecd",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\MoveResetCard.jsx": {
+    "mtime": 1789378238.8015938,
+    "ast_hash": "a0de616bd204dddd9e2a5ba5b9413774",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\WaterCard.jsx": {
+    "mtime": 1789378174.747784,
+    "ast_hash": "b5695aece03e4333bc1a6788b18575df",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\GameTeams.jsx": {
+    "mtime": 1789381130.872275,
+    "ast_hash": "a33905e6e21d8f492b3ba473b544cbbc",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\General\\AppearanceSettings.jsx": {
+    "mtime": 1789381681.3721306,
+    "ast_hash": "dbf24b5e042fa98e54168a1140eb1743",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\General\\NotificationsSettings.jsx": {
+    "mtime": 1789381745.1685226,
+    "ast_hash": "76291a80726f3b546d5c719a8b42c942",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\Settings.jsx": {
+    "mtime": 1789378238.813998,
+    "ast_hash": "1f9e96c0a62ba0ff8deb8b18fa96a84c",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\Wellness\\BreathingSettings.jsx": {
+    "mtime": 1789381603.7796545,
+    "ast_hash": "5c48836f392c6a88e0f1c7fecee66008",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\Wellness\\EyeCareSettings.jsx": {
+    "mtime": 1789381564.3148413,
+    "ast_hash": "d01158260f380af5a8e18932d27b0d14",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\Wellness\\MoveResetSettings.jsx": {
+    "mtime": 1789381584.990292,
+    "ast_hash": "4276bc2098defcdc502ea84e91765929",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Settings\\Wellness\\WaterSettings.jsx": {
+    "mtime": 1789381548.140437,
+    "ast_hash": "1e37ffabee66e05bd35a07202b8fa631",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\tsconfig.json": {
+    "mtime": 1787140058.0392914,
+    "ast_hash": "6cf67654e80961d1405dd42475ba25b3",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\test_reports\\iteration_5.json": {
+    "mtime": 1783667671.5616646,
+    "ast_hash": "addff689a487f3754ec283c79935c05d",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\test_reports\\iteration_6.json": {
+    "mtime": 1786343444.9428928,
+    "ast_hash": "b2d012b1797086a2f121f2be49f779b5",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\test_reports\\iteration_7.json": {
+    "mtime": 1786343444.9449046,
+    "ast_hash": "5814b5b948881971767200d85ed3d6de",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\test_reports\\iteration_8.json": {
+    "mtime": 1786343444.9479177,
+    "ast_hash": "047ceb4539505069b36286fee8ba893b",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\test_reports\\iteration_9.json": {
+    "mtime": 1786343444.9509194,
+    "ast_hash": "aee603f273baf5d096c35cdc354f4843",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\.emergent\\system_deps.txt": {
+    "mtime": 1786343444.4741693,
+    "ast_hash": "724fa7b624378ab823f4a0bc4d94b775",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\backend\\API_WELLNESS.md": {
+    "mtime": 1789381978.9494946,
+    "ast_hash": "c4f27ef6494a91c63a9ece13d1711d35",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\assets\\finger-exercise.png": {
+    "mtime": 1787140057.991272,
+    "ast_hash": "d45170570570fc9e87cb6f70ef5851cb",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\assets\\hand-stretch.png": {
+    "mtime": 1787140057.9962778,
+    "ast_hash": "eac18f5a4a1ce11130cfd04ecbcee615",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\assets\\neck-stretch.png": {
+    "mtime": 1787140058.0002844,
+    "ast_hash": "69428c4ef0e8dc81f2876da8608b2d2d",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\assets\\shoulder-rolling.png": {
+    "mtime": 1787140058.0042846,
+    "ast_hash": "ca185e996ba4d50ffe7d2f8daeeb2b0b",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Dashboard\\components\\assets\\walking.png": {
+    "mtime": 1787140058.0082748,
+    "ast_hash": "0a817e3979ce6cd6c7995ce6bdf4b442",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\public\\Sounds\\water-gulp.mp3": {
+    "mtime": 1787140057.9547422,
+    "ast_hash": "45e3a48bd3f5826a19a7fd6284113684",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\public\\service-worker.js": {
+    "mtime": 1789381704.9580336,
+    "ast_hash": "9746563b02129246d9989495abef5619",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\notifications\\pushService.js": {
+    "mtime": 1789381713.3886292,
+    "ast_hash": "406a2f20ca2f04f97dace2c4a591b35c",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\AcceptInvite.jsx": {
+    "mtime": 1789380588.3326735,
+    "ast_hash": "629c69e7f157728bd69df507cc9103bd",
+    "semantic_hash": ""
+  },
+  "C:\\Projects\\wellness-app\\frontend\\src\\pages\\Me.jsx": {
+    "mtime": 1789381020.2103374,
+    "ast_hash": "cc9b72c53dd6816e4403fd71dfb08a04",
+    "semantic_hash": ""
   }
 }
