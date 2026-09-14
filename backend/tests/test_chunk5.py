@@ -92,7 +92,7 @@ class TestPointsAward:
         uid = emp_session.user["id"]
         # current points
         r0 = admin_session.get(f"{API}/auth/me")
-        before = requests.get(f"{API}/leaderboard").json()
+        before = admin_session.get(f"{API}/leaderboard").json()
         before_pts = next((u["points"] for u in before if u["id"] == uid), 0)
 
         payload = {"user_id": uid, "points": 25, "reason": "TEST_award_user"}
@@ -103,7 +103,7 @@ class TestPointsAward:
         assert data["reason"] == "TEST_award_user"
 
         # Verify points incremented
-        after = requests.get(f"{API}/leaderboard").json()
+        after = admin_session.get(f"{API}/leaderboard").json()
         after_pts = next((u["points"] for u in after if u["id"] == uid), 0)
         assert after_pts >= before_pts + 25
 

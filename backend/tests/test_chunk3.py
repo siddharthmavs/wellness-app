@@ -143,13 +143,13 @@ class TestPolls:
 
 # -------- Events --------
 class TestEvents:
-    def test_list(self):
-        r = requests.get(f"{API}/events", timeout=15)
+    def test_list(self, alex_auth):
+        r = requests.get(f"{API}/events", headers=alex_auth["headers"], timeout=15)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
-    def test_today(self):
-        r = requests.get(f"{API}/events/today", timeout=15)
+    def test_today(self, alex_auth):
+        r = requests.get(f"{API}/events/today", headers=alex_auth["headers"], timeout=15)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 

@@ -342,11 +342,13 @@ async def my_activities(user=Depends(get_current_user)):
     items = await db.activities.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
     return items
 
-# ---------- Leaderboard ----------
+# ---------- Leaderboard / Journey ----------
 @api.get("/leaderboard")
-async def leaderboard(period: str = "all"):
+async def leaderboard(period: str = "all", user=Depends(get_current_user)):
+    """Doc section 5 — Journey is the ORGANIZATION's leaderboard, scoped to the caller's org."""
+    org_id = user.get("org_id")
     # period: daily, weekly, monthly, all
-    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("points", -1).to_list(50)
+    users = await db.users.find({"org_id": org_id}, {"_id": 0, "password": 0}).sort("points", -1).to_list(50)
     if period == "all":
         return users
     # recalc based on activities window
@@ -354,8 +356,9 @@ async def leaderboard(period: str = "all"):
     windows = {"daily": 1, "weekly": 7, "monthly": 30}
     days = windows.get(period, 7)
     since = (now - timedelta(days=days)).isoformat()
+    org_user_ids = [u["id"] for u in users]
     pipeline = [
-        {"$match": {"created_at": {"$gte": since}}},
+        {"$match": {"created_at": {"$gte": since}, "user_id": {"$in": org_user_ids}}},
         {"$group": {"_id": "$user_id", "points": {"$sum": "$points"}}},
         {"$sort": {"points": -1}},
         {"$limit": 50},
@@ -363,7 +366,7 @@ async def leaderboard(period: str = "all"):
     agg = await db.activities.aggregate(pipeline).to_list(50)
     result = []
     for row in agg:
-        u = await db.users.find_one({"id": row["_id"]}, {"_id": 0, "password": 0})
+        u = await db.users.find_one({"id": row["_id"], "org_id": org_id}, {"_id": 0, "password": 0})
         if u:
             u["points"] = row["points"]
             result.append(u)
@@ -726,14 +729,29 @@ async def react_post(post_id: str, body: ReactReq, user=Depends(get_current_user
     await db.posts.update_one({"id": post_id}, {"$set": {"reactions": reactions}})
     return {"reactions": reactions}
 
-# ---------- User profile updates (DND, bio) ----------
+# ---------- User profile updates (doc section 2) ----------
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 class UserPatch(BaseModel):
     dnd: Optional[bool] = None
     bio: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    job_title: Optional[str] = None
+    department: Optional[str] = None
+    birthday: Optional[str] = None            # YYYY-MM-DD
+    work_anniversary: Optional[str] = None    # YYYY-MM-DD
 
 @api.patch("/users/me")
 async def update_me(body: UserPatch, user=Depends(get_current_user)):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    for field in ("birthday", "work_anniversary"):
+        if field in updates and not DATE_RE.match(updates[field]):
+            raise HTTPException(400, f"{field} must be YYYY-MM-DD")
+    if "first_name" in updates or "last_name" in updates:
+        first = updates.get("first_name", user.get("first_name", ""))
+        last = updates.get("last_name", user.get("last_name", ""))
+        updates["name"] = f"{first} {last}".strip() or user.get("name")
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
@@ -921,10 +939,11 @@ async def list_feedback(admin=Depends(require_admin)):
     items = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
-# ---------- Team leaderboard ----------
+# ---------- Team leaderboard (Journey — Teams mode, doc section 5) ----------
 @api.get("/leaderboard/teams")
-async def team_leaderboard():
+async def team_leaderboard(user=Depends(get_current_user)):
     pipeline = [
+        {"$match": {"org_id": user.get("org_id")}},
         {"$group": {"_id": "$department", "points": {"$sum": "$points"}, "members": {"$sum": 1}, "avg_score": {"$avg": "$wellness_score"}}},
         {"$sort": {"points": -1}},
     ]
@@ -1346,7 +1365,7 @@ async def vote_poll(pid: str, body: dict, user=Depends(get_current_user)):
     await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 2}})
     return {"options": options}
 
-# ---------- Events (birthdays/anniversaries) ----------
+# ---------- Events (birthdays/anniversaries, doc section 7) ----------
 class EventCreate(BaseModel):
     type: str  # birthday | anniversary
     user_id: str
@@ -1355,35 +1374,65 @@ class EventCreate(BaseModel):
 
 @api.post("/events")
 async def create_event(body: EventCreate, admin=Depends(require_admin)):
-    ev = {"id": str(uuid.uuid4()), **body.model_dump(), "created_at": now_iso()}
+    target = await db.users.find_one({"id": body.user_id, "org_id": admin.get("org_id")}, {"_id": 0, "id": 1})
+    if not target:
+        raise HTTPException(404, "User not found in your organization")
+    ev = {"id": str(uuid.uuid4()), "org_id": admin.get("org_id"), **body.model_dump(), "created_at": now_iso()}
     await db.events.insert_one(ev)
     ev.pop("_id", None)
     return ev
 
-@api.get("/events")
-async def list_events():
-    items = await db.events.find({}, {"_id": 0}).to_list(500)
-    # Resolve user names
+def _synth_profile_events(users: List[dict]) -> List[dict]:
+    """Events should reflect profile info directly — a birthday/work-anniversary field
+    saved on a profile shows up here with no separate admin step (doc section 7)."""
+    this_year = datetime.now(timezone.utc).year
+    out = []
+    for u in users:
+        if u.get("birthday"):
+            out.append({
+                "id": f"birthday:{u['id']}", "type": "birthday", "user_id": u["id"],
+                "date": u["birthday"], "note": "", "user_name": u.get("name"),
+                "user_avatar": u.get("avatar"), "department": u.get("department"),
+            })
+        if u.get("work_anniversary"):
+            years = None
+            try:
+                years = this_year - int(u["work_anniversary"][:4])
+            except Exception:
+                pass
+            out.append({
+                "id": f"anniversary:{u['id']}", "type": "anniversary", "user_id": u["id"],
+                "date": u["work_anniversary"], "note": "", "user_name": u.get("name"),
+                "user_avatar": u.get("avatar"), "department": u.get("department"),
+                "years_completed": years,
+            })
+    return out
+
+async def _org_events(org_id: str) -> List[dict]:
+    items = await db.events.find({"org_id": org_id}, {"_id": 0}).to_list(500)
     for e in items:
-        u = await db.users.find_one({"id": e["user_id"]}, {"_id": 0, "name": 1, "avatar": 1, "department": 1})
+        u = await db.users.find_one({"id": e["user_id"], "org_id": org_id}, {"_id": 0, "name": 1, "avatar": 1, "department": 1})
         if u:
             e["user_name"] = u.get("name")
             e["user_avatar"] = u.get("avatar")
             e["department"] = u.get("department")
+    manual_keys = {(e["user_id"], e["type"]) for e in items}
+    org_users = await db.users.find({"org_id": org_id}, {"_id": 0}).to_list(500)
+    for s in _synth_profile_events(org_users):
+        if (s["user_id"], s["type"]) not in manual_keys:
+            items.append(s)
     return items
 
+@api.get("/events")
+async def list_events(user=Depends(get_current_user)):
+    return await _org_events(user.get("org_id"))
+
 @api.get("/events/today")
-async def events_today():
+async def events_today(user=Depends(get_current_user)):
     today = datetime.now(timezone.utc).date()
     md = today.strftime("%m-%d")
-    items = await db.events.find({}, {"_id": 0}).to_list(500)
-    out = []
-    for e in items:
-        if e.get("date", "")[5:10] == md:
-            u = await db.users.find_one({"id": e["user_id"]}, {"_id": 0, "name": 1, "avatar": 1, "department": 1})
-            if u:
-                out.append({**e, "user_name": u["name"], "user_avatar": u["avatar"], "department": u.get("department")})
-    return out
+    items = await _org_events(user.get("org_id"))
+    return [e for e in items if e.get("date", "")[5:10] == md]
 
 # ---------- Did You Know? (daily fact) ----------
 FACTS_BANK = [
@@ -2230,6 +2279,34 @@ def _get_object(path: str):
 
 from fastapi import UploadFile, File, Form, Query
 from fastapi.responses import Response
+
+# ---------- Profile picture upload (doc section 2) ----------
+@api.post("/users/me/avatar")
+async def upload_avatar(file: UploadFile = File(...), user=Depends(get_current_user)):
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Max 5MB")
+    ct = file.content_type or ""
+    if not ct.startswith("image/"):
+        raise HTTPException(400, "Image files only")
+    ext = (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png").lower()
+    fname = f"{uuid.uuid4()}.{ext}"
+    path = f"{APP_NAME}/avatars/{user['id']}/{fname}"
+    try:
+        _put_object(path, data, ct)
+    except Exception as e:
+        raise HTTPException(500, f"Upload failed: {e}")
+    avatar_url = f"/api/avatars/{user['id']}/{fname}"
+    await db.users.update_one({"id": user["id"]}, {"$set": {"avatar": avatar_url}})
+    return {"avatar": avatar_url}
+
+@api.get("/avatars/{uid}/{fname}")
+async def get_avatar(uid: str, fname: str):
+    try:
+        data, ct = _get_object(f"{APP_NAME}/avatars/{uid}/{fname}")
+    except Exception:
+        raise HTTPException(404, "Avatar not found")
+    return Response(content=data, media_type=ct)
 
 @api.post("/music/upload")
 async def music_upload(file: UploadFile = File(...), title: str = Form(None), artist: str = Form("Unknown"), user=Depends(get_current_user)):
@@ -4074,11 +4151,13 @@ async def on_startup():
         await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "employee", "dnd": False}})
         await db.users.update_many({"coins": {"$exists": False}}, {"$set": {"coins": 0}})
         await db.users.update_many({"status": {"$exists": False}}, {"$set": {"status": "active"}})
-        # Backfill org_id on any pre-existing users into a shared "Demo Organization"
-        if await db.users.count_documents({"org_id": {"$exists": False}}) > 0:
+        # Backfill org_id on any pre-existing users/events into a shared "Demo Organization"
+        if await db.users.count_documents({"org_id": {"$exists": False}}) > 0 \
+                or await db.events.count_documents({"org_id": {"$exists": False}}) > 0:
             default_org_id = await get_or_create_default_org()
             await db.users.update_many({"org_id": {"$exists": False}}, {"$set": {"org_id": default_org_id}})
-            logger.info("Backfilled org_id on pre-existing users into the Demo Organization")
+            await db.events.update_many({"org_id": {"$exists": False}}, {"$set": {"org_id": default_org_id}})
+            logger.info("Backfilled org_id on pre-existing users/events into the Demo Organization")
         # Backfill work_anniversary from created_at, and split name into first/last, where unset
         async for u in db.users.find(
             {"$or": [{"work_anniversary": {"$exists": False}}, {"first_name": {"$exists": False}}]},
@@ -4101,22 +4180,15 @@ async def on_startup():
             logger.info("Auto-seeded demo data from empty DB")
         else:
             logger.info("Ensured demo users present")
-        # Seed sample events (birthdays/anniversaries) for demo users
-        if await db.events.count_documents({}) == 0:
-            today = datetime.now(timezone.utc).date()
-            users = await db.users.find({"email": {"$regex": "@demo.com$"}}, {"_id": 0, "id": 1}).to_list(20)
-            for i, u in enumerate(users):
-                ev_type = "birthday" if i % 2 == 0 else "anniversary"
-                d = today + timedelta(days=i % 7)
-                await db.events.insert_one({
-                    "id": str(uuid.uuid4()),
-                    "type": ev_type,
-                    "user_id": u["id"],
-                    "date": d.isoformat(),
-                    "note": "",
-                    "created_at": now_iso(),
-                })
-            logger.info("Seeded sample birthday/anniversary events")
+        # Events are profile-driven now (doc section 7) — give a few demo users a sample
+        # birthday so the Events page has something to show out of the box.
+        today = datetime.now(timezone.utc).date()
+        demo_birthday_users = await db.users.find(
+            {"email": {"$regex": "@demo.com$"}, "birthday": {"$in": [None, ""]}}, {"_id": 0, "id": 1}
+        ).to_list(20)
+        for i, u in enumerate(demo_birthday_users[:4]):
+            d = today + timedelta(days=(i * 2) % 7)
+            await db.users.update_one({"id": u["id"]}, {"$set": {"birthday": d.isoformat()}})
     except Exception as e:
         logger.exception(f"Startup migration failed: {e}")
 

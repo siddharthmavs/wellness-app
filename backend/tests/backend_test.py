@@ -103,8 +103,8 @@ class TestActivities:
 # --- Leaderboard ---
 class TestLeaderboard:
     @pytest.mark.parametrize("period", ["all", "daily", "weekly", "monthly"])
-    def test_leaderboard(self, session, period):
-        r = session.get(f"{API}/leaderboard", params={"period": period})
+    def test_leaderboard(self, session, auth_headers, period):
+        r = session.get(f"{API}/leaderboard", params={"period": period}, headers=auth_headers)
         assert r.status_code == 200, r.text
         data = r.json()
         assert isinstance(data, list)
@@ -192,8 +192,8 @@ class TestAI:
 
 # --- Seed ---
 class TestSeed:
-    def test_demo_users_exist(self, session):
-        r = session.get(f"{API}/leaderboard?period=all")
+    def test_demo_users_exist(self, session, auth_headers):
+        r = session.get(f"{API}/leaderboard?period=all", headers=auth_headers)
         assert r.status_code == 200
         emails = [u["email"] for u in r.json()]
         for e in ["alex@demo.com", "jamie@demo.com", "sam@demo.com", "riley@demo.com", "casey@demo.com"]:

@@ -301,8 +301,8 @@ class TestHelpBoard:
 
 # ---------- Team Leaderboard ----------
 class TestTeamLB:
-    def test_team_leaderboard(self, session):
-        r = session.get(f"{API}/leaderboard/teams")
+    def test_team_leaderboard(self, session, emp_headers):
+        r = session.get(f"{API}/leaderboard/teams", headers=emp_headers)
         assert r.status_code == 200
         rows = r.json()
         assert isinstance(rows, list) and len(rows) >= 1
