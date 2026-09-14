@@ -53,7 +53,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
     }
 
     try {
-      new Notification("👀 Time for an eye break!", {
+      new Notification("Time for an eye break!", {
         body: "Look at something about 20 feet away for 20 seconds.",
         icon: "/logo192.png",
         tag: "eye-break",
@@ -113,9 +113,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
   /*
    * =========================================================
    * GLOBAL TIMER LOOP
-   *
-   * Timer state comes from Zustand, so the timer itself
-   * continues independently of this component's rendering.
    * =========================================================
    */
 
@@ -124,9 +121,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
       return;
     }
 
-    /*
-     * If there is no end time, create one.
-     */
     if (!endTime) {
       setTimerState({
         endTime: Date.now() + secs * 1000,
@@ -146,10 +140,12 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
       /*
        * TIMER FINISHED
        */
+
       if (remaining <= 0) {
         /*
          * READY → WORK
          */
+
         if (phaseRef.current === "ready") {
           setTimerState({
             phase: "work",
@@ -165,6 +161,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
         /*
          * WORK → BREAK
          */
+
         if (phaseRef.current === "work") {
           setShowBreakPopup(true);
 
@@ -184,6 +181,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
         /*
          * BREAK → WORK
          */
+
         if (phaseRef.current === "break") {
           setShowBreakPopup(false);
 
@@ -206,11 +204,10 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
       /*
        * TIMER STILL RUNNING
        */
-      else {
-        setTimerState({
-          secs: remaining,
-        });
-      }
+
+      setTimerState({
+        secs: remaining,
+      });
     }, 250);
 
     return () => {
@@ -233,9 +230,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
 
   const toggleRunning = () => {
     if (running) {
-      /*
-       * Pause timer.
-       */
       setTimerState({
         running: false,
         endTime: null,
@@ -244,9 +238,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
       return;
     }
 
-    /*
-     * Resume timer.
-     */
     setTimerState({
       running: true,
       endTime:
@@ -321,9 +312,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
   /*
    * =========================================================
    * PORTAL CONTENT
-   *
-   * Rendering overlays into document.body prevents them
-   * from being trapped underneath ActionCards' z-index.
    * =========================================================
    */
 
@@ -485,8 +473,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
                 shadow-[10px_10px_0px_#000]
               "
             >
-              {/* EYE ICON */}
-
               <motion.div
                 animate={{
                   scale: [1, 1.1, 1],
@@ -512,8 +498,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
                 <Eye className="w-10 h-10" />
               </motion.div>
 
-              {/* TITLE */}
-
               <h2
                 className="
                   font-display
@@ -529,8 +513,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
                 Eye Break!
               </h2>
 
-              {/* DESCRIPTION */}
-
               <p
                 className="
                   font-bold
@@ -544,8 +526,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
                 away and relax your eyes for
                 20 seconds.
               </p>
-
-              {/* STATUS */}
 
               <div
                 className="
@@ -569,8 +549,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
 
                 Break started automatically
               </div>
-
-              {/* CLOSE */}
 
               <button
                 onClick={() =>
@@ -631,18 +609,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
       >
         {/* DECORATIVE CIRCLES */}
 
-        <div
-          className="
-            absolute
-            -right-16
-            -top-16
-            w-40
-            h-40
-            rounded-full
-            border-[4px]
-            border-black/10
-          "
-        />
 
         <div
           className="
@@ -782,31 +748,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
             "
             viewBox="0 0 176 176"
           >
-            {/* OUTER DECORATION */}
-
-            <motion.circle
-              cx="88"
-              cy="88"
-              r="76"
-              fill="none"
-              stroke="black"
-              strokeWidth="2"
-              strokeDasharray="4 7"
-              className="opacity-15"
-              animate={{
-                rotate: 360,
-              }}
-              transition={{
-                duration: 12,
-                repeat: Infinity,
-                ease: "linear",
-              }}
-              style={{
-                transformOrigin:
-                  "88px 88px",
-              }}
-            />
-
             {/* BACKGROUND RING */}
 
             <circle
@@ -859,16 +800,10 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
               text-center
             "
           >
-            <motion.div
-              key={displayTime}
-              initial={{
-                opacity: 0.5,
-                scale: 0.96,
-              }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-              }}
+            {/* No key / mount animation here.
+                This prevents the timer from flickering. */}
+
+            <div
               className="
                 font-display
                 font-black
@@ -879,7 +814,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
               "
             >
               {displayTime}
-            </motion.div>
+            </div>
 
             <span
               className="
@@ -1055,12 +990,6 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
 
       {/* =====================================================
           PORTAL
-          
-          This is the important fix.
-
-          Both overlays are rendered directly into document.body
-          instead of remaining inside the Dashboard's z-index
-          hierarchy.
       ===================================================== */}
 
       {typeof document !== "undefined" &&

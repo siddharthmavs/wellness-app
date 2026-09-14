@@ -1,8 +1,8 @@
+
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
 import {
-  BrutalButton,
   BrutalBadge,
 } from "../../components/brutal";
 
@@ -16,27 +16,24 @@ import {
 } from "../../components/DashboardCards";
 
 import { CompanionMascot } from "../../components/CompanionMascot";
-import {
-  IconLeaf,
-  IconSparkle,
-} from "../../components/HandDrawn";
 
 import { useAuthStore } from "../../store";
 import { api } from "../../lib/api";
 import { toast } from "sonner";
 
-import {
-  Sparkles,
-  Cloud,
-} from "lucide-react";
-
 import ActionCards from "./components/ActionCards";
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
 
 export default function Dashboard() {
   const { user, setUser } = useAuthStore();
 
   const [challenges, setChallenges] = useState([]);
+
   const [aiLoading, setAiLoading] = useState(false);
+
   const [insight, setInsight] = useState("");
 
   /* =========================================================
@@ -45,11 +42,14 @@ export default function Dashboard() {
 
   const loadChallenges = async () => {
     try {
-      const { data } =
-        await api.get("/challenges");
+      const { data } = await api.get(
+        "/challenges"
+      );
 
       setChallenges(
-        Array.isArray(data) ? data : []
+        Array.isArray(data)
+          ? data
+          : []
       );
     } catch (error) {
       console.error(
@@ -74,9 +74,12 @@ export default function Dashboard() {
   const doAction = async (type) => {
     try {
       const { data } =
-        await api.post("/activities", {
-          type,
-        });
+        await api.post(
+          "/activities",
+          {
+            type,
+          }
+        );
 
       setUser({
         ...user,
@@ -109,7 +112,8 @@ export default function Dashboard() {
   ========================================================= */
 
   const handleWaterReward = (xp) => {
-    const numericXP = Number(xp) || 0;
+    const numericXP =
+      Number(xp) || 0;
 
     if (numericXP <= 0) {
       return;
@@ -168,141 +172,39 @@ export default function Dashboard() {
   ========================================================= */
 
   return (
-    <main className="relative min-h-screen">
+    <main className="dashboard-page">
+
+      {/* =================================================
+          DASHBOARD CONTENT
+      ================================================= */}
+
       <div
         className="
+          dashboard-container
           max-w-7xl
           mx-auto
           px-4
           md:px-6
           py-8
-          relative
-          leaf-bg
         "
       >
-        {/* =====================================================
-            BACKGROUND DECORATIONS
 
-            These stay behind dashboard content.
-        ===================================================== */}
-
-        <div
-          className="
-            fixed
-            top-28
-            left-[3%]
-            opacity-20
-            floaty-1
-            pointer-events-none
-            z-0
-            hidden
-            xl:block
-            text-cozy-muted
-          "
-          aria-hidden="true"
-        >
-          <Cloud size={68} />
-        </div>
-
-        <div
-          className="
-            fixed
-            top-40
-            right-[6%]
-            opacity-25
-            floaty-2
-            pointer-events-none
-            z-0
-            hidden
-            lg:block
-          "
-          aria-hidden="true"
-        >
-          <IconSparkle size={48} />
-        </div>
-
-        <div
-          className="
-            fixed
-            top-[55%]
-            left-[2%]
-            opacity-25
-            floaty-3
-            pointer-events-none
-            z-0
-            hidden
-            lg:block
-          "
-          aria-hidden="true"
-        >
-          <IconLeaf size={60} />
-        </div>
-
-        <div
-          className="
-            fixed
-            top-[45%]
-            right-[3%]
-            opacity-20
-            floaty-1
-            pointer-events-none
-            z-0
-            hidden
-            xl:block
-            text-cozy-muted
-          "
-          aria-hidden="true"
-        >
-          <Cloud size={80} />
-        </div>
-
-        <div
-          className="
-            fixed
-            bottom-32
-            left-[5%]
-            opacity-25
-            floaty-2
-            pointer-events-none
-            z-0
-            hidden
-            lg:block
-          "
-          aria-hidden="true"
-        >
-          <IconSparkle size={56} />
-        </div>
-
-        <div
-          className="
-            fixed
-            bottom-16
-            right-[8%]
-            opacity-25
-            floaty-3
-            pointer-events-none
-            z-0
-            hidden
-            lg:block
-          "
-          aria-hidden="true"
-        >
-          <IconLeaf size={64} />
-        </div>
-
-        {/* =====================================================
-            ALL NORMAL DASHBOARD CONTENT
-            z-10
-
-            This is intentionally below ActionCards.
-        ===================================================== */}
+        {/* =================================================
+            HERO ROW
+        ================================================= */}
 
         <section className="relative z-10">
-          {/* ===================================================
-              HERO ROW
-          =================================================== */}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div
+            className="
+              grid
+              grid-cols-1
+              md:grid-cols-3
+              gap-6
+              mb-8
+            "
+          >
+
             {/* HERO CARD */}
 
             <motion.div
@@ -330,9 +232,15 @@ export default function Dashboard() {
               }}
               data-testid="hero-card"
             >
+
               <div className="relative z-10 max-w-md">
+
                 <div
-                  className="text-sm font-semibold mb-2"
+                  className="
+                    text-sm
+                    font-semibold
+                    mb-2
+                  "
                   style={{
                     color:
                       "var(--cozy-text)",
@@ -358,29 +266,26 @@ export default function Dashboard() {
                     leading-tight
                     mb-4
                   "
-                  style={{
-                    color:
-                      "var(--cozy-text)",
-                  }}
                 >
                   A calm start makes
                   a strong day.
                 </h1>
 
-                <p
-                  className="font-hand text-lg"
-                  style={{
-                    color:
-                      "var(--cozy-text)",
-                    opacity: 0.8,
-                  }}
-                >
+                <p className="font-hand text-lg">
                   your daily ritual,
                   one small step at a
                   time
                 </p>
 
-                <div className="flex gap-2 mt-5 flex-wrap">
+                <div
+                  className="
+                    flex
+                    gap-2
+                    mt-5
+                    flex-wrap
+                  "
+                >
+
                   <span
                     className="
                       px-3
@@ -389,10 +294,6 @@ export default function Dashboard() {
                       text-xs
                       font-semibold
                     "
-                    style={{
-                      background:
-                        "rgba(255,255,255,0.5)",
-                    }}
                   >
                     {user?.streak || 0}{" "}
                     day streak
@@ -406,13 +307,8 @@ export default function Dashboard() {
                       text-xs
                       font-semibold
                     "
-                    style={{
-                      background:
-                        "rgba(255,255,255,0.5)",
-                    }}
                   >
-                    {user?.points || 0}{" "}
-                    pts
+                    {user?.points || 0} pts
                   </span>
 
                   <span
@@ -422,16 +318,14 @@ export default function Dashboard() {
                       rounded-full
                       text-xs
                       font-semibold
-                    "
-                    style={{
-                      background:
-                        "rgba(255,255,255,0.5)",
-                    }}
+                  "
                   >
                     Level{" "}
                     {user?.level || 1}
                   </span>
+
                 </div>
+
               </div>
 
               <div
@@ -457,6 +351,7 @@ export default function Dashboard() {
                   size={140}
                 />
               </div>
+
             </motion.div>
 
             {/* WELLNESS SCORE */}
@@ -482,6 +377,7 @@ export default function Dashboard() {
               }}
               data-testid="wellness-score-card"
             >
+
               <div
                 className="
                   text-xs
@@ -509,8 +405,7 @@ export default function Dashboard() {
                     "var(--cozy-primary-dark)",
                 }}
               >
-                {user?.wellness_score ||
-                  50}
+                {user?.wellness_score || 50}
 
                 <span
                   className="text-2xl"
@@ -524,7 +419,11 @@ export default function Dashboard() {
               </div>
 
               <div
-                className="mt-4 h-3 overflow-hidden"
+                className="
+                  mt-4
+                  h-3
+                  overflow-hidden
+                "
                 style={{
                   borderRadius: 999,
                   background:
@@ -532,10 +431,7 @@ export default function Dashboard() {
                 }}
               >
                 <div
-                  className="
-                    h-full
-                    transition-all
-                  "
+                  className="h-full transition-all"
                   style={{
                     width: `${
                       user?.wellness_score ||
@@ -562,12 +458,14 @@ export default function Dashboard() {
                 Nurture with small
                 daily acts
               </p>
+
             </motion.div>
+
           </div>
 
-          {/* ===================================================
+          {/* =================================================
               DAILY KNOWLEDGE
-          =================================================== */}
+          ================================================= */}
 
           <div
             className="
@@ -582,25 +480,12 @@ export default function Dashboard() {
             <WordOfDayCard />
             <SpotlightCard />
           </div>
+
         </section>
 
-        {/* =====================================================
-            QUICK ACTIONS / WELLNESS CARDS
-
-            IMPORTANT:
-            This is intentionally z-40.
-
-            The modal components used by:
-              - WaterCard
-              - EyeBreakCard
-              - MoveResetCard
-              - BreatheCard
-
-            live inside ActionCards.
-
-            Giving this section a higher stacking layer keeps
-            those modals above the dashboard's lower cards.
-        ===================================================== */}
+        {/* =================================================
+            TODAY'S RITUALS
+        ================================================= */}
 
         <section
           className="
@@ -610,21 +495,24 @@ export default function Dashboard() {
             mb-10
           "
         >
+
           <h2
             className="
               font-display
               text-2xl
               mb-4
             "
-            style={{
-              color:
-                "var(--cozy-text)",
-            }}
           >
             Today's rituals
           </h2>
 
-          <div className="relative z-40 overflow-visible">
+          <div
+            className="
+              relative
+              z-40
+              overflow-visible
+            "
+          >
             <ActionCards
               onAction={doAction}
               onWaterReward={
@@ -632,35 +520,28 @@ export default function Dashboard() {
               }
             />
           </div>
+
         </section>
 
-        {/* =====================================================
+        {/* =================================================
             BOTTOM ROW
+        ================================================= */}
 
-            Kept at z-10 so it stays below ActionCards/modal
-            stacking layer.
-        ===================================================== */}
-
-        
-          <section
-            className="
-              relative
-              grid
-              grid-cols-1
-              lg:grid-cols-2
-              gap-6
-            "
-          >
-            
-          {/* EYE CARE TIMER */}
+        <section
+          className="
+            relative
+            grid
+            grid-cols-1
+            lg:grid-cols-2
+            gap-6
+          "
+        >
 
           <EyeCareTimer
             onBreakComplete={() =>
               doAction("eye_care")
             }
           />
-
-          {/* WEEKLY INSIGHTS */}
 
           <WeeklyInsightsCard />
 
@@ -677,6 +558,7 @@ export default function Dashboard() {
             "
             data-testid="challenges-card"
           >
+
             <h3
               className="
                 font-display
@@ -690,124 +572,87 @@ export default function Dashboard() {
             </h3>
 
             <div className="space-y-2">
+
               {challenges.length === 0 ? (
-                <div className="text-xs font-bold opacity-50">
+                <div
+                  className="
+                    text-xs
+                    font-bold
+                    opacity-50
+                  "
+                >
                   No challenges available
                   right now.
                 </div>
               ) : (
-                challenges.map((challenge) => (
-                  <div
-                    key={challenge.id}
-                    className="
-                      border-[3px]
-                      border-black
-                      p-3
-                      rounded-[2px]
-                      flex
-                      items-center
-                      justify-between
-                      gap-2
-                      bg-brutal-yellow/30
-                    "
-                  >
-                    <div>
-                      <div
-                        className="
-                          font-black
-                          text-sm
-                          uppercase
-                        "
-                      >
-                        {challenge.title}
+                challenges.map(
+                  (challenge) => (
+                    <div
+                      key={challenge.id}
+                      className="
+                        border-[3px]
+                        border-black
+                        p-3
+                        rounded-[2px]
+                        flex
+                        items-center
+                        justify-between
+                        gap-2
+                        bg-brutal-yellow/30
+                      "
+                    >
+
+                      <div>
+
+                        <div
+                          className="
+                            font-black
+                            text-sm
+                            uppercase
+                          "
+                        >
+                          {challenge.title}
+                        </div>
+
+                        <div
+                          className="
+                            text-xs
+                            font-bold
+                          "
+                        >
+                          {challenge.progress}/
+                          {challenge.target}{" "}
+                          done
+                        </div>
+
                       </div>
 
-                      <div
-                        className="
-                          text-xs
-                          font-bold
-                        "
-                      >
-                        {challenge.progress}/
-                        {challenge.target}{" "}
-                        done
-                      </div>
+                      {challenge.done ? (
+                        <BrutalBadge color="green">
+                          DONE +
+                          {challenge.reward}
+                        </BrutalBadge>
+                      ) : (
+                        <BrutalBadge color="pink">
+                          +
+                          {challenge.reward}{" "}
+                          PTS
+                        </BrutalBadge>
+                      )}
+
                     </div>
-
-                    {challenge.done ? (
-                      <BrutalBadge color="green">
-                        DONE +
-                        {challenge.reward}
-                      </BrutalBadge>
-                    ) : (
-                      <BrutalBadge color="pink">
-                        +
-                        {challenge.reward}{" "}
-                        PTS
-                      </BrutalBadge>
-                    )}
-                  </div>
-                ))
+                  )
+                )
               )}
+
             </div>
+
           </div>
 
-          {/* ===================================================
-              AI INSIGHT
-          =================================================== */}
-
-          <div
-            className="
-              bg-brutal-cyan
-              border-[4px]
-              border-black
-              shadow-brutal-lg
-              rounded-[4px]
-              p-5
-            "
-            data-testid="ai-insight-card"
-          >
-            <h3
-              className="
-                font-display
-                font-black
-                uppercase
-                text-xl
-                mb-3
-                flex
-                items-center
-                gap-2
-              "
-            >
-              <Sparkles className="w-5 h-5" />
-              AI Vibe Check
-            </h3>
-
-            <p
-              className="
-                text-sm
-                font-semibold
-                min-h-[80px]
-              "
-            >
-              {insight ||
-                "Tap below for a brutally honest take on your recent moods."}
-            </p>
-
-            <BrutalButton
-              data-testid="ai-insight-btn"
-              color="black"
-              onClick={getInsight}
-              disabled={aiLoading}
-              className="mt-3 w-full"
-            >
-              {aiLoading
-                ? " THINKING..."
-                : " GET INSIGHT"}
-            </BrutalButton>
-          </div>
         </section>
+
       </div>
     </main>
   );
 }
+

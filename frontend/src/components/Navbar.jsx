@@ -139,19 +139,19 @@ export const Navbar = () => {
             ref={moreRef}
             className="relative"
           >
-            <button
-              type="button"
-              data-testid="nav-more-btn"
-              onClick={() => setMoreOpen((prev) => !prev)}
-              className={`flex items-center gap-1.5 font-semibold text-xs md:text-sm px-3 py-2 rounded-full transition-all ${
-                moreOpen
-                  ? "bg-cozy-secondary shadow-cozy"
-                  : "text-cozy-text hover:bg-cozy-secondary/60"
-              }`}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-              More
-            </button>
+           <button
+  type="button"
+  data-testid="nav-more-btn"
+  onClick={() => setMoreOpen((prev) => !prev)}
+  className={`flex items-center gap-1.5 font-semibold text-xs md:text-sm px-3 py-2 rounded-full transition-all ${
+    moreOpen
+      ? "bg-cozy-secondary shadow-cozy"
+      : "text-cozy-text hover:bg-cozy-secondary/60"
+  }`}
+>
+  <MoreHorizontal className="w-4 h-4" />
+  More
+</button>
 
             <AnimatePresence>
               {moreOpen && (

@@ -1,407 +1,589 @@
+
 @import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&family=Kalam:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   ROOT VARIABLES
+========================================================= */
+
 :root {
   --cozy-bg: #EAF3E2;
   --cozy-tint: #DCE8D0;
   --cozy-surface: #FFFDF8;
+
   --cozy-primary: #7FAE62;
   --cozy-primary-dark: #5B8A44;
+
   --cozy-secondary: #F4D6C2;
   --cozy-accent: #F2B5A7;
+
   --cozy-text: #3F4A3E;
   --cozy-muted: #7D8A74;
   --cozy-border: #D8E2CF;
-  --shadow-cozy: 0px 2px 8px rgba(63, 74, 62, 0.06);
-  --shadow-cozy-lg: 0px 6px 18px rgba(63, 74, 62, 0.09);
+
+  --shadow-cozy:
+    0 2px 8px rgba(63, 74, 62, 0.06);
+
+  --shadow-cozy-lg:
+    0 6px 18px rgba(63, 74, 62, 0.09);
+
+  --cozy-section-gap: 24px;
+  --cozy-card-padding: 20px;
 }
+
+/* =========================================================
+   DARK MODE
+========================================================= */
 
 html.dark {
   --cozy-bg: #1E241B;
   --cozy-tint: #232B1F;
   --cozy-surface: #262E22;
+
   --cozy-primary: #8FBF72;
   --cozy-primary-dark: #6E9B57;
+
   --cozy-secondary: #D9A98A;
   --cozy-accent: #E39C8C;
+
   --cozy-text: #EDF2E6;
   --cozy-muted: #A6B29C;
   --cozy-border: #3A4634;
-  --shadow-cozy: 0px 2px 8px rgba(0, 0, 0, 0.28);
-  --shadow-cozy-lg: 0px 6px 18px rgba(0, 0, 0, 0.4);
+
+  --shadow-cozy:
+    0 2px 8px rgba(0, 0, 0, 0.28);
+
+  --shadow-cozy-lg:
+    0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
-html, body, #root {
+/* =========================================================
+   GLOBAL DOCUMENT
+========================================================= */
+
+html,
+body,
+#root {
+  min-height: 100%;
   margin: 0;
   padding: 0;
-  min-height: 100%;
-  color: var(--cozy-text);
-  font-family: "Nunito", "Plus Jakarta Sans", sans-serif;
-  font-weight: 500;
-  transition: color 0.3s ease;
 }
-html { background-color: var(--cozy-bg); }
-#root { background: transparent; }
 
-/* ==========================================================
-   PREMIUM HANDMADE PAPER BACKGROUND
-   Layered: (1) base color, (2) very soft cream↔sage radial washes 5-8%,
-   (3) fine paper fibre SVG turbulence, (4) tiny grain speckles.
-   Fully tileable, no objects, no visible repeating artifacts.
-   ========================================================== */
+html {
+  background: var(--cozy-bg);
+}
+
 body {
-  background-image:
-    /* Soft cream wash top-left */
-    radial-gradient(ellipse 60% 45% at 18% 10%, rgba(249, 247, 241, 0.55), transparent 70%),
-    /* Soft sage wash bottom-right */
-    radial-gradient(ellipse 55% 50% at 82% 88%, rgba(220, 232, 208, 0.6), transparent 72%),
-    /* Warm peach whisper */
-    radial-gradient(ellipse 40% 30% at 92% 12%, rgba(244, 214, 194, 0.18), transparent 70%),
-    /* Cool sage whisper */
-    radial-gradient(ellipse 45% 35% at 8% 82%, rgba(127, 174, 98, 0.05), transparent 75%),
-    /* Fine paper fibre + grain (SVG turbulence, tileable) */
-    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.25  0 0 0 0 0.29  0 0 0 0 0.24  0 0 0 0.055 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E"),
-    /* Coarser paper fibre — long strand feel */
-    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='620' height='620'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.6' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.28  0 0 0 0 0.32  0 0 0 0 0.26  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E"),
-    /* Base color */
-    linear-gradient(180deg, var(--cozy-bg) 0%, var(--cozy-tint) 100%);
-  background-size: auto, auto, auto, auto, 420px 420px, 620px 620px, auto;
-  background-attachment: fixed, fixed, fixed, fixed, fixed, fixed, fixed;
-  background-blend-mode: normal, normal, normal, normal, multiply, multiply, normal;
+  min-height: 100vh;
+
+  color: var(--cozy-text);
+
+  font-family:
+    "Nunito",
+    "Plus Jakarta Sans",
+    sans-serif;
+
+  font-weight: 500;
+
+  background:
+    var(--cozy-bg);
+
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease;
 }
 
-html.dark body {
-  background-image:
-    radial-gradient(ellipse 60% 45% at 18% 10%, rgba(255, 253, 248, 0.03), transparent 70%),
-    radial-gradient(ellipse 55% 50% at 82% 88%, rgba(220, 232, 208, 0.04), transparent 72%),
-    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E"),
-    linear-gradient(180deg, var(--cozy-bg) 0%, var(--cozy-tint) 100%);
-  background-size: auto, auto, 420px 420px, auto;
-  background-attachment: fixed, fixed, fixed, fixed;
-  background-blend-mode: normal, normal, screen, normal;
+#root {
+  min-height: 100vh;
+  background: transparent !important;
 }
 
-.App { min-height: 100vh; background: transparent; }
-.min-h-screen.bg-white { background: transparent !important; }
-.min-h-screen { background: transparent !important; }
+/* =========================================================
+   TYPOGRAPHY
+========================================================= */
 
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
   font-family: "Fredoka", sans-serif;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--cozy-text);
 }
 
-.font-hand { font-family: "Kalam", cursive; }
-.font-display { font-family: "Fredoka", sans-serif; }
-.font-body { font-family: "Nunito", sans-serif; }
+.font-hand {
+  font-family: "Kalam", cursive;
+}
 
-/* Paper grain overlay — now a lighter subtle watercolour pigment variation on top of body */
-.paper-grain { position: relative; }
+.font-display {
+  font-family: "Fredoka", sans-serif;
+}
+
+.font-body {
+  font-family: "Nunito", sans-serif;
+}
+
+/* =========================================================
+   APPEARANCE VARIABLES
+========================================================= */
+
+html[data-accent="custom"] {
+  --cozy-primary: var(--custom-primary);
+  --cozy-primary-dark: var(--custom-primary-dark);
+  --cozy-secondary: var(--custom-secondary);
+  --cozy-accent: var(--custom-accent);
+  --cozy-border: var(--custom-border);
+}
+
+/* =========================================================
+   BACKGROUND PRESETS
+========================================================= */
+
+html[data-background="garden"] {
+  --cozy-bg: #EAF3E2;
+  --cozy-tint: #DCE8D0;
+}
+
+html[data-background="morning"] {
+  --cozy-bg: #FFF7E8;
+  --cozy-tint: #F8E9CA;
+}
+
+html[data-background="cloud"] {
+  --cozy-bg: #F1F7FA;
+  --cozy-tint: #DCEBF1;
+}
+
+html[data-background="bloom"] {
+  --cozy-bg: #FBF1F5;
+  --cozy-tint: #F2DCE5;
+}
+
+/* =========================================================
+   DARK BACKGROUND PRESETS
+========================================================= */
+
+html.dark[data-background="garden"] {
+  --cozy-bg: #1E241B;
+  --cozy-tint: #232B1F;
+}
+
+html.dark[data-background="morning"] {
+  --cozy-bg: #29251D;
+  --cozy-tint: #342F24;
+}
+
+html.dark[data-background="cloud"] {
+  --cozy-bg: #1C252C;
+  --cozy-tint: #222F38;
+}
+
+html.dark[data-background="bloom"] {
+  --cozy-bg: #2B2024;
+  --cozy-tint: #35272C;
+}
+
+/* =========================================================
+   LAYOUT SETTINGS
+========================================================= */
+
+html[data-layout="comfortable"] {
+  --cozy-section-gap: 24px;
+  --cozy-card-padding: 20px;
+}
+
+html[data-layout="compact"] {
+  --cozy-section-gap: 16px;
+  --cozy-card-padding: 15px;
+}
+
+/* =========================================================
+   PAPER GRAIN
+========================================================= */
+
+.paper-grain {
+  position: relative;
+}
+
 .paper-grain::before {
   content: "";
+
   position: fixed;
   inset: 0;
+
   pointer-events: none;
-  z-index: 1;
-  opacity: 0.18;
+
+  z-index: 0;
+
+  opacity: 0.12;
+
   mix-blend-mode: multiply;
+
   background-image:
-    radial-gradient(ellipse 32% 24% at 65% 30%, rgba(127,174,98,0.06), transparent 70%),
-    radial-gradient(ellipse 28% 22% at 25% 70%, rgba(244,214,194,0.05), transparent 70%),
-    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.55  0 0 0 0 0.42  0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23w)'/%3E%3C/svg%3E");
-  background-size: auto, auto, 800px 800px;
+    radial-gradient(
+      ellipse 32% 24% at 65% 30%,
+      rgba(127, 174, 98, 0.06),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 28% 22% at 25% 70%,
+      rgba(244, 214, 194, 0.05),
+      transparent 70%
+    );
+
+  background-size: auto;
   background-attachment: fixed;
 }
-html.dark .paper-grain::before { opacity: 0.14; mix-blend-mode: screen; }
 
-/* Floating decorative elements */
-.floaty-1 { animation: float 4s ease-in-out infinite; }
-.floaty-2 { animation: float 5.5s ease-in-out infinite 0.5s; }
-.floaty-3 { animation: float 6.5s ease-in-out infinite 1s; }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--cozy-muted); border-radius: 10px; opacity: 0.4; }
-::-webkit-scrollbar-thumb:hover { background: var(--cozy-primary); }
-
-::selection { background: var(--cozy-secondary); color: var(--cozy-text); }
-
-/* ==========================================================
-   LEGACY BRUTAL CLASS OVERRIDES → Cozy Wellness
-   Every page uses these — remap globally so no per-file edits needed.
-   ========================================================== */
-
-/* Cards float above paper by being slightly brighter than the base */
-.bg-white { background-color: var(--cozy-surface) !important; color: var(--cozy-text); }
-.bg-brutal-yellow { background-color: var(--cozy-secondary) !important; color: var(--cozy-text); }
-.bg-brutal-cyan { background-color: #C8DFF0 !important; color: var(--cozy-text); }
-.bg-brutal-pink { background-color: var(--cozy-accent) !important; color: var(--cozy-text); }
-.bg-brutal-green { background-color: var(--cozy-primary) !important; color: #fff; }
-.bg-black { background-color: var(--cozy-text) !important; color: var(--cozy-surface) !important; }
-.text-brutal-yellow { color: var(--cozy-secondary) !important; }
-
-html.dark .bg-white { background-color: var(--cozy-surface) !important; color: var(--cozy-text); }
-html.dark .bg-brutal-yellow { background-color: #7A5A44 !important; color: var(--cozy-text); }
-html.dark .bg-brutal-cyan { background-color: #4A6A80 !important; color: var(--cozy-text); }
-html.dark .bg-brutal-pink { background-color: #7A4E4A !important; color: var(--cozy-text); }
-html.dark .bg-brutal-green { background-color: var(--cozy-primary) !important; color: #fff; }
-html.dark .bg-gray-100 { background-color: var(--cozy-surface) !important; }
-
-/* Dark-mode overrides for inline pastel backgrounds used in hero + cards */
-html.dark [style*="background: linear-gradient(135deg, #F7D9C4"],
-html.dark [style*="linear-gradient(135deg, #F7D9C4"] {
-  background: linear-gradient(135deg, #6B5341 0%, #7A4E4A 100%) !important;
-  color: var(--cozy-text) !important;
-}
-html.dark [style*="background: #C8DFF0"],
-html.dark [style*="backgroundColor: \"#C8DFF0\""] {
-  background: #4A6A80 !important;
-}
-html.dark [style*="backgroundColor: color === \"cyan\" ? \"#C8DFF0\""] {
-  background: #4A6A80 !important;
+html.dark .paper-grain::before {
+  opacity: 0.08;
+  mix-blend-mode: screen;
 }
 
-/* Borders: black → soft cozy border */
-.border-black { border-color: var(--cozy-border) !important; }
-html.dark .border-black { border-color: var(--cozy-border) !important; }
+/* =========================================================
+   CARDS
+========================================================= */
 
-/* Kill hard shadows — apply cozy shadow instead */
-.shadow-brutal, .shadow-brutal-sm, .shadow-brutal-lg, .shadow-brutal-xl,
-.brutal-shadow, .brutal-shadow-lg {
+.bg-white {
+  background-color: var(--cozy-surface) !important;
+  color: var(--cozy-text);
+}
+
+.bg-brutal-yellow {
+  background-color: var(--cozy-secondary) !important;
+  color: var(--cozy-text);
+}
+
+.bg-brutal-cyan {
+  background-color: #C8DFF0 !important;
+  color: var(--cozy-text);
+}
+
+.bg-brutal-pink {
+  background-color: var(--cozy-accent) !important;
+  color: var(--cozy-text);
+}
+
+.bg-brutal-green {
+  background-color: var(--cozy-primary) !important;
+  color: #fff;
+}
+
+.bg-black {
+  background-color: var(--cozy-text) !important;
+  color: var(--cozy-surface) !important;
+}
+
+html.dark .bg-white {
+  background-color: var(--cozy-surface) !important;
+}
+
+html.dark .bg-brutal-yellow {
+  background-color: #7A5A44 !important;
+}
+
+html.dark .bg-brutal-cyan {
+  background-color: #4A6A80 !important;
+}
+
+html.dark .bg-brutal-pink {
+  background-color: #7A4E4A !important;
+}
+
+html.dark .bg-brutal-green {
+  background-color: var(--cozy-primary) !important;
+}
+
+/* =========================================================
+   BORDERS
+========================================================= */
+
+.border-black {
+  border-color: var(--cozy-border) !important;
+}
+
+.border-\[3px\] {
+  border-width: 1px !important;
+}
+
+.border-\[4px\] {
+  border-width: 2px !important;
+}
+
+.border-\[6px\] {
+  border-width: 2px !important;
+}
+
+.border-\[2px\] {
+  border-width: 1px !important;
+}
+
+/* =========================================================
+   RADIUS
+========================================================= */
+
+.rounded-\[2px\] {
+  border-radius: 16px !important;
+}
+
+.rounded-\[4px\] {
+  border-radius: 20px !important;
+}
+
+/* =========================================================
+   SHADOWS
+========================================================= */
+
+.shadow-brutal,
+.shadow-brutal-sm,
+.shadow-brutal-lg,
+.shadow-brutal-xl,
+.brutal-shadow,
+.brutal-shadow-lg {
   box-shadow: var(--shadow-cozy) !important;
 }
 
-/* Hover-lift shadow for cards/buttons using brutal-lg */
-.shadow-brutal-lg:hover, .shadow-brutal-xl:hover { box-shadow: var(--shadow-cozy-lg) !important; }
+.shadow-brutal-lg:hover,
+.shadow-brutal-xl:hover {
+  box-shadow: var(--shadow-cozy-lg) !important;
+}
 
-/* Border widths — soften from 3-4px to 1-2px */
-.border-\[3px\] { border-width: 1px !important; }
-.border-\[4px\] { border-width: 2px !important; }
-.border-\[6px\] { border-width: 2px !important; }
-.border-\[2px\] { border-width: 1px !important; }
+/* =========================================================
+   TEXT
+========================================================= */
 
-/* Border radius — brutal 0-4px → cozy 16-24px */
-.rounded-\[2px\] { border-radius: 16px !important; }
-.rounded-\[4px\] { border-radius: 20px !important; }
+.text-black {
+  color: var(--cozy-text) !important;
+}
 
-/* Text colors */
-.text-black { color: var(--cozy-text) !important; }
-html.dark .text-black { color: var(--cozy-text) !important; }
+.text-gray-600,
+.text-gray-700 {
+  color: var(--cozy-muted) !important;
+}
 
-/* Buttons — pill-ify by default when they have brutal color background */
-button.bg-brutal-green, button.bg-brutal-pink, button.bg-brutal-yellow, button.bg-brutal-cyan,
-button.bg-black, .brutal-btn {
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+button.bg-brutal-green,
+button.bg-brutal-pink,
+button.bg-brutal-yellow,
+button.bg-brutal-cyan,
+button.bg-black,
+.brutal-btn {
   border-radius: 999px !important;
 }
 
-/* Inputs */
-input, textarea, select {
+/* =========================================================
+   INPUTS
+========================================================= */
+
+input,
+textarea,
+select {
   background-color: var(--cozy-surface) !important;
   color: var(--cozy-text) !important;
   border-color: var(--cozy-border) !important;
+
   border-radius: 16px !important;
-  transition: border-color 0.2s, box-shadow 0.2s;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
-input:focus, textarea:focus, select:focus {
+
+input:focus,
+textarea:focus,
+select:focus {
   outline: none !important;
-  box-shadow: 0 0 0 3px rgba(127, 174, 98, 0.25) !important;
-  border-color: var(--cozy-primary) !important;
+
+  box-shadow:
+    0 0 0 3px
+    rgba(127, 174, 98, 0.25) !important;
+
+  border-color:
+    var(--cozy-primary) !important;
 }
 
-/* Kill the old brutal-dots pattern & brutal-grid pattern */
-.brutal-dots, .brutal-grid {
+/* =========================================================
+   LEGACY PATTERNS
+========================================================= */
+
+.brutal-dots,
+.brutal-grid {
   background-image: none !important;
-  background-color: var(--cozy-bg) !important;
+  background-color: transparent !important;
 }
 
-/* Body dark mode override (min-h-screen bg-white → cozy dark) */
-.min-h-screen.bg-white { background-color: var(--cozy-bg) !important; }
+/* =========================================================
+   SKELETON
+========================================================= */
 
-/* Text util for muted */
-.text-gray-600, .text-gray-700 { color: var(--cozy-muted) !important; }
-
-/* Sonner toast override to cozy */
-[data-sonner-toast] {
-  background-color: var(--cozy-surface) !important;
-  color: var(--cozy-text) !important;
-  border: 1px solid var(--cozy-border) !important;
-  border-radius: 20px !important;
-  box-shadow: var(--shadow-cozy-lg) !important;
-  font-family: "Nunito", sans-serif !important;
-  font-weight: 700 !important;
-  text-transform: none !important;
-}
-
-/* Wobbly hand-drawn card border via SVG mask — applied to key cards */
-.hand-frame {
-  position: relative;
-}
-.hand-frame::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-  background: transparent;
-  border: 1.5px solid var(--cozy-text);
-  opacity: 0.45;
-  filter: url(#wobble);
-}
-
-/* Torn/washi-tape sticker feel for tags */
-.washi-tag {
-  position: relative;
-  background: var(--cozy-secondary);
-  color: var(--cozy-text);
-  padding: 4px 12px;
-  font-family: "Kalam", cursive;
-  font-weight: 700;
-  display: inline-block;
-  border-radius: 3px;
-  transform: rotate(-1.5deg);
-  box-shadow: 0 1px 2px rgba(61,68,55,0.12);
-}
-.washi-tag::before, .washi-tag::after {
-  content: "";
-  position: absolute;
-  top: -2px;
-  width: 12px;
-  height: 8px;
-  background: repeating-linear-gradient(45deg, transparent 0 2px, rgba(0,0,0,0.05) 2px 3px);
-}
-.washi-tag::before { left: -6px; transform: rotate(-8deg); }
-.washi-tag::after { right: -6px; transform: rotate(8deg); }
-
-/* Ink-drawn underline effect for links/hovers */
-.ink-underline {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 6'%3E%3Cpath d='M2 3 Q 30 1, 60 3 T 118 3' stroke='%233D4437' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: 0 100%;
-  background-size: 100% 4px;
-  padding-bottom: 4px;
-}
-
-/* Card that feels like a torn journal page */
-.journal-page {
-  background: var(--cozy-surface);
-  position: relative;
-  border-radius: 22px;
-  box-shadow: var(--shadow-cozy);
-}
-.journal-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  opacity: 0.04;
-  border-radius: inherit;
-}
-
-/* Doodled corner flourish — apply .doodle-corner to any card wrapper */
-.doodle-corner::after {
-  content: "";
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 32px;
-  height: 32px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 16 Q 12 4 28 8' stroke='%233D4437' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 20 Q 4 16 6 10' stroke='%233D4437' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='26' cy='6' r='1.5' fill='%233D4437'/%3E%3C/svg%3E");
-  background-size: contain;
-  background-repeat: no-repeat;
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* Mention pill — cozy version */
-.mention-pill {
-  background: var(--cozy-primary);
-  color: #fff;
-  border: none;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.85em;
-  display: inline-block;
-  margin: 0 2px;
-}
-
-/* Skeleton */
 @keyframes cozy-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
 }
+
 .brutal-skeleton {
   background: var(--cozy-border);
   border: none !important;
   border-radius: 20px !important;
-  animation: cozy-pulse 1.4s ease-in-out infinite;
-}
-html.dark .brutal-skeleton { background: #3A4634; }
 
-/* Card lift on hover */
-.cozy-lift {
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  animation:
+    cozy-pulse
+    1.4s
+    ease-in-out
+    infinite;
 }
+
+html.dark .brutal-skeleton {
+  background: #3A4634;
+}
+
+/* =========================================================
+   COZY LIFT
+========================================================= */
+
+.cozy-lift {
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
 .cozy-lift:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-cozy-lg);
 }
 
-/* Nav pill */
+/* =========================================================
+   NAV PILL
+========================================================= */
+
 .nav-pill {
   border-radius: 999px !important;
   transition: all 0.2s ease;
 }
 
-/* Mobile bottom-nav padding compensation */
-@media (max-width: 768px) {
-  body { padding-bottom: 76px; }
+/* =========================================================
+   WASHI TAG
+========================================================= */
+
+.washi-tag {
+  position: relative;
+
+  background: var(--cozy-secondary);
+  color: var(--cozy-text);
+
+  padding: 4px 12px;
+
+  font-family: "Kalam", cursive;
+  font-weight: 700;
+
+  display: inline-block;
+
+  border-radius: 3px;
+
+  transform: rotate(-1.5deg);
+
+  box-shadow:
+    0 1px 2px
+    rgba(61, 68, 55, 0.12);
 }
 
-/* Floating leaves background */
-.leaf-bg::before {
-  content: "";
-  position: fixed;
-  width: 60px;
-  height: 60px;
-  opacity: 0.12;
-  top: 10%;
-  left: 5%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M6 42 Q 4 26 14 18 Q 26 8 42 6 Q 40 22 30 32 Q 20 42 6 42 Z' fill='%237FAE62' stroke='%233D4437' stroke-width='2'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: contain;
-  position: fixed;
-  font-size: 60px;
-  opacity: 0.08;
-  top: 10%;
-  left: 5%;
-  animation: float 8s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 0;
+/* =========================================================
+   MENTION
+========================================================= */
+
+.mention-pill {
+  background: var(--cozy-primary);
+  color: #fff;
+
+  padding: 2px 8px;
+
+  border-radius: 999px;
+
+  font-weight: 700;
+  font-size: 0.85em;
+
+  display: inline-block;
+  margin: 0 2px;
 }
-.leaf-bg::after {
-  content: "";
-  position: fixed;
-  width: 80px;
-  height: 80px;
-  opacity: 0.1;
-  bottom: 10%;
-  right: 8%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M42 6 Q 44 22 34 30 Q 22 40 6 42 Q 8 26 18 18 Q 30 8 42 6 Z' fill='%23F7D9C4' stroke='%233D4437' stroke-width='2'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: contain;
-  position: fixed;
-  font-size: 80px;
-  opacity: 0.07;
-  bottom: 10%;
-  right: 8%;
-  animation: float 10s ease-in-out infinite 1s;
-  pointer-events: none;
-  z-index: 0;
+
+/* =========================================================
+   SONNER
+========================================================= */
+
+[data-sonner-toast] {
+  background-color: var(--cozy-surface) !important;
+  color: var(--cozy-text) !important;
+
+  border:
+    1px solid
+    var(--cozy-border) !important;
+
+  border-radius: 20px !important;
+
+  box-shadow:
+    var(--shadow-cozy-lg) !important;
+
+  font-family:
+    "Nunito",
+    sans-serif !important;
+
+  font-weight: 700 !important;
+
+  text-transform: none !important;
 }
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cozy-muted);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cozy-primary);
+}
+
+/* =========================================================
+   SELECTION
+========================================================= */
+
+::selection {
+  background: var(--cozy-secondary);
+  color: var(--cozy-text);
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 768px) {
+  body {
+    padding-bottom: 76px;
+  }
+}
+

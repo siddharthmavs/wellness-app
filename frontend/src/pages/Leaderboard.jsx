@@ -39,13 +39,64 @@ export default function Leaderboard() {
 
  return (
  <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
- <motion.div
- initial={{ y: -20, opacity: 0, rotate: -2 }} animate={{ y: 0, opacity: 1, rotate: -1 }}
- className="bg-black text-brutal-yellow border-[4px] border-black shadow-brutal-lg p-6 mb-6 inline-block"
- >
- <h1 className="font-display font-black text-5xl md:text-6xl uppercase leading-none"> TOP DOGS</h1>
- <p className="text-xs uppercase tracking-widest mt-2">who's winning the wellness game</p>
- </motion.div>
+        <motion.div
+            initial={{
+                y: -20,
+                opacity: 0,
+                rotate: -2,
+            }}
+            animate={{
+                y: 0,
+                opacity: 1,
+                rotate: -1,
+            }}
+            transition={{
+                duration: 0.45,
+                ease: "easeOut",
+            }}
+            className="
+                bg-[#DDECCF]
+                border-[4px]
+                border-black
+                shadow-brutal-lg
+                px-6
+                py-5
+                mb-6
+                inline-block
+                relative
+            "
+            >
+            <h1
+                className="
+                font-display
+                font-black
+                uppercase
+                leading-none
+                text-4xl
+                md:text-6xl
+                text-black
+                m-0
+                p-0
+                "
+            >
+                TOP DOGS
+            </h1>
+
+            <p
+                className="
+                text-[10px]
+                md:text-xs
+                uppercase
+                tracking-[0.18em]
+                mt-3
+                text-gray-600
+                font-bold
+                m-0
+                "
+            >
+                Who's winning the wellness game?
+            </p>
+        </motion.div>
 
  <div className="flex gap-2 mb-3 flex-wrap" data-testid="leaderboard-views">
  {VIEWS.map((v) => (

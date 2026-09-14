@@ -67,7 +67,7 @@ const PHASES = {
   HOLD: {
     name: "HOLD",
     description: "Stay relaxed",
-    duration: 2,
+    duration: 4,
     from: 1.25,
     to: 1.25,
   },
@@ -1987,7 +1987,7 @@ export default function BreathingCard({
                         </strong>
 
                         <span>
-                          2 seconds
+                          4 seconds
                         </span>
                       </div>
                     </div>

@@ -1,6 +1,10 @@
+
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+
 import {
+  ArrowLeft,
   Bell,
   Droplets,
   Eye,
@@ -40,6 +44,8 @@ const DEFAULT_SETTINGS = {
 ========================================================= */
 
 const NotificationSettings = () => {
+  const navigate = useNavigate();
+
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem(
@@ -63,9 +69,7 @@ const NotificationSettings = () => {
   });
 
   const [permission, setPermission] = useState(() => {
-    if (
-      typeof Notification !== "undefined"
-    ) {
+    if (typeof Notification !== "undefined") {
       return Notification.permission;
     }
 
@@ -108,9 +112,7 @@ const NotificationSettings = () => {
   ========================================================= */
 
   const requestNotificationPermission = async () => {
-    if (
-      typeof Notification === "undefined"
-    ) {
+    if (typeof Notification === "undefined") {
       return;
     }
 
@@ -227,6 +229,26 @@ const NotificationSettings = () => {
 
       <div className="flex items-center gap-4 mb-8">
 
+        {/* BACK TO SETTINGS */}
+
+        <button
+          type="button"
+          onClick={() => navigate("/settings")}
+          className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition hover:scale-105"
+          style={{
+            background: "var(--cozy-surface)",
+            color: "var(--cozy-text)",
+            border:
+              "1px solid var(--cozy-border)",
+          }}
+          aria-label="Back to Settings"
+          title="Back to Settings"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+
+        {/* NOTIFICATION ICON */}
+
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
           style={{
@@ -237,6 +259,8 @@ const NotificationSettings = () => {
         >
           <Bell className="w-7 h-7" />
         </div>
+
+        {/* TITLE */}
 
         <div>
           <h1 className="font-display font-black text-3xl md:text-4xl text-cozy-text">

@@ -8,8 +8,7 @@ import {
   Navigate,
 } from "react-router-dom";
 
-import { Toaster } from "sonner";
-import { toast } from "sonner";
+import { Toaster, toast } from "sonner";
 
 import { useAuthStore, useThemeStore } from "./store";
 import { api } from "./lib/api";
@@ -17,7 +16,13 @@ import { api } from "./lib/api";
 import { Navbar } from "./components/Navbar";
 import { BottomNav } from "./components/BottomNav";
 import { MusicPlayer } from "./components/MusicPlayer";
-import { InkDefs } from "./components/HandDrawn";
+
+import {
+  IconCloud,
+  IconLeaf,
+  IconSparkle,
+} from "./components/HandDrawn";
+
 import { startNotificationScheduler } from "./notifications/notificationScheduler";
 
 /* =========================================================
@@ -28,15 +33,10 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
 /* =========================================================
-   DASHBOARD
-========================================================= */
-
-import Dashboard from "./pages/Dashboard/Dashboard";
-
-/* =========================================================
    MAIN PAGES
 ========================================================= */
 
+import Dashboard from "./pages/Dashboard/Dashboard";
 import Leaderboard from "./pages/Leaderboard";
 import Mood from "./pages/Mood";
 import FunWall from "./pages/FunWall";
@@ -58,25 +58,314 @@ import GameTeams from "./pages/GameTeams";
 
 import Settings from "./pages/Settings/Settings";
 
-/* ---------------- General Settings ---------------- */
-
 import NotificationsSettings from "./pages/Settings/General/NotificationsSettings";
 import AppearanceSettings from "./pages/Settings/General/AppearanceSettings";
-import SoundSettings from "./pages/Settings/General/SoundSettings";
-import AccessibilitySettings from "./pages/Settings/General/AccessibilitySettings";
-
-/* ---------------- Wellness Settings ---------------- */
 
 import WaterSettings from "./pages/Settings/Wellness/WaterSettings";
 import EyeCareSettings from "./pages/Settings/Wellness/EyeCareSettings";
 import MoveResetSettings from "./pages/Settings/Wellness/MoveResetSettings";
 import BreathingSettings from "./pages/Settings/Wellness/BreathingSettings";
 
-/* ---------------- Admin Settings ---------------- */
+/* =========================================================
+   GLOBAL APPEARANCE SETTINGS
+========================================================= */
 
-import OrganizationSettings from "./pages/Settings/Admin/OrganizationSettings";
-import WellnessDefaults from "./pages/Settings/Admin/WellnessDefaults";
-import RewardsSettings from "./pages/Settings/Admin/RewardsSettings";
+const APPEARANCE_KEY = "wellness-appearance-settings";
+
+const DEFAULT_APPEARANCE = {
+  background: "garden",
+  solidColor: "#F5F5F5",
+  accentMode: "default",
+  accentColor: "#7FAE62",
+  layout: "comfortable",
+  fontStyle: "default",
+  fontSize: "default",
+};
+
+/* =========================================================
+   FONT SETTINGS
+========================================================= */
+
+const FONT_FAMILIES = {
+  nunito: '"Nunito", sans-serif',
+  fredoka: '"Fredoka", sans-serif',
+  jakarta: '"Plus Jakarta Sans", sans-serif',
+  kalam: '"Kalam", cursive',
+  poppins: '"Poppins", sans-serif',
+  quicksand: '"Quicksand", sans-serif',
+  dmSans: '"DM Sans", sans-serif',
+  manrope: '"Manrope", sans-serif',
+  inter: '"Inter", sans-serif',
+};
+
+/* =========================================================
+   APPLY SAVED APPEARANCE
+========================================================= */
+
+const applySavedAppearance = () => {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const root = document.documentElement;
+
+  let settings = {
+    ...DEFAULT_APPEARANCE,
+  };
+
+  /* =======================================================
+     LOAD SAVED SETTINGS
+  ======================================================= */
+
+  try {
+    const saved = localStorage.getItem(APPEARANCE_KEY);
+
+    if (saved) {
+      const parsed = JSON.parse(saved);
+
+      settings = {
+        ...DEFAULT_APPEARANCE,
+        ...parsed,
+      };
+    }
+  } catch (error) {
+    console.warn(
+      "Could not load appearance settings.",
+      error
+    );
+  }
+
+  
+
+  let background = settings.background || "garden";
+
+  if (background === "custom") {
+    background = "solid";
+  }
+
+  root.dataset.background = background;
+
+  /* =======================================================
+     CUSTOM / SOLID BACKGROUND
+  ======================================================= */
+
+  if (background === "solid") {
+    const solidColor =
+      settings.solidColor || "#F5F5F5";
+
+    root.style.setProperty(
+      "--appearance-bg",
+      solidColor
+    );
+
+    root.style.setProperty(
+      "--appearance-tint",
+      solidColor
+    );
+
+    root.style.setProperty(
+      "--appearance-decoration",
+      "none"
+    );
+  } else {
+    root.style.removeProperty(
+      "--appearance-bg"
+    );
+
+    root.style.removeProperty(
+      "--appearance-tint"
+    );
+
+    root.style.removeProperty(
+      "--appearance-decoration"
+    );
+  }
+
+  /* =======================================================
+     LAYOUT
+  ======================================================= */
+
+  root.dataset.layout =
+    settings.layout || "comfortable";
+
+  /* =======================================================
+     FONT STYLE
+  ======================================================= */
+
+  const fontStyle =
+    settings.fontStyle || "default";
+
+  root.dataset.fontStyle = fontStyle;
+
+
+  let fontFamily =
+    '"Nunito", "Plus Jakarta Sans", sans-serif';
+
+  switch (fontStyle) {
+    case "nunito":
+      fontFamily = FONT_FAMILIES.nunito;
+      break;
+
+    case "fredoka":
+      fontFamily = FONT_FAMILIES.fredoka;
+      break;
+
+    case "jakarta":
+    case "plus-jakarta":
+    case "plusJakartaSans":
+      fontFamily = FONT_FAMILIES.jakarta;
+      break;
+
+    case "kalam":
+      fontFamily = FONT_FAMILIES.kalam;
+      break;
+
+    case "poppins":
+      fontFamily = FONT_FAMILIES.poppins;
+      break;
+
+    case "quicksand":
+      fontFamily = FONT_FAMILIES.quicksand;
+      break;
+
+    case "dm-sans":
+    case "dmSans":
+      fontFamily = FONT_FAMILIES.dmSans;
+      break;
+
+    case "manrope":
+      fontFamily = FONT_FAMILIES.manrope;
+      break;
+
+    case "inter":
+      fontFamily = FONT_FAMILIES.inter;
+      break;
+
+    case "default":
+    default:
+      /*
+         Default keeps the original Wellness Garden
+         mixed typography.
+      */
+      fontFamily =
+        '"Nunito", "Plus Jakarta Sans", sans-serif';
+      break;
+  }
+
+  root.style.setProperty(
+    "--appearance-font-family",
+    fontFamily
+  );
+
+  /* =======================================================
+     FONT SIZE
+  ======================================================= */
+
+  const fontSize =
+    settings.fontSize || "default";
+
+  root.dataset.fontSize = fontSize;
+
+  
+
+  let fontScale = 1;
+
+  switch (fontSize) {
+    case "small":
+      fontScale = 0.92;
+      break;
+
+    case "large":
+      fontScale = 1.12;
+      break;
+
+    case "extra-large":
+      fontScale = 1.25;
+      break;
+
+    case "default":
+    default:
+      fontScale = 1;
+      break;
+  }
+
+  root.style.setProperty(
+    "--appearance-font-scale",
+    String(fontScale)
+  );
+
+  /* =======================================================
+     ACCENT COLOR
+  ======================================================= */
+
+  if (settings.accentMode === "custom") {
+    const hex =
+      settings.accentColor || "#7FAE62";
+
+    root.dataset.accent = "custom";
+
+    root.style.setProperty(
+      "--custom-primary",
+      hex
+    );
+
+    root.style.setProperty(
+      "--custom-primary-dark",
+      hex
+    );
+
+    root.style.setProperty(
+      "--custom-secondary",
+      hex
+    );
+
+    root.style.setProperty(
+      "--custom-accent",
+      hex
+    );
+
+    root.style.setProperty(
+      "--custom-border",
+      hex
+    );
+  } else {
+    root.dataset.accent = "default";
+
+    root.style.removeProperty(
+      "--custom-primary"
+    );
+
+    root.style.removeProperty(
+      "--custom-primary-dark"
+    );
+
+    root.style.removeProperty(
+      "--custom-secondary"
+    );
+
+    root.style.removeProperty(
+      "--custom-accent"
+    );
+
+    root.style.removeProperty(
+      "--custom-border"
+    );
+  }
+
+  /* =======================================================
+     BODY BACKGROUND
+     
+  ======================================================= */
+
+  if (background === "solid") {
+    document.body.style.backgroundColor =
+      settings.solidColor || "#F5F5F5";
+  } else {
+    document.body.style.backgroundColor =
+      "var(--cozy-bg)";
+  }
+};
+
 /* =========================================================
    PRIVATE LAYOUT
 ========================================================= */
@@ -87,26 +376,108 @@ const PrivateLayout = ({
 }) => {
   const { token, user } = useAuthStore();
 
-  /* Not logged in */
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  /* Admin-only pages */
   if (adminOnly && user?.role !== "admin") {
     return <Navigate to="/" replace />;
   }
 
   return (
-    <div className="min-h-screen bg-white paper-grain relative">
+    <div className="private-layout">
 
-      <Navbar />
+      {/* =====================================================
+          GLOBAL APPEARANCE BACKGROUND
+      ===================================================== */}
 
-      <div className="relative z-10">
-        {children}
+      <div
+        className="appearance-background"
+        aria-hidden="true"
+      />
+
+      {/* =====================================================
+          GLOBAL WELLNESS DECORATIONS
+      ===================================================== */}
+
+      <div
+        className="appearance-decorations"
+        aria-hidden="true"
+      >
+
+        <div className="appearance-leaf appearance-leaf-one">
+          <IconLeaf size={58} />
+        </div>
+
+        <div className="appearance-sparkle appearance-sparkle-one">
+          <IconSparkle size={38} />
+        </div>
+
+        <div className="appearance-cloud appearance-cloud-one">
+          <IconCloud size={70} />
+        </div>
+
+        <div className="appearance-leaf appearance-leaf-two">
+          <IconLeaf size={48} />
+        </div>
+
+        <div className="appearance-sparkle appearance-sparkle-two">
+          <IconSparkle size={34} />
+        </div>
+
+        <div className="appearance-cloud appearance-cloud-two">
+          <IconCloud size={60} />
+        </div>
+
+        <div className="appearance-leaf appearance-leaf-three">
+          <IconLeaf size={45} />
+        </div>
+
+        <div className="appearance-sparkle appearance-sparkle-three">
+          <IconSparkle size={32} />
+        </div>
+
+        <div className="appearance-leaf appearance-leaf-four">
+          <IconLeaf size={52} />
+        </div>
+
+        <div className="appearance-sparkle appearance-sparkle-four">
+          <IconSparkle size={28} />
+        </div>
+
+        <div className="appearance-cloud appearance-cloud-three">
+          <IconCloud size={54} />
+        </div>
+
       </div>
 
-      <BottomNav />
+      {/* =====================================================
+          NAVIGATION
+      ===================================================== */}
+
+      <div className="global-navigation">
+        <Navbar />
+      </div>
+
+      {/* =====================================================
+          PAGE CONTENT
+      ===================================================== */}
+
+      <main className="private-content">
+        {children}
+      </main>
+
+      {/* =====================================================
+          BOTTOM NAVIGATION
+      ===================================================== */}
+
+      <div className="global-bottom-navigation">
+        <BottomNav />
+      </div>
+
+      {/* =====================================================
+          MUSIC PLAYER
+      ===================================================== */}
 
       <MusicPlayer />
 
@@ -134,6 +505,32 @@ function App() {
   }, [applyTheme]);
 
   /* =======================================================
+     APPLY SAVED APPEARANCE
+  ======================================================= */
+
+  useEffect(() => {
+    applySavedAppearance();
+
+    
+
+    const handleAppearanceUpdate = () => {
+      applySavedAppearance();
+    };
+
+    window.addEventListener(
+      "appearanceSettingsUpdated",
+      handleAppearanceUpdate
+    );
+
+    return () => {
+      window.removeEventListener(
+        "appearanceSettingsUpdated",
+        handleAppearanceUpdate
+      );
+    };
+  }, []);
+
+  /* =======================================================
      LOAD CURRENT USER
   ======================================================= */
 
@@ -155,12 +552,14 @@ function App() {
   useEffect(() => {
     if (!token) return undefined;
 
-    return startNotificationScheduler((notification) => {
-      toast(notification.title, {
-        description: notification.message,
-        duration: 10000,
-      });
-    });
+    return startNotificationScheduler(
+      (notification) => {
+        toast(notification.title, {
+          description: notification.message,
+          duration: 10000,
+        });
+      }
+    );
   }, [token]);
 
   /* =======================================================
@@ -172,23 +571,15 @@ function App() {
 
       <BrowserRouter>
 
-        {/* =================================================
-            TOASTER
-        ================================================= */}
-          <Toaster
-            position="bottom-right"
-            closeButton={true}
-            toastOptions={{
-              className:
-                "!bg-white !border-[3px] !border-black " +
-                "!shadow-brutal !rounded-[2px] " +
-                "!font-black !uppercase !text-base !p-4 !min-w-[300px]",
-            }}
-          />
-
-        {/* =================================================
-            APPLICATION ROUTES
-        ================================================= */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            className:
+              "!bg-white !border-[3px] !border-black " +
+              "!shadow-brutal !rounded-[2px] " +
+              "!font-black !uppercase !text-sm",
+          }}
+        />
 
         <Routes>
 
@@ -353,7 +744,7 @@ function App() {
           />
 
           {/* =================================================
-              SETTINGS HOME
+              SETTINGS
           ================================================= */}
 
           <Route
@@ -364,10 +755,6 @@ function App() {
               </PrivateLayout>
             }
           />
-
-          {/* =================================================
-              GENERAL SETTINGS
-          ================================================= */}
 
           <Route
             path="/settings/notifications"
@@ -387,23 +774,7 @@ function App() {
             }
           />
 
-          <Route
-            path="/settings/sound"
-            element={
-              <PrivateLayout>
-                <SoundSettings />
-              </PrivateLayout>
-            }
-          />
-
-          <Route
-            path="/settings/accessibility"
-            element={
-              <PrivateLayout>
-                <AccessibilitySettings />
-              </PrivateLayout>
-            }
-          />
+          
 
           {/* =================================================
               WELLNESS SETTINGS
@@ -457,44 +828,16 @@ function App() {
               </PrivateLayout>
             }
           />
-          {/* =================================================
-              ADMIN SETTINGS
-          ================================================= */}
 
-          <Route
-            path="/settings/admin/organization"
-            element={
-              <PrivateLayout adminOnly>
-                <OrganizationSettings />
-              </PrivateLayout>
-            }
-          />
-
-          <Route
-            path="/settings/admin/wellness-defaults"
-            element={
-              <PrivateLayout adminOnly>
-                <WellnessDefaults />
-              </PrivateLayout>
-            }
-          />
-
-          <Route
-            path="/settings/admin/rewards"
-            element={
-              <PrivateLayout adminOnly>
-                <RewardsSettings />
-              </PrivateLayout>
-            }
-          />
-          
           {/* =================================================
               FALLBACK
           ================================================= */}
 
           <Route
             path="*"
-            element={<Navigate to="/" replace />}
+            element={
+              <Navigate to="/" replace />
+            }
           />
 
         </Routes>

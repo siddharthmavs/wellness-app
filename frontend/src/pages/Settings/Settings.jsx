@@ -4,15 +4,12 @@ import {
   Settings as SettingsIcon,
   Bell,
   Palette,
-  Volume2,
-  Accessibility,
   Droplets,
   Eye,
   PersonStanding,
   Wind,
   ChevronRight,
-  Shield,
-  Trophy,
+  
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store"; // Make sure this path points to your store
@@ -34,18 +31,8 @@ const GENERAL_SETTINGS = [
     icon: Palette,
     path: "/settings/appearance",
   },
-  {
-    label: "Sound",
-    description: "Manage sounds and audio feedback",
-    icon: Volume2,
-    path: "/settings/sound",
-  },
-  {
-    label: "Accessibility",
-    description: "Adjust accessibility preferences",
-    icon: Accessibility,
-    path: "/settings/accessibility",
-  },
+  
+ 
 ];
 
 /* =========================================================
@@ -79,30 +66,6 @@ const WELLNESS_SETTINGS = [
   },
 ];
 
-/* =========================================================
-   ADMIN SETTINGS
-========================================================= */
-
-const ADMIN_SETTINGS = [
-  {
-    label: "Organization",
-    description: "Manage organization-wide wellness settings",
-    icon: Shield,
-    path: "/settings/admin/organization",
-  },
-  {
-    label: "Wellness Defaults",
-    description: "Configure default goals and schedules for employees",
-    icon: SettingsIcon,
-    path: "/settings/admin/wellness-defaults",
-  },
-  {
-    label: "Rewards & Gamification",
-    description: "Configure XP, reward thresholds, achievements and streaks",
-    icon: Trophy,
-    path: "/settings/admin/rewards",
-  },
-];
 
 /* =========================================================
    SETTING ITEM
@@ -234,13 +197,7 @@ const Settings = () => {
           items={WELLNESS_SETTINGS}
         />
 
-        {/* ADMINISTRATION */}
-        {isAdmin && (
-          <SettingsSection
-            title="Administration"
-            items={ADMIN_SETTINGS}
-          />
-        )}
+        
 
       </div>
     </main>

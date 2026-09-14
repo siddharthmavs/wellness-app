@@ -46,38 +46,95 @@ const DEFAULT_REWARDS = [
   { threshold: 100, xp: 50 },
 ];
 
+/*
+  One MOVE BREAK consists of ALL five exercises.
+  Completing an individual exercise does NOT increase
+  the daily movement count.
+*/
+
 const ACTIVITIES = [
   {
     name: "Hand Stretching",
-    description: "Stretch your fingers and palms gently.",
+    preview: "Get ready to stretch your fingers and palms gently.",
+    description:
+      "Stretch your fingers and palms gently.",
     duration: 5,
     image: handStretch,
   },
   {
     name: "Finger Stretch",
-    description: "Relax and stretch each finger slowly.",
+    preview: "Prepare to relax and stretch each finger slowly.",
+    description:
+      "Relax and stretch each finger slowly.",
     duration: 5,
     image: fingerExercise,
   },
   {
     name: "Neck Relax",
-    description: "Release tension from your neck and shoulders.",
+    preview: "Get ready to release tension from your neck and shoulders.",
+    description:
+      "Release tension from your neck and shoulders.",
     duration: 5,
     image: neckStretch,
   },
   {
     name: "Shoulder Rolling",
-    description: "Roll your shoulders slowly and relax.",
+    preview: "Prepare to roll your shoulders slowly and relax.",
+    description:
+      "Roll your shoulders slowly and relax.",
     duration: 5,
     image: shoulderRolling,
   },
   {
     name: "Walking",
-    description: "Stand up and walk around for a moment.",
+    preview: "Get ready to stand up and walk around.",
+    description:
+      "Stand up and walk around for a moment.",
     duration: 5,
     image: walking,
   },
 ];
+
+/* =========================================================
+   SOUND UTILITY (Web Audio API)
+========================================================= */
+
+const playSound = (type = "tick") => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === "tick") {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } else if (type === "beep") {
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // Higher pitch beep
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    } else if (type === "complete") {
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    }
+  } catch {
+    // Ignore audio context blocks
+  }
+};
 
 /* =========================================================
    STORAGE HELPERS
@@ -168,6 +225,10 @@ const getSavedRewardConfig = () => {
   }
 };
 
+/* =========================================================
+   DAILY DATA
+========================================================= */
+
 const loadDailyData = () => {
   const today = getToday();
 
@@ -183,10 +244,6 @@ const loadDailyData = () => {
     localStorage.setItem(
       "moveResetCompleted",
       "0"
-    );
-
-    localStorage.removeItem(
-      "moveResetRewarded"
     );
 
     localStorage.removeItem(
@@ -233,7 +290,7 @@ const saveRewardedMilestones = (milestones) => {
 };
 
 /* =========================================================
-   PROGRESS DATA
+   PROGRESS ITEMS
 ========================================================= */
 
 const createProgressItems = (
@@ -258,10 +315,13 @@ const createProgressItems = (
       time:
         schedule[index] ||
         `MOVE ${index + 1}`,
+
       completed:
         index < safeCompleted,
+
       current:
-        index === safeCompleted,
+        index === safeCompleted &&
+        safeCompleted < safeGoal,
     })
   );
 };
@@ -274,9 +334,9 @@ export default function MoveResetCard({
   onAction,
   onDailyGoalComplete,
 }) {
-  /* -------------------------------------------------------
+  /* =======================================================
      USER SETTINGS
-  ------------------------------------------------------- */
+  ======================================================= */
 
   const [goal, setGoal] =
     useState(getSavedGoal);
@@ -284,9 +344,9 @@ export default function MoveResetCard({
   const [schedule, setSchedule] =
     useState(getSavedSchedule);
 
-  /* -------------------------------------------------------
+  /* =======================================================
      REWARD SETTINGS
-  ------------------------------------------------------- */
+  ======================================================= */
 
   const initialRewardConfig =
     getSavedRewardConfig();
@@ -304,9 +364,9 @@ export default function MoveResetCard({
       initialRewardConfig.milestones
     );
 
-  /* -------------------------------------------------------
+  /* =======================================================
      DAILY PROGRESS
-  ------------------------------------------------------- */
+  ======================================================= */
 
   const [completed, setCompleted] =
     useState(loadDailyData);
@@ -321,18 +381,18 @@ export default function MoveResetCard({
   const rewardedMilestonesRef =
     useRef(rewardedMilestones);
 
-  /* -------------------------------------------------------
+  /* =======================================================
      REWARD MODE
-  ------------------------------------------------------- */
+  ======================================================= */
 
   const [
     workingTowardRewardGoal,
     setWorkingTowardRewardGoal,
   ] = useState(false);
 
-  /* -------------------------------------------------------
+  /* =======================================================
      POPUPS
-  ------------------------------------------------------- */
+  ======================================================= */
 
   const [
     showGoalComplete,
@@ -354,9 +414,9 @@ export default function MoveResetCard({
     setPendingReward,
   ] = useState(null);
 
-  /* -------------------------------------------------------
-     EXERCISE
-  ------------------------------------------------------- */
+  /* =======================================================
+     EXERCISE SESSION
+  ======================================================= */
 
   const [
     showExercise,
@@ -379,17 +439,17 @@ export default function MoveResetCard({
   ] = useState(false);
 
   const [
+    isPreviewing,
+    setIsPreviewing,
+  ] = useState(false);
+
+  const [
     isTransitioning,
     setIsTransitioning,
   ] = useState(false);
 
-  const [
-    transitionRemaining,
-    setTransitionRemaining,
-  ] = useState(0);
-
   /* =======================================================
-     GOAL LOGIC
+     DERIVED VALUES
   ======================================================= */
 
   const personalGoal =
@@ -452,6 +512,9 @@ export default function MoveResetCard({
     personalGoalComplete &&
     !rewardGoalComplete &&
     personalGoal < adminRewardGoal;
+
+  const currentActivity =
+    ACTIVITIES[activityIndex];
 
   /* =======================================================
      LOAD SETTINGS
@@ -633,7 +696,7 @@ export default function MoveResetCard({
   }, []);
 
   /* =======================================================
-     PERSIST PROGRESS
+     PERSIST DAILY PROGRESS
   ======================================================= */
 
   useEffect(() => {
@@ -649,7 +712,7 @@ export default function MoveResetCard({
   }, [completed]);
 
   /* =======================================================
-     PERSIST REWARDS
+     PERSIST REWARDED MILESTONES
   ======================================================= */
 
   useEffect(() => {
@@ -662,7 +725,7 @@ export default function MoveResetCard({
   }, [rewardedMilestones]);
 
   /* =======================================================
-     RESET EVENT
+     RESET API
   ======================================================= */
 
   useEffect(() => {
@@ -754,7 +817,7 @@ export default function MoveResetCard({
     );
 
   /* =======================================================
-     SHOW REWARD
+     OPEN REWARD POPUP
   ======================================================= */
 
   const openRewardPopup =
@@ -773,7 +836,7 @@ export default function MoveResetCard({
     }, []);
 
   /* =======================================================
-     START EXERCISE
+     START MOVE BREAK
   ======================================================= */
 
   const startExercise = () => {
@@ -781,19 +844,9 @@ export default function MoveResetCard({
       return;
     }
 
-    const randomIndex =
-      Math.floor(
-        Math.random() *
-          ACTIVITIES.length
-      );
-
-    setActivityIndex(randomIndex);
-
-    setRemaining(
-      ACTIVITIES[randomIndex].duration
-    );
-
+    setActivityIndex(0);
     setIsPreparing(true);
+    setIsPreviewing(false);
     setIsTransitioning(false);
     setShowExercise(true);
   };
@@ -802,20 +855,24 @@ export default function MoveResetCard({
      CLOSE EXERCISE
   ======================================================= */
 
-  const closeExercise = () => {
+  const closeExercise = useCallback(() => {
     setShowExercise(false);
+
     setIsPreparing(false);
+    setIsPreviewing(false);
     setIsTransitioning(false);
+
     setRemaining(0);
-    setTransitionRemaining(0);
-  };
+    setActivityIndex(0);
+  }, []);
 
   /* =======================================================
-     COMPLETE SESSION
+     COMPLETE ENTIRE MOVE BREAK
   ======================================================= */
 
   const completeSession =
     useCallback(() => {
+      playSound("complete");
       const previousCompleted =
         Number(
           localStorage.getItem(
@@ -840,19 +897,11 @@ export default function MoveResetCard({
 
       onAction?.("stand");
 
-      /* -----------------------------------------------
-         PERSONAL GOAL
-      ------------------------------------------------ */
-
       const crossedPersonalGoal =
         previousCompleted <
           personalGoal &&
         newCompleted >=
           personalGoal;
-
-      /* -----------------------------------------------
-         ADMIN REWARDS
-      ------------------------------------------------ */
 
       const reachedMilestones =
         getReachedMilestones(
@@ -893,14 +942,22 @@ export default function MoveResetCard({
             onDailyGoalComplete?.({
               type:
                 "move_reset_milestone",
+
               threshold:
                 Number(
                   milestone.threshold
                 ),
+
               reward:
                 Number(
                   milestone.xp
                 ),
+
+              completed:
+                newCompleted,
+
+              goal:
+                adminRewardGoal,
             });
           }
         );
@@ -912,10 +969,6 @@ export default function MoveResetCard({
               newMilestones.length - 1
             ]
           : null;
-
-      /* -----------------------------------------------
-         PERSONAL GOAL POPUP
-      ------------------------------------------------ */
 
       if (
         crossedPersonalGoal &&
@@ -932,10 +985,6 @@ export default function MoveResetCard({
 
         return;
       }
-
-      /* -----------------------------------------------
-         REWARD POPUP
-      ------------------------------------------------ */
 
       if (latestReward) {
         openRewardPopup(
@@ -963,30 +1012,29 @@ export default function MoveResetCard({
     if (isPreparing) {
       const timer = setTimeout(() => {
         setIsPreparing(false);
-
-        setRemaining(
-          ACTIVITIES[
-            activityIndex
-          ].duration
-        );
+        setIsPreviewing(true);
       }, 1000);
 
       return () =>
         clearTimeout(timer);
     }
 
+    if (isPreviewing) {
+      const timer = setTimeout(() => {
+        setIsPreviewing(false);
+        setRemaining(
+          ACTIVITIES[activityIndex].duration
+        );
+      }, 2000);
+
+      return () =>
+        clearTimeout(timer);
+    }
+
     if (isTransitioning) {
-      if (transitionRemaining <= 1) {
+      const timer = setTimeout(() => {
         completeSession();
         closeExercise();
-
-        return;
-      }
-
-      const timer = setTimeout(() => {
-        setTransitionRemaining(
-          (value) => value - 1
-        );
       }, 1000);
 
       return () =>
@@ -994,6 +1042,13 @@ export default function MoveResetCard({
     }
 
     if (remaining > 0) {
+      // Trigger beep when hitting the last second, or tick otherwise
+      if (remaining === 1) {
+        playSound("beep");
+      } else {
+        playSound("tick");
+      }
+
       const timer = setTimeout(() => {
         setRemaining(
           (value) => value - 1
@@ -1004,16 +1059,29 @@ export default function MoveResetCard({
         clearTimeout(timer);
     }
 
-    setIsTransitioning(true);
-    setTransitionRemaining(1);
+    const isLastExercise =
+      activityIndex ===
+      ACTIVITIES.length - 1;
+
+    if (isLastExercise) {
+      setIsTransitioning(true);
+      return;
+    }
+
+    const nextIndex =
+      activityIndex + 1;
+
+    setActivityIndex(nextIndex);
+    setIsPreviewing(true);
   }, [
     showExercise,
     isPreparing,
+    isPreviewing,
     isTransitioning,
-    transitionRemaining,
     remaining,
     activityIndex,
     completeSession,
+    closeExercise,
   ]);
 
   /* =======================================================
@@ -1041,10 +1109,13 @@ export default function MoveResetCard({
         "keydown",
         handleKeyDown
       );
-  }, [showExercise]);
+  }, [
+    showExercise,
+    closeExercise,
+  ]);
 
   /* =======================================================
-     CONTINUE
+     CONTINUE TOWARD ADMIN REWARD GOAL
   ======================================================= */
 
   const continueTowardRewardGoal =
@@ -1065,7 +1136,7 @@ export default function MoveResetCard({
     };
 
   /* =======================================================
-     FINISH TODAY
+     FINISH FOR TODAY
   ======================================================= */
 
   const finishForToday = () => {
@@ -1081,50 +1152,12 @@ export default function MoveResetCard({
   };
 
   /* =======================================================
-     RESET
-  ======================================================= */
-
-  const resetToday = () => {
-    localStorage.setItem(
-      "moveResetDate",
-      getToday()
-    );
-
-    localStorage.setItem(
-      "moveResetCompleted",
-      "0"
-    );
-
-    rewardedMilestonesRef.current =
-      [];
-
-    setCompleted(0);
-    setRewardedMilestones([]);
-
-    setWorkingTowardRewardGoal(
-      false
-    );
-
-    setShowGoalComplete(false);
-    setShowReward(false);
-    setCurrentReward(null);
-    setPendingReward(null);
-  };
-
-  /* =======================================================
      RENDER
   ======================================================= */
 
   return (
     <>
-      {/* ===================================================
-          MAIN CARD
-      =================================================== */}
-
       <div className="move-reset-card">
-
-        {/* HEADER */}
-
         <div className="move-card-header">
           <div>
             <div className="move-card-title">
@@ -1139,26 +1172,13 @@ export default function MoveResetCard({
             </div>
 
             <p className="move-card-subtitle">
-              Take a short movement break.
+              Complete a full movement break to
+              reset your body and mind.
             </p>
           </div>
-
-          <button
-            type="button"
-            className="move-settings-button"
-            onClick={resetToday}
-            title="Reset today's progress"
-          >
-            <RotateCcw size={16} />
-          </button>
         </div>
 
-        {/* =================================================
-            PROGRESS
-        ================================================= */}
-
         <div className="move-activity-progress">
-
           <div className="move-progress-title">
             <span>
               {workingTowardRewardGoal
@@ -1172,8 +1192,20 @@ export default function MoveResetCard({
             </span>
           </div>
 
-          <div className="move-activity-icons">
+          <div className="move-progress-bar">
+            <motion.div
+              className="move-progress-fill"
+              initial={{ width: 0 }}
+              animate={{
+                width: `${progress}%`,
+              }}
+              transition={{
+                duration: 0.5,
+              }}
+            />
+          </div>
 
+          <div className="move-activity-icons">
             {progressItems.map(
               (item) => {
                 const Icon =
@@ -1187,9 +1219,7 @@ export default function MoveResetCard({
                   <React.Fragment
                     key={item.index}
                   >
-
                     <div className="move-progress-item">
-
                       <span className="move-time">
                         {item.time}
                       </span>
@@ -1254,56 +1284,61 @@ export default function MoveResetCard({
                     </div>
 
                     {item.index <
-                      safeActiveProgressGoal - 1 && (
+                      safeActiveProgressGoal -
+                        1 && (
                       <div
                         className={`move-connector ${
-                          item.index < completed
+                          item.index <
+                          completed
                             ? "completed"
                             : ""
                         }`}
                       />
                     )}
-
                   </React.Fragment>
                 );
               }
             )}
-
           </div>
         </div>
-
-        {/* =================================================
-            STATUS
-        ================================================= */}
 
         <div className="move-status-message">
           {allGoalsComplete ? (
             "🎉 All movement goals completed!"
           ) : workingTowardRewardGoal ? (
-            `Keep going! ${
-              adminRewardGoal -
-              completed
-            } more to reach the reward goal.`
+            <>
+              Keep going!{" "}
+              <strong>
+                {Math.max(
+                  adminRewardGoal -
+                    completed,
+                  0
+                )}
+              </strong>{" "}
+              more complete break
+              {adminRewardGoal -
+                completed ===
+              1
+                ? ""
+                : "s"}{" "}
+              to reach the reward goal.
+            </>
           ) : personalGoalComplete ? (
-            "Daily movement goal completed!"
+            "Daily movement goal completed! Keep going if you want to earn more rewards."
           ) : (
             <>
               {personalGoal -
                 completed}{" "}
-              movement{" "}
+              complete movement break
               {personalGoal -
                 completed ===
               1
-                ? "break"
-                : "breaks"}{" "}
+                ? ""
+                : "s"}{" "}
               remaining
             </>
           )}
         </div>
-
-        {/* =================================================
-            START BUTTON
-        ================================================= */}
 
         {!allGoalsComplete ? (
           <button
@@ -1318,6 +1353,8 @@ export default function MoveResetCard({
 
             {workingTowardRewardGoal
               ? "KEEP MOVING"
+              : personalGoalComplete
+              ? "START ANOTHER BREAK"
               : "START MOVE BREAK"}
           </button>
         ) : (
@@ -1332,17 +1369,19 @@ export default function MoveResetCard({
         )}
       </div>
 
-      {/* ===================================================
-          EXERCISE MODAL
-      =================================================== */}
-
       <AnimatePresence>
         {showExercise && (
           <motion.div
             className="move-exercise-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{
+              opacity: 0,
+            }}
+            animate={{
+              opacity: 1,
+            }}
+            exit={{
+              opacity: 0,
+            }}
           >
             <motion.div
               className="move-exercise-modal"
@@ -1359,11 +1398,11 @@ export default function MoveResetCard({
                 opacity: 0,
               }}
             >
-
               <button
                 type="button"
                 className="move-exercise-close"
                 onClick={closeExercise}
+                aria-label="Close movement break"
               >
                 <X size={20} />
               </button>
@@ -1371,7 +1410,11 @@ export default function MoveResetCard({
               {isPreparing ? (
                 <>
                   <div className="move-small-label">
-                    GET READY
+                    MOVE & RESET
+                  </div>
+
+                  <div className="move-exercise-progress">
+                    Get Ready
                   </div>
 
                   <h2>
@@ -1383,9 +1426,36 @@ export default function MoveResetCard({
                   </div>
 
                   <p>
-                    Get into a comfortable
-                    position.
+                    You will complete all{" "}
+                    <strong>
+                      {ACTIVITIES.length}
+                    </strong>{" "}
+                    exercises in this break.
                   </p>
+                </>
+              ) : isPreviewing ? (
+                <>
+                  <div className="move-small-label">
+                    EXERCISE {activityIndex + 1} OF {ACTIVITIES.length}
+                  </div>
+
+                  <h2>
+                    {currentActivity.name}
+                  </h2>
+
+                  <motion.img
+                    key={currentActivity.name + "-preview"}
+                    src={currentActivity.image}
+                    alt={currentActivity.name}
+                    className="move-exercise-image"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                  />
+
+                  <div className="move-exercise-description" style={{ fontSize: "1.1rem", fontWeight: 500, margin: "1rem 0" }}>
+                    {currentActivity.preview}
+                  </div>
                 </>
               ) : isTransitioning ? (
                 <>
@@ -1393,16 +1463,25 @@ export default function MoveResetCard({
                     GREAT JOB!
                   </div>
 
+                  <div className="move-exercise-progress">
+                    {ACTIVITIES.length} of{" "}
+                    {ACTIVITIES.length} exercises
+                  </div>
+
                   <h2>
-                    Movement Complete
+                    Break Complete!
                   </h2>
 
                   <div className="move-countdown transition-countdown">
-                    ✓
+                    <Check
+                      size={42}
+                      strokeWidth={3}
+                    />
                   </div>
 
                   <p>
-                    Saving your progress...
+                    You completed the full
+                    movement break.
                   </p>
                 </>
               ) : (
@@ -1411,26 +1490,37 @@ export default function MoveResetCard({
                     MOVE & RESET
                   </div>
 
+                  <div className="move-exercise-progress">
+                    Exercise{" "}
+                    {activityIndex + 1}{" "}
+                    of{" "}
+                    {ACTIVITIES.length}
+                  </div>
+
                   <h2>
-                    {
-                      ACTIVITIES[
-                        activityIndex
-                      ].name
-                    }
+                    {currentActivity.name}
                   </h2>
 
-                  <img
+                  <motion.img
+                    key={currentActivity.name}
                     src={
-                      ACTIVITIES[
-                        activityIndex
-                      ].image
+                      currentActivity.image
                     }
                     alt={
-                      ACTIVITIES[
-                        activityIndex
-                      ].name
+                      currentActivity.name
                     }
                     className="move-exercise-image"
+                    initial={{
+                      opacity: 0,
+                      scale: 0.95,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                    }}
+                    transition={{
+                      duration: 0.3,
+                    }}
                   />
 
                   <div className="move-countdown">
@@ -1438,11 +1528,7 @@ export default function MoveResetCard({
                   </div>
 
                   <div className="move-exercise-description">
-                    {
-                      ACTIVITIES[
-                        activityIndex
-                      ].description
-                    }
+                    {currentActivity.description}
                   </div>
 
                   <div className="move-exercise-dots">
@@ -1451,7 +1537,7 @@ export default function MoveResetCard({
                         <span
                           key={index}
                           className={
-                            index ===
+                            index <=
                             activityIndex
                               ? "active"
                               : ""
@@ -1460,25 +1546,33 @@ export default function MoveResetCard({
                       )
                     )}
                   </div>
+
+                  <div className="move-exercise-step-label">
+                    {activityIndex ===
+                    ACTIVITIES.length - 1
+                      ? "Final exercise"
+                      : "Next exercise follows automatically"}
+                  </div>
                 </>
               )}
-
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ===================================================
-          PERSONAL GOAL COMPLETE
-      =================================================== */}
-
       <AnimatePresence>
         {showGoalComplete && (
           <motion.div
             className="move-reward-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{
+              opacity: 0,
+            }}
+            animate={{
+              opacity: 1,
+            }}
+            exit={{
+              opacity: 0,
+            }}
           >
             <motion.div
               className="move-reward-popup"
@@ -1495,7 +1589,6 @@ export default function MoveResetCard({
                 opacity: 0,
               }}
             >
-
               <div className="reward-person">
                 🎉
               </div>
@@ -1509,8 +1602,11 @@ export default function MoveResetCard({
                 movement goal of{" "}
                 <strong>
                   {personalGoal}
-                </strong>
-                .
+                </strong>{" "}
+                complete break
+                {personalGoal === 1
+                  ? ""
+                  : "s"}.
               </p>
 
               {canContinueTowardReward ? (
@@ -1520,11 +1616,11 @@ export default function MoveResetCard({
                     <strong>
                       {adminRewardGoal}
                     </strong>{" "}
-                    to unlock more rewards.
+                    complete breaks to
+                    unlock more rewards.
                   </p>
 
                   <div className="move-goal-actions">
-
                     <button
                       type="button"
                       onClick={
@@ -1542,7 +1638,6 @@ export default function MoveResetCard({
                     >
                       FINISH FOR TODAY
                     </button>
-
                   </div>
                 </>
               ) : (
@@ -1555,24 +1650,25 @@ export default function MoveResetCard({
                   DONE
                 </button>
               )}
-
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* ===================================================
-          REWARD POPUP
-      =================================================== */}
 
       <AnimatePresence>
         {showReward &&
           currentReward && (
             <motion.div
               className="move-reward-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{
+                opacity: 0,
+              }}
+              animate={{
+                opacity: 1,
+              }}
+              exit={{
+                opacity: 0,
+              }}
             >
               <motion.div
                 className="move-reward-popup"
@@ -1589,7 +1685,6 @@ export default function MoveResetCard({
                   opacity: 0,
                 }}
               >
-
                 <div className="reward-person">
                   🏆
                 </div>
@@ -1606,7 +1701,8 @@ export default function MoveResetCard({
                     }
                     %
                   </strong>{" "}
-                  of your admin reward goal.
+                  of your admin reward
+                  goal.
                 </p>
 
                 <div className="move-xp">
@@ -1622,7 +1718,6 @@ export default function MoveResetCard({
                 >
                   AWESOME
                 </button>
-
               </motion.div>
             </motion.div>
           )}
