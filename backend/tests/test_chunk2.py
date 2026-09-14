@@ -97,11 +97,13 @@ class TestAdminUsers:
         assert r.status_code == 400
 
     def test_admin_delete_user_then_recreate(self, session, admin_headers):
-        # create temp user via register, delete via admin
+        # create a temp user in the admin's own org via invite + accept, then delete via admin
         email = f"TEST_del_{uuid.uuid4().hex[:6]}@test.com"
-        r = session.post(f"{API}/auth/register", json={
-            "name": "TEST Del", "email": email, "password": "p1234", "department": "QA"
-        })
+        ri = session.post(f"{API}/admin/invitations", json={"name": "TEST Del", "email": email},
+                          headers=admin_headers)
+        assert ri.status_code == 200, ri.text
+        r = session.post(f"{API}/auth/accept-invite",
+                         json={"token": ri.json()["token"], "password": "p1234"})
         assert r.status_code == 200
         uid = r.json()["user"]["id"]
         rd = session.delete(f"{API}/admin/users/{uid}", headers=admin_headers)

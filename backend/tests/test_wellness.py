@@ -27,11 +27,20 @@ def _session(token=None):
 
 @pytest.fixture(scope="module")
 def user_session():
-    """A throwaway user so daily counters start from a known-empty state."""
+    """A throwaway employee in the seeded Demo Organization (so game-team/bounty fixtures
+    that assume demo-org seed data still line up), with known-empty daily counters."""
     s = _session()
+    s.post(f"{API}/seed", timeout=20)
+    admin_r = s.post(f"{API}/auth/login", json=ADMIN, timeout=20)
+    assert admin_r.status_code == 200, admin_r.text
+    admin_token = admin_r.json()["token"]
+
     email = f"wellness_{uuid.uuid4().hex[:10]}@demo.com"
-    r = s.post(f"{API}/auth/register",
-               json={"name": "Wellness Bot", "email": email, "password": "demo1234"}, timeout=20)
+    inv = s.post(f"{API}/admin/invitations", json={"name": "Wellness Bot", "email": email},
+                headers={"Authorization": f"Bearer {admin_token}"}, timeout=20)
+    assert inv.status_code == 200, inv.text
+    r = s.post(f"{API}/auth/accept-invite",
+               json={"token": inv.json()["token"], "password": "demo1234"}, timeout=20)
     assert r.status_code == 200, r.text
     body = r.json()
     s.headers.update({"Authorization": f"Bearer {body['token']}"})

@@ -33,20 +33,24 @@ def auth_headers(demo_token):
 # --- Auth ---
 class TestAuth:
     def test_register_new_user(self, session):
+        # /auth/register now creates a brand-new organization + its first Admin
+        # (doc section 1) — employees join only via /auth/accept-invite.
         email = f"TEST_{uuid.uuid4().hex[:8]}@test.com"
         r = session.post(f"{API}/auth/register", json={
-            "name": "TEST User", "email": email, "password": "test1234", "department": "QA"
+            "org_name": "QA Test Org", "name": "TEST User", "email": email, "password": "test1234"
         })
         assert r.status_code == 200, r.text
         data = r.json()
         assert "token" in data and "user" in data
         assert data["user"]["email"] == email
+        assert data["user"]["role"] == "admin"
+        assert data["user"]["org_id"]
         assert data["user"]["points"] == 0
         assert data["user"]["level"] == 1
 
     def test_register_duplicate(self, session):
         r = session.post(f"{API}/auth/register", json={
-            "name": "Alex", "email": DEMO_EMAIL, "password": "x", "department": "X"
+            "org_name": "Another Org", "name": "Alex", "email": DEMO_EMAIL, "password": "x"
         })
         assert r.status_code == 400
 

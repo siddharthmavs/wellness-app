@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import Any, Dict, List, Optional
 import uuid
+import secrets
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt as pyjwt
@@ -88,15 +89,32 @@ async def create_notification(user_id: str, kind: str, title: str, message: str,
     })
 
 # ---------- Models ----------
-class RegisterReq(BaseModel):
+class OrgRegisterReq(BaseModel):
+    """Admin sign-up: creates a brand-new organization plus its first Admin account (doc section 1.1)."""
+    org_name: str
     name: str
     email: EmailStr
     password: str
-    department: Optional[str] = "General"
 
 class LoginReq(BaseModel):
     email: EmailStr
     password: str
+
+class InviteCreateReq(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    role: Optional[str] = "employee"
+    department: Optional[str] = None
+
+class AcceptInviteReq(BaseModel):
+    token: str
+    password: str
+    name: Optional[str] = None
+
+class OrganizationPatch(BaseModel):
+    name: Optional[str] = None
+    support_email: Optional[EmailStr] = None
+    work_email_domain: Optional[str] = None
 
 class ActivityReq(BaseModel):
     type: str  # water, eye_care, stand, breathing
@@ -119,40 +137,124 @@ class AIInsightReq(BaseModel):
     moods: Optional[List[str]] = None
 
 # ---------- Auth ----------
-@api.post("/auth/register")
-async def register(body: RegisterReq):
-    existing = await db.users.find_one({"email": body.email.lower()})
-    if existing:
-        raise HTTPException(400, "Email already registered")
-    uid = str(uuid.uuid4())
-    avatar_colors = ["FFE600", "00E5FF", "FF4D6D", "00C853"]
-    user = {
-        "id": uid,
-        "name": body.name,
-        "email": body.email.lower(),
-        "password": hash_password(body.password),
-        "department": body.department or "General",
+AVATAR_COLORS = ["FFE600", "00E5FF", "FF4D6D", "00C853"]
+INVITE_EXPIRE_DAYS = 7
+
+def _split_name(name: str):
+    name = (name or "").strip()
+    if " " in name:
+        first, last = name.split(" ", 1)
+        return first, last
+    return name, ""
+
+def _new_user_doc(org_id: str, name: str, email: str, password: str, role: str,
+                   department: str = "General") -> dict:
+    first, last = _split_name(name)
+    created = now_iso()
+    return {
+        "id": str(uuid.uuid4()),
+        "org_id": org_id,
+        "name": name,
+        "first_name": first,
+        "last_name": last,
+        "email": email.lower(),
+        "password": hash_password(password),
+        "department": department or "General",
+        "job_title": "",
+        "birthday": None,
+        "work_anniversary": created[:10],  # doc section 2: defaults to the join date
+        "bio": "",
         "points": 0,
         "streak": 0,
         "level": 1,
         "wellness_score": 50,
         "badges": [],
-        "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={body.name}&backgroundColor={random.choice(avatar_colors)}",
-        "role": "employee",
+        "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={name}&backgroundColor={random.choice(AVATAR_COLORS)}",
+        "role": role,
+        "status": "active",
         "dnd": False,
-        "created_at": now_iso(),
-        "last_activity": now_iso(),
+        "created_at": created,
+        "last_activity": created,
     }
-    await db.users.insert_one(user)
+
+def invite_status(inv: dict) -> str:
+    """Invitation status is mostly stored, but expiry is computed lazily (doc section 3.1)."""
+    if inv.get("status") in ("accepted", "cancelled"):
+        return inv["status"]
+    try:
+        if datetime.now(timezone.utc) > datetime.fromisoformat(inv["expires_at"]):
+            return "expired"
+    except Exception:
+        pass
+    return "pending"
+
+@api.post("/auth/register")
+async def register(body: OrgRegisterReq):
+    """Admin creates a brand-new organization; open self-signup for employees no longer exists —
+    employees join only via POST /auth/accept-invite (doc section 1)."""
+    existing = await db.users.find_one({"email": body.email.lower()})
+    if existing:
+        raise HTTPException(400, "Email already registered")
+    org_name = body.org_name.strip()
+    if not org_name:
+        raise HTTPException(400, "Organization name is required")
+    org_id = str(uuid.uuid4())
+    org = {
+        "id": org_id,
+        "name": org_name,
+        "support_email": body.email.lower(),
+        "work_email_domain": body.email.lower().split("@")[-1],
+        "created_at": now_iso(),
+    }
+    await db.organizations.insert_one(org)
+    user = _new_user_doc(org_id, body.name, body.email, body.password, role="admin")
+    await db.users.insert_one(dict(user))
     user.pop("password", None)
     user.pop("_id", None)
-    return {"token": create_token(uid), "user": user}
+    return {"token": create_token(user["id"]), "user": user}
+
+@api.get("/invitations/{token}")
+async def preview_invitation(token: str):
+    """Public (unauthenticated) preview so the accept-invite page can show who/what org before signup."""
+    inv = await db.invitations.find_one({"token": token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(404, "Invitation not found")
+    status = invite_status(inv)
+    if status != "pending":
+        raise HTTPException(400, f"This invitation is {status}")
+    org = await db.organizations.find_one({"id": inv["org_id"]}, {"_id": 0})
+    return {"email": inv["email"], "name": inv.get("name"), "role": inv.get("role"),
+            "org_name": (org or {}).get("name", "")}
+
+@api.post("/auth/accept-invite")
+async def accept_invite(body: AcceptInviteReq):
+    inv = await db.invitations.find_one({"token": body.token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(404, "Invitation not found")
+    status = invite_status(inv)
+    if status != "pending":
+        raise HTTPException(400, f"This invitation is {status}")
+    if await db.users.find_one({"email": inv["email"]}):
+        raise HTTPException(400, "Email already registered")
+    name = (body.name or inv.get("name") or inv["email"].split("@")[0]).strip()
+    user = _new_user_doc(inv["org_id"], name, inv["email"], body.password,
+                          role=inv.get("role") or "employee", department=inv.get("department"))
+    await db.users.insert_one(dict(user))
+    await db.invitations.update_one(
+        {"token": body.token},
+        {"$set": {"status": "accepted", "accepted_at": now_iso(), "user_id": user["id"]}},
+    )
+    user.pop("password", None)
+    user.pop("_id", None)
+    return {"token": create_token(user["id"]), "user": user}
 
 @api.post("/auth/login")
 async def login(body: LoginReq):
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_password(body.password, user.get("password", "")):
         raise HTTPException(401, "Invalid credentials")
+    if user.get("status") == "deactivated":
+        raise HTTPException(403, "This account has been deactivated")
     user.pop("password", None)
     user.pop("_id", None)
     return {"token": create_token(user["id"]), "user": user}
@@ -218,7 +320,7 @@ async def apply_activity_rewards(user: dict, pts: int) -> dict:
 
 @api.post("/activities")
 async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
-    pc = await get_points_config()
+    pc = await get_points_config(user.get("org_id"))
     pts = body.points or pc.get(body.type, 5)
     activity = {
         "id": str(uuid.uuid4()),
@@ -499,10 +601,29 @@ async def ai_mood_insight(body: AIInsightReq, user=Depends(get_current_user)):
         return {"insight": f"Your vibe has been a mix of {', '.join(moods[:3])}. Keep logging — self-awareness is the cheat code. "}
 
 # ---------- Seed ----------
+DEFAULT_ORG_NAME = "Demo Organization"
+
+async def get_or_create_default_org() -> str:
+    """Every user needs an org_id. Pre-existing/demo data lives in one idempotently-seeded
+    'Demo Organization' so nothing already in the DB breaks when multi-org support is added."""
+    org = await db.organizations.find_one({"name": DEFAULT_ORG_NAME}, {"_id": 0, "id": 1})
+    if org:
+        return org["id"]
+    org_id = str(uuid.uuid4())
+    await db.organizations.insert_one({
+        "id": org_id,
+        "name": DEFAULT_ORG_NAME,
+        "support_email": "admin@demo.com",
+        "work_email_domain": "demo.com",
+        "created_at": now_iso(),
+    })
+    return org_id
+
 @api.post("/seed")
 async def seed_data():
     # idempotent — only inserts missing demo users/posts
     existing_count = await db.users.count_documents({})
+    default_org_id = await get_or_create_default_org()
 
     demo_users = [
         {"name": "Admin Boss", "email": "admin@demo.com", "password": "demo1234", "department": "Management", "points": 500, "color": "000000", "role": "admin"},
@@ -523,12 +644,17 @@ async def seed_data():
                 )
             continue
         uid = str(uuid.uuid4())
+        first, last = _split_name(du["name"])
         await db.users.insert_one({
             "id": uid,
+            "org_id": default_org_id,
             "name": du["name"],
+            "first_name": first,
+            "last_name": last,
             "email": du["email"],
             "password": hash_password(du["password"]),
             "department": du["department"],
+            "job_title": "",
             "points": du["points"],
             "streak": random.randint(2, 14),
             "level": 1 + du["points"] // 200,
@@ -536,6 +662,7 @@ async def seed_data():
             "badges": random.sample([b["id"] for b in BADGES], k=random.randint(1, 3)),
             "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={du['name']}&backgroundColor={du['color']}",
             "role": du.get("role", "employee"),
+            "status": "active",
             "dnd": False,
             "created_at": now_iso(),
             "last_activity": now_iso(),
@@ -910,17 +1037,28 @@ async def weekly_insights(user=Depends(get_current_user)):
 # ---------- Admin routes ----------
 @api.get("/admin/users")
 async def admin_users(admin=Depends(require_admin)):
-    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(500)
+    """Doc section 3.2 — the current organization's users only, never other orgs'."""
+    users = await db.users.find({"org_id": admin.get("org_id")}, {"_id": 0, "password": 0}).to_list(500)
     return users
 
 class AdminUserPatch(BaseModel):
     role: Optional[str] = None
     department: Optional[str] = None
     points: Optional[int] = None
+    status: Optional[str] = None  # active | deactivated
+
+async def _get_org_user(uid: str, admin: dict) -> dict:
+    u = await db.users.find_one({"id": uid, "org_id": admin.get("org_id")}, {"_id": 0, "password": 0})
+    if not u:
+        raise HTTPException(404, "User not found in your organization")
+    return u
 
 @api.patch("/admin/users/{uid}")
 async def admin_update_user(uid: str, body: AdminUserPatch, admin=Depends(require_admin)):
+    await _get_org_user(uid, admin)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates.get("status") not in (None, "active", "deactivated"):
+        raise HTTPException(400, "status must be 'active' or 'deactivated'")
     if updates:
         await db.users.update_one({"id": uid}, {"$set": updates})
     u = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
@@ -930,8 +1068,90 @@ async def admin_update_user(uid: str, body: AdminUserPatch, admin=Depends(requir
 async def admin_delete_user(uid: str, admin=Depends(require_admin)):
     if uid == admin["id"]:
         raise HTTPException(400, "Cannot delete self")
+    await _get_org_user(uid, admin)
     await db.users.delete_one({"id": uid})
     return {"deleted": True}
+
+# ---------- Organization & Invitations (doc sections 1, 3.1, 3.2) ----------
+@api.get("/admin/organization")
+async def get_organization(admin=Depends(require_admin)):
+    org = await db.organizations.find_one({"id": admin.get("org_id")}, {"_id": 0})
+    if not org:
+        raise HTTPException(404, "Organization not found")
+    return org
+
+@api.put("/admin/organization")
+async def update_organization(body: OrganizationPatch, admin=Depends(require_admin)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        await db.organizations.update_one({"id": admin.get("org_id")}, {"$set": updates})
+    return await db.organizations.find_one({"id": admin.get("org_id")}, {"_id": 0})
+
+def _invite_public(inv: dict) -> dict:
+    inv = {**inv, "status": invite_status(inv)}
+    inv.pop("token", None)
+    return inv
+
+@api.get("/admin/invitations")
+async def list_invitations(admin=Depends(require_admin)):
+    invites = await db.invitations.find({"org_id": admin.get("org_id")}, {"_id": 0}).sort("invited_at", -1).to_list(500)
+    return [_invite_public(i) for i in invites]
+
+@api.post("/admin/invitations")
+async def create_invitation(body: InviteCreateReq, admin=Depends(require_admin)):
+    email = body.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "This email already belongs to a user")
+    existing = await db.invitations.find_one({"org_id": admin.get("org_id"), "email": email}, {"_id": 0})
+    if existing and invite_status(existing) == "pending":
+        raise HTTPException(400, "An invitation is already pending for this email")
+    role = body.role if body.role in ("employee", "admin", "team_lead") else "employee"
+    inv = {
+        "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
+        "email": email,
+        "name": body.name,
+        "role": role,
+        "department": body.department,
+        "status": "pending",
+        "token": secrets.token_urlsafe(24),
+        "invited_by": admin["id"],
+        "invited_at": now_iso(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRE_DAYS)).isoformat(),
+        "accepted_at": None,
+    }
+    await db.invitations.insert_one(dict(inv))
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    inv["accept_link"] = f"{frontend_url}/accept-invite/{inv['token']}"
+    inv.pop("_id", None)
+    return inv
+
+@api.post("/admin/invitations/{iid}/resend")
+async def resend_invitation(iid: str, admin=Depends(require_admin)):
+    """No email provider is configured; 'resend' just refreshes the token/expiry so the admin
+    can re-share the accept link."""
+    inv = await db.invitations.find_one({"id": iid, "org_id": admin.get("org_id")}, {"_id": 0})
+    if not inv:
+        raise HTTPException(404, "Invitation not found")
+    if invite_status(inv) not in ("pending", "expired"):
+        raise HTTPException(400, "Only pending or expired invitations can be resent")
+    token = secrets.token_urlsafe(24)
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRE_DAYS)).isoformat()
+    await db.invitations.update_one(
+        {"id": iid}, {"$set": {"token": token, "status": "pending", "expires_at": expires_at}}
+    )
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    inv.update({"token": token, "status": "pending", "expires_at": expires_at})
+    inv["accept_link"] = f"{frontend_url}/accept-invite/{token}"
+    return inv
+
+@api.delete("/admin/invitations/{iid}")
+async def cancel_invitation(iid: str, admin=Depends(require_admin)):
+    inv = await db.invitations.find_one({"id": iid, "org_id": admin.get("org_id")}, {"_id": 0})
+    if not inv:
+        raise HTTPException(404, "Invitation not found")
+    await db.invitations.update_one({"id": iid}, {"$set": {"status": "cancelled"}})
+    return {"cancelled": True}
 
 class ChallengeCreate(BaseModel):
     title: str
@@ -1362,7 +1582,7 @@ async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
         if ok:
             correct += 1
         results.append({"q": q["q"], "your": ans, "correct": q["answer"], "ok": ok})
-    pc = await get_points_config()
+    pc = await get_points_config(user.get("org_id"))
     pts = correct * pc.get("quiz_per_correct", 3) + (pc.get("quiz_perfect_bonus", 15) if correct == len(questions) else 0)
     rec = {
         "id": str(uuid.uuid4()),
@@ -1513,7 +1733,7 @@ async def tried_bite(bite_id: str, body: BiteTriedReq = None, user=Depends(get_c
     if existing:
         return {"already": True, "mode": existing.get("mode")}
 
-    pc = await get_points_config()
+    pc = await get_points_config(user.get("org_id"))
     pts = int(pc.get("bite_tried", 5))
     await db.bite_tried.insert_one({
         "id": str(uuid.uuid4()),
@@ -1690,7 +1910,13 @@ DEFAULT_GAME_CONFIG = {
     "wellness_score_increment": 2,
 }
 
-async def get_points_config():
+async def get_points_config(org_id: Optional[str] = None):
+    """Reward/point rules are organization-wide (doc section 3.3). Each org can override
+    the shared defaults; orgs that haven't customized fall back to the legacy global doc."""
+    if org_id:
+        cfg = await db.config.find_one({"key": f"points_config:{org_id}"}, {"_id": 0})
+        if cfg:
+            return {**DEFAULT_POINTS_CONFIG, **{k: v for k, v in cfg.items() if k not in ("key", "org_id")}}
     cfg = await db.config.find_one({"key": "points_config"}, {"_id": 0})
     if not cfg:
         return DEFAULT_POINTS_CONFIG.copy()
@@ -1704,13 +1930,15 @@ async def get_game_config():
 
 @api.get("/admin/points-config")
 async def get_pc(admin=Depends(require_admin)):
-    return await get_points_config()
+    return await get_points_config(admin.get("org_id"))
 
 @api.put("/admin/points-config")
 async def set_pc(body: dict, admin=Depends(require_admin)):
     clean = {k: int(v) for k, v in body.items() if k in DEFAULT_POINTS_CONFIG and isinstance(v, (int, float))}
-    await db.config.update_one({"key": "points_config"}, {"$set": {"key": "points_config", **clean}}, upsert=True)
-    return await get_points_config()
+    org_id = admin.get("org_id")
+    key = f"points_config:{org_id}" if org_id else "points_config"
+    await db.config.update_one({"key": key}, {"$set": {"key": key, "org_id": org_id, **clean}}, upsert=True)
+    return await get_points_config(org_id)
 
 @api.get("/admin/game-config")
 async def get_gc(admin=Depends(require_admin)):
@@ -2650,7 +2878,7 @@ async def log_wellness_activity(user_id: str, atype: str, action: str,
 async def record_wellness_event(user: dict, atype: str, action: str, value: Any = None,
                                 xp: Optional[int] = None) -> dict:
     """Log an activity and apply the standard points/level/streak progression."""
-    pc = await get_points_config()
+    pc = await get_points_config(user.get("org_id"))
     pts = pc.get(atype, 5) if xp is None else int(xp)
     activity = await log_wellness_activity(user["id"], atype, action, value, pts)
     totals = await apply_activity_rewards(user, pts)
@@ -2659,7 +2887,7 @@ async def record_wellness_event(user: dict, atype: str, action: str, value: Any 
 async def maybe_award_goal_bonus(user: dict, source: str, atype: str, date: str,
                                  value: Any = None) -> Optional[dict]:
     """Award the once-per-day goal-completion bonus, if it hasn't been awarded yet."""
-    pc = await get_points_config()
+    pc = await get_points_config(user.get("org_id"))
     xp = int(pc.get(REWARD_RULES[source], 50))
     result = await award_reward(
         user_id=user["id"],
@@ -3835,6 +4063,9 @@ async def ensure_indexes():
     )
     await db.game_bounties.create_index("status")
     await db.game_challenges.create_index([("status", 1), ("created_at", -1)])
+    await db.organizations.create_index("name")
+    await db.invitations.create_index("token", unique=True)
+    await db.invitations.create_index([("org_id", 1), ("email", 1)])
 
 @app.on_event("startup")
 async def on_startup():
@@ -3842,6 +4073,23 @@ async def on_startup():
     try:
         await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "employee", "dnd": False}})
         await db.users.update_many({"coins": {"$exists": False}}, {"$set": {"coins": 0}})
+        await db.users.update_many({"status": {"$exists": False}}, {"$set": {"status": "active"}})
+        # Backfill org_id on any pre-existing users into a shared "Demo Organization"
+        if await db.users.count_documents({"org_id": {"$exists": False}}) > 0:
+            default_org_id = await get_or_create_default_org()
+            await db.users.update_many({"org_id": {"$exists": False}}, {"$set": {"org_id": default_org_id}})
+            logger.info("Backfilled org_id on pre-existing users into the Demo Organization")
+        # Backfill work_anniversary from created_at, and split name into first/last, where unset
+        async for u in db.users.find(
+            {"$or": [{"work_anniversary": {"$exists": False}}, {"first_name": {"$exists": False}}]},
+            {"_id": 0, "id": 1, "name": 1, "created_at": 1},
+        ):
+            first, last = _split_name(u.get("name", ""))
+            anniversary = (u.get("created_at") or now_iso())[:10]
+            await db.users.update_one(
+                {"id": u["id"]},
+                {"$set": {"first_name": first, "last_name": last, "work_anniversary": anniversary}},
+            )
         try:
             await ensure_indexes()
         except Exception as e:
