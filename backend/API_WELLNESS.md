@@ -140,8 +140,56 @@ opt-in signal.
 ## User settings — `/api/settings`
 
 `GET` returns the fully-defaulted document; `PUT` deep-merges a partial patch.
-Sections: `notifications`, `sound`, `theme`, `water`, `eye_break`, `move_reset`,
-`breathing`. Schedules and goals are validated on write.
+Sections: `notifications`, `sound`, `theme`, `appearance`, `water`, `eye_break`,
+`move_reset`, `breathing`. Schedules and goals are validated on write;
+`appearance` (background, solid/accent color, layout, font style/size) is
+unvalidated free-form key/value.
+
+## Organizations & invitations — Wellness Garden requirements §1, 2, 3, 5, 6, 7
+
+`POST /api/auth/register` now creates a new **organization** plus its first
+Admin (`{org_name, name, email, password}`) instead of an open self-signup —
+employees join only via invitation. Every user has an `org_id`; pre-existing
+data lives in an idempotently-seeded "Demo Organization".
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/auth/register` | admin org signup — `{org_name, name, email, password}` |
+| GET | `/invitations/{token}` | public preview (email, org name, role) for the accept-invite page |
+| POST | `/auth/accept-invite` | `{token, password, name?}` — creates the employee account in that org |
+| GET/PUT | `/admin/organization` | *admin* — `{name, support_email, work_email_domain}` |
+| GET | `/admin/invitations` | *admin*, org-scoped; pending/expired rows include `accept_link` |
+| POST | `/admin/invitations` | *admin* — `{email, name?, role?, department?}`; 7-day expiry |
+| POST | `/admin/invitations/{id}/resend` | *admin* — rotates the token/expiry, returns a fresh `accept_link` |
+| DELETE | `/admin/invitations/{id}` | *admin* — marks cancelled |
+
+`GET /admin/users`, `GET/PUT /admin/points-config` and `GET /leaderboard[/teams]`
+are all scoped to the caller's `org_id`; `GET /leaderboard` now requires auth
+(it used to be public). `PATCH /admin/users/{uid}` also accepts
+`status: "active" | "deactivated"` (login is blocked for deactivated users).
+
+`PATCH /users/me` gained `first_name`, `last_name`, `job_title`, `department`,
+`birthday` and `work_anniversary` (both `YYYY-MM-DD`); `POST /users/me/avatar`
+(multipart, image/\*, ≤5MB) uploads a profile picture via the same
+object-storage helpers as music uploads and returns `{avatar}`, a
+backend-relative path served by `GET /avatars/{uid}/{file}`.
+
+`GET /events`/`GET /events/today` are now org-scoped and auth-required, and
+merge admin-created rows with **synthesized** birthday/work-anniversary
+events computed live from every org member's profile fields (dedup'd by
+`(user_id, type)`, manual rows win); anniversary entries include
+`years_completed`.
+
+## Web Push — Wellness Garden requirements §8.4
+
+`GET /api/notifications/vapid-public-key` returns the VAPID public key.
+`POST /notifications/register-device` now also accepts a raw
+`subscription: PushSubscriptionJSON` (falls back to `subscription.endpoint`
+when no separate `token` is given). `deliver_push()` sends real pushes via
+`pywebpush` for `webpush` devices with a subscription (auto-deactivating the
+device on a 404/410 "gone" response); FCM/APNs devices are unchanged
+(`"queued"`, no provider configured). Requires `VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`, `VAPID_CLAIMS_EMAIL` in `.env`.
 
 ## Game teams (current branch)
 
@@ -169,9 +217,10 @@ Unknown bite ids now return 404 instead of silently awarding points.
 
 `water_logs`, `eye_break_logs`, `move_reset_logs`, `breathing_logs`,
 `user_settings`, `reward_transactions`, `devices`, `notification_dispatch`,
-`game_bounties`, `game_challenges` — created with indexes on startup by
-`ensure_indexes()`. Existing collections (`users`, `activities`,
-`notifications`, `rewards`, `game_teams`, …) are reused, not duplicated.
+`game_bounties`, `game_challenges`, `organizations`, `invitations` — created
+with indexes on startup by `ensure_indexes()`. Existing collections (`users`,
+`activities`, `notifications`, `rewards`, `game_teams`, …) are reused, not
+duplicated.
 
 ## Tests
 

@@ -138,6 +138,50 @@ Build a full-stack Employee Wellness & Engagement Web Platform in Neo-Brutalist 
 - No emojis introduced — all icons via lucide-react
 
 
+### Chunk 11 (Wellness Garden Backend Integration Requirements — Sep 2026)
+Implements the "Wellness Garden Backend Integration Requirements" doc: multi-org
+support, invite-only signup, richer profiles, org-scoped Journey/Events, a
+dedicated Me page, Settings pages wired to the backend, and real Web Push.
+- **Organizations & invitations** — new `organizations`/`invitations`
+  collections; `POST /auth/register` now creates an org + its first Admin
+  instead of open self-signup; employees join via `POST /auth/accept-invite`
+  (token + password). Admin "People & Access" tab in `AdminDashboard.jsx`
+  (Organization settings, Invite Employees, Recent Invitations) rewired from
+  localStorage mocks to the real endpoints, with copyable accept links and
+  pending/accepted/expired/cancelled status. `Signup.jsx` → org creation form;
+  new `AcceptInvite.jsx` at `/accept-invite/:token`. All pre-existing/demo
+  users live in an idempotently-seeded "Demo Organization".
+- **Org scoping** — `/admin/users`, `/admin/points-config`, `/leaderboard`,
+  `/leaderboard/teams` (now auth-required) and `/events[/today]` are scoped to
+  the caller's `org_id`. Admin can deactivate/reactivate a member (`status`
+  field) in addition to hard delete.
+- **Profile** — `first_name`, `last_name`, `job_title`, `birthday`,
+  `work_anniversary`, avatar upload (`POST /users/me/avatar`, reuses the
+  music-upload object-storage helpers). `Profile.jsx` gained an edit form +
+  avatar picker; `resolveAvatar()` in `lib/api.js` resolves the uploaded
+  backend-relative avatar path everywhere an avatar renders.
+- **Events** — profile-driven: birthdays/work-anniversaries synthesize live
+  from org members' profile fields (merged with any manual admin-created
+  rows), including `years_completed` for anniversaries.
+- **Journey & Me** — `/leaderboard` route renamed to `/journey` (old path
+  redirects); new dedicated `/me` page (today's progress, XP/level, personal
+  reward history via `GET /dashboard` + `/rewards` + `/rewards/history`,
+  previously unused by the frontend); `/profile` is now the profile-edit page,
+  linked from Me.
+- **Settings backend wiring** — Water/EyeCare/MoveReset/Breathing,
+  Notifications and Appearance settings pages previously persisted to
+  localStorage only despite matching backend endpoints existing; all six now
+  load from and save to `GET/PUT /settings` (or `/notifications/settings`),
+  keeping localStorage only as an offline fallback. Backend gained an
+  `appearance` settings section (background/accent/layout/font) that didn't
+  exist before (only a bare `theme` string did).
+- **Web Push** — VAPID keypair + `pywebpush`; `GET /notifications/vapid-public-key`,
+  `register-device` accepts a raw `PushSubscriptionJSON`, `deliver_push()`
+  sends real pushes (auto-deactivates dead subscriptions on 404/410). New
+  `public/service-worker.js` + `notifications/pushService.js` +  a "Browser
+  Push" toggle in Notification Settings, independent of the existing in-tab
+  desktop `Notification` popups.
+
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py
 - Frontend uses REACT_APP_BACKEND_URL; backend on /api prefix
