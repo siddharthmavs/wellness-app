@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/brutal";
 import { Heart, ImagePlus, MessageCircle } from "lucide-react";
 import { useAuthStore } from "../store";
@@ -102,7 +102,7 @@ export default function HelpBoard() {
  className="bg-white border-[4px] border-black shadow-brutal-lg p-5"
  >
  <div className="flex items-center gap-2 mb-2 flex-wrap">
- <img src={p.user_avatar} alt="" className="w-8 h-8 border-[2px] border-black" />
+ <img src={resolveAvatar(p.user_avatar)} alt="" className="w-8 h-8 border-[2px] border-black" />
  <span className="font-black uppercase text-sm">{p.user_name}</span>
  <span className="bg-brutal-yellow border-[2px] border-black px-2 py-0.5 font-black text-xs uppercase">{ICONS[p.category]} {p.category}</span>
  <span className="text-[10px] font-bold ml-auto">{new Date(p.created_at).toLocaleString()}</span>
@@ -120,7 +120,7 @@ export default function HelpBoard() {
  <div className="mt-3 space-y-2 border-t-[3px] border-black pt-3">
  {p.comments.map((c) => (
  <div key={c.id} className="flex items-start gap-2">
- <img src={c.user_avatar} alt="" className="w-6 h-6 border-[2px] border-black" />
+ <img src={resolveAvatar(c.user_avatar)} alt="" className="w-6 h-6 border-[2px] border-black" />
  <div className="flex-1 bg-brutal-yellow/40 border-[2px] border-black px-2 py-1">
  <div className="font-black text-xs uppercase">{c.user_name}</div>
  <div className="text-sm">{c.content}</div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton } from "../components/brutal";
 import { toast } from "sonner";
 
@@ -537,7 +537,7 @@ export default function Events() {
 
                       <div className="flex items-center gap-4">
                         <img
-                          src={event.user_avatar}
+                          src={resolveAvatar(event.user_avatar)}
                           alt=""
                           className="w-20 h-20 border-[4px] border-black bg-white object-cover"
                         />
@@ -625,7 +625,7 @@ export default function Events() {
                     className="bg-white border-[4px] border-black shadow-brutal p-4 flex items-center gap-4"
                   >
                     <img
-                      src={event.user_avatar}
+                      src={resolveAvatar(event.user_avatar)}
                       alt=""
                       className="w-14 h-14 border-[3px] border-black bg-white object-cover"
                     />

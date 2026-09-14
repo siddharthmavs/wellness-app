@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalTag } from "../components/brutal";
 import { Crown, Trophy, Medal } from "lucide-react";
 import { Skeleton, EmptyState } from "../components/Skeleton";
@@ -126,7 +126,7 @@ export default function Leaderboard() {
  data-testid={`podium-${idx}`}
  >
  <div className="text-3xl md:text-5xl">{MEDAL_LABEL[idx]}</div>
- <img src={u.avatar} alt={u.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto border-[3px] border-black bg-white my-2" />
+ <img src={resolveAvatar(u.avatar)} alt={u.name} className="w-12 h-12 md:w-16 md:h-16 mx-auto border-[3px] border-black bg-white my-2" />
  <div className="font-display font-black text-sm md:text-lg uppercase truncate">{u.name}</div>
  <div className="font-black text-xs"> {u.points}</div>
  </motion.div>
@@ -150,7 +150,7 @@ export default function Leaderboard() {
  className="flex items-center gap-4 p-3 border-[4px] border-black shadow-brutal-lg rounded-[4px] bg-white"
  >
  <div className="font-display font-black text-3xl w-12 text-center">#{i + 4}</div>
- <img src={u.avatar} alt={u.name} className="w-12 h-12 border-[3px] border-black bg-brutal-yellow" />
+ <img src={resolveAvatar(u.avatar)} alt={u.name} className="w-12 h-12 border-[3px] border-black bg-brutal-yellow" />
  <div className="flex-1 min-w-0">
  <div className="font-display font-black text-lg uppercase truncate">{u.name}</div>
  <div className="text-xs font-bold uppercase">{u.department} · {u.streak || 0}</div>

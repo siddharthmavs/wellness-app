@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag, BrutalBadge } from "../components/brutal";
 import { useAuthStore } from "../store";
 import { toast } from "sonner";
@@ -110,7 +110,7 @@ export default function Shoutouts() {
  className="bg-white border-[4px] border-black shadow-brutal-lg p-5"
  >
  <div className="flex items-center gap-3 mb-3 flex-wrap">
- <img src={s.sender_avatar} alt="" className="w-9 h-9 border-[3px] border-black bg-brutal-yellow" />
+ <img src={resolveAvatar(s.sender_avatar)} alt="" className="w-9 h-9 border-[3px] border-black bg-brutal-yellow" />
  <span className="font-black uppercase">{s.sender_name}</span>
  <span className="text-xs font-bold uppercase">→</span>
  {s.recipients.map((r) => (

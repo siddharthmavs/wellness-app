@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { toast } from "sonner";
 import { useAuthStore } from "../store";
 
@@ -202,7 +202,7 @@ export default function GameTeams() {
                       className="flex items-center gap-1 bg-white border-[2px] border-black px-1.5 py-0.5"
                     >
                       <img
-                        src={m.avatar}
+                        src={resolveAvatar(m.avatar)}
                         alt=""
                         className="w-5 h-5 border-[1px] border-black"
                       />

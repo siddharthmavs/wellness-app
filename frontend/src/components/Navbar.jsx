@@ -30,7 +30,7 @@ import {
 
 const PRIMARY = [
   { to: "/", label: "Home", icon: Home },
-  { to: "/leaderboard", label: "Journey", icon: Trophy },
+  { to: "/journey", label: "Journey", icon: Trophy },
   { to: "/mood", label: "Mood", icon: Smile },
   { to: "/funwall", label: "Community", icon: MessageSquare },
   { to: "/shoutouts", label: "Kudos", icon: Sparkles },
@@ -45,7 +45,7 @@ const MORE = [
   { to: "/learn", label: "Learn", icon: BookOpen },
   { to: "/events", label: "Events", icon: Cake },
   { to: "/teams", label: "Teams", icon: Swords },
-  { to: "/profile", label: "Me", icon: User },
+  { to: "/me", label: "Me", icon: User },
 ];
 
 export const Navbar = () => {

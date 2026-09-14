@@ -42,6 +42,7 @@ import Leaderboard from "./pages/Leaderboard";
 import Mood from "./pages/Mood";
 import FunWall from "./pages/FunWall";
 import Profile from "./pages/Profile";
+import Me from "./pages/Me";
 import Shoutouts from "./pages/Shoutouts";
 import HelpBoard from "./pages/HelpBoard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -639,13 +640,15 @@ function App() {
           ================================================= */}
 
           <Route
-            path="/leaderboard"
+            path="/journey"
             element={
               <PrivateLayout>
                 <Leaderboard />
               </PrivateLayout>
             }
           />
+
+          <Route path="/leaderboard" element={<Navigate to="/journey" replace />} />
 
           <Route
             path="/mood"
@@ -751,6 +754,15 @@ function App() {
             element={
               <PrivateLayout>
                 <Profile />
+              </PrivateLayout>
+            }
+          />
+
+          <Route
+            path="/me"
+            element={
+              <PrivateLayout>
+                <Me />
               </PrivateLayout>
             }
           />

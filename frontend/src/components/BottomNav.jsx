@@ -4,10 +4,10 @@ import { Home, Trophy, MessageSquare, Smile, User } from "lucide-react";
 
 const ITEMS = [
  { to: "/", label: "Home", icon: Home },
- { to: "/leaderboard", label: "Journey", icon: Trophy },
+ { to: "/journey", label: "Journey", icon: Trophy },
  { to: "/funwall", label: "Community", icon: MessageSquare },
  { to: "/mood", label: "Mood", icon: Smile },
- { to: "/profile", label: "Me", icon: User },
+ { to: "/me", label: "Me", icon: User },
 ];
 
 export const BottomNav = () => (

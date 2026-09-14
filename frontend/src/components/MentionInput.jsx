@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 
 /**
  * MentionInput — textarea/input that suggests users when typing '@'.
@@ -98,7 +98,7 @@ export const MentionInput = ({
  onMouseDown={(e) => { e.preventDefault(); pick(u); }}
  className={`w-full text-left flex items-center gap-2 px-3 py-2 ${highlight === i ? "bg-brutal-yellow" : "bg-white"}`}
  >
- <img src={u.avatar} alt="" className="w-6 h-6 border-[2px] border-black" />
+ <img src={resolveAvatar(u.avatar)} alt="" className="w-6 h-6 border-[2px] border-black" />
  <span className="font-black uppercase text-sm">@{u.name}</span>
  <span className="text-xs ml-auto font-bold">{u.department}</span>
  </button>

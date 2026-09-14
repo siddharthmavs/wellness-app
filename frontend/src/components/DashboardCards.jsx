@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { toast } from "sonner";
 import { IconMindBlown, IconKnewIt, IconHmm, IconLightbulb, IconBook, IconSparkle } from "./HandDrawn";
 
@@ -88,7 +88,7 @@ export const SpotlightCard = () => {
  <div className="absolute -bottom-3 -right-3 opacity-60 pointer-events-none"><IconSparkle size={70} /></div>
  <div className="text-xs font-semibold uppercase tracking-wider mb-2">Community Highlight · This Week</div>
  <div className="flex items-center gap-3 relative z-10">
- <img src={s.avatar} alt="" className="w-16 h-16 rounded-full" style={{ border: "2px solid var(--cozy-text)", background: "var(--cozy-surface)" }} />
+ <img src={resolveAvatar(s.avatar)} alt="" className="w-16 h-16 rounded-full" style={{ border: "2px solid var(--cozy-text)", background: "var(--cozy-surface)" }} />
  <div>
  <div className="font-display text-2xl">{s.name}</div>
  <div className="text-xs font-semibold">{s.department}</div>

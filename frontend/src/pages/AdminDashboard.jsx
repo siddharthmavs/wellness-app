@@ -4,7 +4,7 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/brutal";
 import { toast } from "sonner";
 import {
@@ -595,7 +595,7 @@ const UsersTab = () => {
               className="flex flex-col md:flex-row md:items-center gap-3 border-[3px] border-black p-3 bg-white shadow-brutal-sm"
             >
               <img
-                src={user.avatar}
+                src={resolveAvatar(user.avatar)}
                 className="w-10 h-10 border-[2px] border-black object-cover"
                 alt=""
               />
@@ -1942,7 +1942,7 @@ const PointsTab = () => {
                     onChange={() => setMemberPicks(memberPicks.includes(u.id) ? memberPicks.filter(x => x !== u.id) : [...memberPicks, u.id])}
                     className="w-4 h-4"
                   />
-                  <img src={u.avatar} alt="" className="w-7 h-7 border-[2px] border-black" />
+                  <img src={resolveAvatar(u.avatar)} alt="" className="w-7 h-7 border-[2px] border-black" />
                   <span className="font-black uppercase text-xs">{u.name}</span>
                 </label>
               ))}

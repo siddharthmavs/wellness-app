@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton, BrutalCard } from "./brutal";
 import { toast } from "sonner";
 
@@ -36,7 +36,7 @@ export const BuddyCard = () => {
  {data?.buddy ? (
  <div>
  <div className="flex items-center gap-3 border-[3px] border-black p-3 bg-brutal-yellow/40">
- <img src={data.buddy.avatar} className="w-12 h-12 border-[2px] border-black" alt="" />
+ <img src={resolveAvatar(data.buddy.avatar)} className="w-12 h-12 border-[2px] border-black" alt="" />
  <div>
  <div className="font-black uppercase">{data.buddy.name}</div>
  <div className="text-xs font-bold">{data.buddy.department}</div>
@@ -97,7 +97,7 @@ export const PlantCard = () => {
  {board.map((p, i) => (
  <div key={p.id} className="flex items-center gap-2 text-sm">
  <span className="font-black w-5">#{i + 1}</span>
- <img src={p.user_avatar} className="w-6 h-6 border-[2px] border-black" alt="" />
+ <img src={resolveAvatar(p.user_avatar)} className="w-6 h-6 border-[2px] border-black" alt="" />
  <span className="font-bold flex-1 truncate">{p.user_name}</span>
  <span className="font-black"> {p.streak}</span>
  </div>

@@ -6,6 +6,12 @@ export const API = `${BACKEND_URL}/api`;
 
 export const api = axios.create({ baseURL: API });
 
+// Avatars uploaded via POST /users/me/avatar come back as a backend-relative
+// path (e.g. "/api/avatars/{uid}/{file}"); anything else (Dicebear, etc.) is
+// already an absolute URL.
+export const resolveAvatar = (avatar) =>
+ avatar && avatar.startsWith("/api/") ? `${BACKEND_URL}${avatar}` : avatar;
+
 api.interceptors.request.use((config) => {
  const token = useAuthStore.getState().token;
  if (token) config.headers.Authorization = `Bearer ${token}`;
