@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Droplets, Plus, Trash2, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../../lib/api";
 
 const WATER_GOAL_KEY = "waterGoal";
 const WATER_SETTINGS_KEY = "wellness-water-settings";
@@ -61,6 +62,25 @@ const WaterSettings = () => {
     localStorage.setItem(WATER_SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
+  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => {
+      const water = data?.water;
+      if (!water) return;
+      if (typeof water.goal === "number") {
+        setSavedGoal(water.goal);
+        setSelectedGoal(water.goal);
+      }
+      if (Array.isArray(water.reminder_times)) {
+        setSettings((prev) => ({ ...prev, reminderTimes: water.reminder_times }));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const syncSchedule = (times) => {
+    api.put("/settings", { water: { reminder_times: times } }).catch(() => {});
+  };
+
   useEffect(() => {
     const updateGoalFromStorage = (detailData) => {
       if (detailData) {
@@ -108,6 +128,7 @@ const WaterSettings = () => {
     localStorage.setItem(WATER_GOAL_KEY, String(selectedGoal));
     setSavedGoal(selectedGoal);
     window.dispatchEvent(new Event("water-settings-updated"));
+    api.put("/water/goal", { goal: selectedGoal }).catch(() => {});
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -125,18 +146,16 @@ const WaterSettings = () => {
       setNewTime("");
       return;
     }
-    setSettings((prev) => ({
-      ...prev,
-      reminderTimes: [...prev.reminderTimes, newTime].sort(),
-    }));
+    const next = [...settings.reminderTimes, newTime].sort();
+    setSettings((prev) => ({ ...prev, reminderTimes: next }));
+    syncSchedule(next);
     setNewTime("");
   };
 
   const removeReminderTime = (time) => {
-    setSettings((prev) => ({
-      ...prev,
-      reminderTimes: prev.reminderTimes.filter((item) => item !== time),
-    }));
+    const next = settings.reminderTimes.filter((item) => item !== time);
+    setSettings((prev) => ({ ...prev, reminderTimes: next }));
+    syncSchedule(next);
   };
 
   return (

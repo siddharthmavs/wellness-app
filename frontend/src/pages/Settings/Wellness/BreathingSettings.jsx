@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../../lib/api";
 
 const DEFAULT_GOAL = 3;
 const DEFAULT_REWARD_GOAL = 3;
@@ -182,6 +183,22 @@ const BreathingSettings = () => {
     };
   }, [loadRewardGoal]);
 
+  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => {
+      const b = data?.breathing;
+      if (!b) return;
+      if (typeof b.goal === "number") {
+        setSavedGoal(b.goal);
+        setGoal(b.goal);
+      }
+      if (Array.isArray(b.schedule) && b.schedule.length > 0) {
+        setSavedSchedule(b.schedule);
+        setSchedule(b.schedule);
+      }
+    }).catch(() => {});
+  }, []);
+
   /* =========================================================
      CHANGE PERSONAL GOAL
   ========================================================= */
@@ -248,6 +265,8 @@ const BreathingSettings = () => {
 
     setSavedGoal(goal);
     setSavedSchedule(finalSchedule);
+
+    api.put("/settings", { breathing: { goal, schedule: finalSchedule } }).catch(() => {});
 
     window.dispatchEvent(
       new CustomEvent(

@@ -1,7 +1,10 @@
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { api } from "../../../lib/api";
+import { pushSupported, getPushSubscriptionStatus, enablePush, disablePush } from "../../../notifications/pushService";
 
 import {
   ArrowLeft,
@@ -13,6 +16,7 @@ import {
   Volume2,
   Monitor,
   MessageSquare,
+  Smartphone,
 } from "lucide-react";
 
 /* =========================================================
@@ -76,6 +80,52 @@ const NotificationSettings = () => {
     return "default";
   });
 
+  const [pushStatus, setPushStatus] = useState("checking"); // checking | none | subscribed | unsupported
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    if (!pushSupported()) { setPushStatus("unsupported"); return; }
+    getPushSubscriptionStatus().then(setPushStatus).catch(() => setPushStatus("none"));
+  }, []);
+
+  const togglePush = async () => {
+    setPushBusy(true);
+    try {
+      if (pushStatus === "subscribed") {
+        await disablePush();
+        setPushStatus("none");
+        toast.success("Browser push disabled");
+      } else {
+        await enablePush();
+        setPushStatus("subscribed");
+        toast.success("Browser push enabled — you'll get reminders even when this tab is closed");
+      }
+    } catch (err) {
+      toast.error(err?.message || "Could not update browser push");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  const loadedFromBackend = useRef(false);
+  useEffect(() => {
+    api.get("/notifications/settings").then(({ data }) => {
+      loadedFromBackend.current = true;
+      setSettings((prev) => ({
+        ...prev,
+        notificationsEnabled: data.notifications_enabled ?? prev.notificationsEnabled,
+        desktopNotifications: data.desktop_notifications ?? prev.desktopNotifications,
+        inAppPopup: data.in_app_popup ?? prev.inAppPopup,
+        sound: data.sound ?? prev.sound,
+        water: data.water ?? prev.water,
+        eyeCare: data.eye_care ?? prev.eyeCare,
+        moveReset: data.move_reset ?? prev.moveReset,
+        breathe: data.breathing ?? prev.breathe,
+      }));
+    }).catch(() => {});
+  }, []);
+
   /* =========================================================
      SAVE SETTINGS
   ========================================================= */
@@ -94,6 +144,19 @@ const NotificationSettings = () => {
         detail: settings,
       })
     );
+
+    if (loadedFromBackend.current) {
+      api.put("/notifications/settings", {
+        notifications_enabled: settings.notificationsEnabled,
+        desktop_notifications: settings.desktopNotifications,
+        in_app_popup: settings.inAppPopup,
+        sound: settings.sound,
+        water: settings.water,
+        eye_care: settings.eyeCare,
+        move_reset: settings.moveReset,
+        breathing: settings.breathe,
+      }).catch(() => {});
+    }
   }, [settings]);
 
   /* =========================================================
@@ -408,6 +471,66 @@ const NotificationSettings = () => {
                   Allow
                 </button>
               )}
+
+            </div>
+
+          </div>
+
+        </section>
+      )}
+
+      {/* =====================================================
+          BROWSER PUSH (doc section 8.4)
+      ===================================================== */}
+
+      {settings.notificationsEnabled && pushStatus !== "unsupported" && (
+        <section className="mb-8">
+
+          <h2 className="px-2 mb-3 text-xs font-black uppercase tracking-widest opacity-50">
+            Browser Push
+          </h2>
+
+          <div
+            className="bg-cozy-surface p-5 shadow-cozy"
+            style={{
+              border: "1px solid var(--cozy-border)",
+              borderRadius: 20,
+            }}
+          >
+
+            <div className="flex items-center justify-between gap-4">
+
+              <div className="flex items-center gap-4">
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{ background: "var(--cozy-secondary)", color: "var(--cozy-primary-dark)" }}
+                >
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-cozy-text">
+                    Notifications outside the browser tab
+                  </h3>
+                  <p className="text-xs mt-1 opacity-60">
+                    {pushStatus === "subscribed"
+                      ? "Enabled — reminders will reach you even when this tab is closed."
+                      : "Get reminders on your device even when Wellness Garden isn't open."}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={togglePush}
+                disabled={pushBusy || pushStatus === "checking"}
+                className="px-4 py-2 rounded-xl font-bold text-sm shadow-cozy transition hover:opacity-90 disabled:opacity-50 shrink-0"
+                style={{
+                  background: pushStatus === "subscribed" ? "var(--cozy-secondary)" : "var(--cozy-primary)",
+                  color: pushStatus === "subscribed" ? "var(--cozy-text)" : "white",
+                }}
+              >
+                {pushBusy ? "..." : pushStatus === "subscribed" ? "Disable" : "Enable"}
+              </button>
 
             </div>
 

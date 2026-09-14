@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../../lib/api";
 
 const DEFAULT_GOAL = 3;
 const DEFAULT_REWARD_GOAL = 3;
@@ -182,6 +183,22 @@ const MoveResetSettings = () => {
     };
   }, [loadRewardGoal]);
 
+  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => {
+      const mr = data?.move_reset;
+      if (!mr) return;
+      if (typeof mr.goal === "number") {
+        setSavedGoal(mr.goal);
+        setGoal(mr.goal);
+      }
+      if (Array.isArray(mr.schedule) && mr.schedule.length > 0) {
+        setSavedSchedule(mr.schedule);
+        setSchedule(mr.schedule);
+      }
+    }).catch(() => {});
+  }, []);
+
   /* =========================================================
      CHANGE PERSONAL GOAL
   ========================================================= */
@@ -249,6 +266,8 @@ const MoveResetSettings = () => {
 
     setSavedGoal(goal);
     setSavedSchedule(finalSchedule);
+
+    api.put("/settings", { move_reset: { goal, schedule: finalSchedule } }).catch(() => {});
 
     window.dispatchEvent(
       new CustomEvent(

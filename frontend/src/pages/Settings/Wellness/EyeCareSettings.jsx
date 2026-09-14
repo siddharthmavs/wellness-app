@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, Trophy, Trash2, Plus, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../../lib/api";
 
 const DEFAULT_GOAL = 3;
 const DEFAULT_REWARD_GOAL = 3;
@@ -99,6 +100,22 @@ const EyeCareSettings = () => {
     };
   }, [loadRewardGoal]);
 
+  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => {
+      const eb = data?.eye_break;
+      if (!eb) return;
+      if (typeof eb.goal === "number") {
+        setSavedGoal(eb.goal);
+        setGoal(eb.goal);
+      }
+      if (Array.isArray(eb.schedule) && eb.schedule.length > 0) {
+        setSavedSchedule(eb.schedule);
+        setSchedule(eb.schedule);
+      }
+    }).catch(() => {});
+  }, []);
+
   /* =========================================================
      HANDLE GOAL CHANGE
   ======================================================== */
@@ -150,6 +167,8 @@ const EyeCareSettings = () => {
         detail: { goal, schedule: finalSchedule },
       })
     );
+
+    api.put("/settings", { eye_break: { goal, schedule: finalSchedule } }).catch(() => {});
 
     setSaved(true);
     setTimeout(() => {

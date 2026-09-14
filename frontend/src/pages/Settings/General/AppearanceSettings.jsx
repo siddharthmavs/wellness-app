@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../../../lib/api";
 
 import {
   ArrowLeft,
@@ -439,6 +440,25 @@ export default function AppearanceSettings() {
   const [settings, setSettings] =
     useState(loadSettings);
 
+  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  const loadedFromBackend = useRef(false);
+  useEffect(() => {
+    api.get("/settings").then(({ data }) => {
+      const a = data?.appearance;
+      loadedFromBackend.current = true;
+      if (!a) return;
+      setSettings((prev) => ({
+        ...prev,
+        background: a.background ?? prev.background,
+        solidColor: a.solid_color ?? prev.solidColor,
+        accentMode: a.accent_mode ?? prev.accentMode,
+        accentColor: a.accent_color ?? prev.accentColor,
+        layout: a.layout ?? prev.layout,
+        fontStyle: a.font_style ?? prev.fontStyle,
+      }));
+    }).catch(() => { loadedFromBackend.current = true; });
+  }, []);
+
   useEffect(() => {
     applyAppearance(settings);
 
@@ -462,6 +482,19 @@ export default function AppearanceSettings() {
         }
       )
     );
+
+    if (loadedFromBackend.current) {
+      api.put("/settings", {
+        appearance: {
+          background: settings.background,
+          solid_color: settings.solidColor,
+          accent_mode: settings.accentMode,
+          accent_color: settings.accentColor,
+          layout: settings.layout,
+          font_style: settings.fontStyle,
+        },
+      }).catch(() => {});
+    }
   }, [settings]);
 
   const selectDefaultBackground = () => {

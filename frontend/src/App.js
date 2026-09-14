@@ -545,6 +545,28 @@ function App() {
         setUser(data);
       })
       .catch(() => {});
+
+    // Restore the saved appearance from the backend on login (doc section 8.5),
+    // not just from this browser's localStorage.
+    api
+      .get("/settings")
+      .then(({ data }) => {
+        const a = data?.appearance;
+        if (!a) return;
+        const current = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || "{}");
+        const merged = {
+          ...current,
+          background: a.background ?? current.background,
+          solidColor: a.solid_color ?? current.solidColor,
+          accentMode: a.accent_mode ?? current.accentMode,
+          accentColor: a.accent_color ?? current.accentColor,
+          layout: a.layout ?? current.layout,
+          fontStyle: a.font_style ?? current.fontStyle,
+        };
+        localStorage.setItem(APPEARANCE_KEY, JSON.stringify(merged));
+        applySavedAppearance();
+      })
+      .catch(() => {});
   }, [token, setUser]);
 
   /* =======================================================

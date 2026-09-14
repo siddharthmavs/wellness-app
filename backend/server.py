@@ -2779,6 +2779,12 @@ DEFAULT_USER_SETTINGS: Dict[str, Any] = {
     },
     "sound": {"enabled": True, "volume": 0.7},
     "theme": "light",
+    # Doc section 8.5 — font, background, accent, layout and other visual preferences.
+    "appearance": {
+        "background": "garden", "solid_color": "#F5F5F5",
+        "accent_mode": "default", "accent_color": "#7FAE62",
+        "layout": "comfortable", "font_style": "default", "font_size": "default",
+    },
     "water": {"goal": 2000, "reminder_times": ["10:00", "13:00", "16:00"]},
     "eye_break": {"goal": 3, "schedule": ["10:00", "13:00", "16:00", "18:00", "20:00", "21:00"]},
     "move_reset": {"goal": 3, "schedule": ["10:30", "14:00", "17:00", "19:00", "21:00"]},
@@ -2822,6 +2828,7 @@ class SettingsPatch(BaseModel):
     notifications: Optional[dict] = None
     sound: Optional[dict] = None
     theme: Optional[str] = None
+    appearance: Optional[dict] = None
     water: Optional[dict] = None
     eye_break: Optional[dict] = None
     move_reset: Optional[dict] = None
