@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import Any, Dict, List, Optional
 import uuid
+import asyncio
 import secrets
 from datetime import datetime, timezone, timedelta
 import bcrypt
@@ -3684,10 +3685,11 @@ class NotificationSettingsReq(BaseModel):
     breathing: Optional[bool] = None
 
 class DeviceReq(BaseModel):
-    token: str
+    token: Optional[str] = None  # falls back to subscription.endpoint when omitted
     platform: Optional[str] = "web"      # web | ios | android
     provider: Optional[str] = "webpush"  # webpush | fcm | apns
     label: Optional[str] = None
+    subscription: Optional[Dict[str, Any]] = None  # raw PushSubscriptionJSON for webpush
 
 
 def notifications_enabled_for(settings: dict, module: str) -> bool:
@@ -3734,15 +3736,26 @@ async def put_notification_settings(body: NotificationSettingsReq, user=Depends(
     saved = await save_user_settings(user["id"], {"notifications": patch})
     return saved["notifications"]
 
+@api.get("/notifications/vapid-public-key")
+async def vapid_public_key():
+    """Doc section 8.4 — the browser needs this to call pushManager.subscribe()."""
+    key = os.environ.get("VAPID_PUBLIC_KEY")
+    if not key:
+        raise HTTPException(503, "Push notifications are not configured on this server")
+    return {"key": key}
+
 @api.post("/notifications/register-device")
 async def register_device(body: DeviceReq, user=Depends(get_current_user)):
-    token = (body.token or "").strip()
+    token = (body.token or (body.subscription or {}).get("endpoint") or "").strip()
     if not token or len(token) > 4096:
         raise HTTPException(400, "token is required and must be under 4096 characters")
     if body.platform not in ("web", "ios", "android"):
         raise HTTPException(400, "platform must be web, ios or android")
     if body.provider not in ("webpush", "fcm", "apns"):
         raise HTTPException(400, "provider must be webpush, fcm or apns")
+    if body.provider == "webpush" and body.subscription:
+        if not body.subscription.get("endpoint") or not (body.subscription.get("keys") or {}).get("p256dh"):
+            raise HTTPException(400, "subscription must include endpoint and keys.p256dh")
     device = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -3750,6 +3763,7 @@ async def register_device(body: DeviceReq, user=Depends(get_current_user)):
         "platform": body.platform,
         "provider": body.provider,
         "label": (body.label or "")[:120],
+        "subscription": body.subscription,
         "active": True,
         "created_at": now_iso(),
     }
@@ -3805,12 +3819,39 @@ async def notification_schedule(user=Depends(get_current_user)):
 
 
 async def deliver_push(device: dict, title: str, message: str, data: dict = None) -> str:
-    """Hand a reminder to the configured push provider.
+    """Hand a reminder to the configured push provider (doc section 8.4).
 
-    No provider credentials are configured in this environment, so delivery is
-    recorded as `queued`. Wiring FCM/APNs/WebPush here is the only change needed
-    to turn these into real pushes.
+    Real delivery is wired for `webpush` devices carrying a browser subscription,
+    using the VAPID keypair in .env. FCM/APNs (native app) devices have no
+    provider configured in this environment, so they're recorded as `queued`.
     """
+    if device.get("provider") == "webpush" and device.get("subscription"):
+        vapid_private = os.environ.get("VAPID_PRIVATE_KEY")
+        if not vapid_private:
+            logger.info("Push queued (VAPID not configured) for device %s: %s", device.get("id"), title)
+            return "queued"
+        try:
+            import json as _json
+            from pywebpush import webpush, WebPushException
+            await asyncio.to_thread(
+                webpush,
+                subscription_info=device["subscription"],
+                data=_json.dumps({"title": title, "message": message, "data": data or {}}),
+                vapid_private_key=vapid_private,
+                vapid_claims={"sub": os.environ.get("VAPID_CLAIMS_EMAIL", "mailto:admin@example.com")},
+            )
+            return "sent"
+        except WebPushException as exc:
+            status = getattr(exc.response, "status_code", None)
+            if status in (404, 410):
+                # Subscription is gone (user revoked permission / browser data cleared).
+                await db.devices.update_one({"id": device.get("id")}, {"$set": {"active": False}})
+            logger.warning("Push delivery failed for device %s: %s", device.get("id"), exc)
+            return "failed"
+        except Exception as exc:
+            logger.warning("Push delivery failed for device %s: %s", device.get("id"), exc)
+            return "failed"
+
     provider_key = os.environ.get("PUSH_PROVIDER_KEY")
     if not provider_key:
         logger.info("Push queued (no provider configured) for device %s: %s", device.get("id"), title)
