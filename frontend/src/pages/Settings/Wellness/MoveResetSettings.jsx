@@ -1,10 +1,25 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, Trophy } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  Trophy,
+  LockKeyhole,
+  Clock3,
+  RotateCcw,
+  PersonStanding,
+  Plus,
+  Trash2,
+  Check,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 
+/* =========================================================
+   MOVE & RESET SETTINGS
+========================================================= */
+
 const DEFAULT_GOAL = 3;
 const DEFAULT_REWARD_GOAL = 3;
+const MAX_GOAL = 5;
 
 const DEFAULT_SCHEDULE = [
   "10:30",
@@ -15,311 +30,578 @@ const DEFAULT_SCHEDULE = [
 ];
 
 const REWARD_CONFIG_KEY = "wellness-reward-config";
-const MOVE_GOAL_KEY = "moveResetGoal";
-const MOVE_SCHEDULE_KEY = "moveResetSchedule";
+const GOAL_KEY = "moveResetGoal";
+const SCHEDULE_KEY = "moveResetSchedule";
 
 /* =========================================================
-   REWARD GOAL PARSER
+   STORAGE HELPERS
 ========================================================= */
 
-const parseRewardGoal = (savedData) => {
+const getStoredRewardGoal = () => {
   try {
-    if (!savedData) {
-      return DEFAULT_REWARD_GOAL;
-    }
-
-    const parsed =
-      typeof savedData === "string"
-        ? JSON.parse(savedData)
-        : savedData;
-
-    const rawGoal =
-      parsed?.moveReset?.rewardGoal ??
-      parsed?.rewardGoal;
-
-    const parsedGoal = Number(rawGoal);
-
-    return Number.isFinite(parsedGoal) && parsedGoal > 0
-      ? parsedGoal
-      : DEFAULT_REWARD_GOAL;
-  } catch (error) {
-    console.error(
-      "Failed to parse movement reward goal:",
-      error
-    );
-
-    return DEFAULT_REWARD_GOAL;
-  }
-};
-
-const MoveResetSettings = () => {
-  const navigate = useNavigate();
-
-  /* =========================================================
-     PERSONAL GOAL
-  ========================================================= */
-
-  const [savedGoal, setSavedGoal] = useState(() => {
-    const saved = Number(
-      localStorage.getItem(MOVE_GOAL_KEY)
-    );
-
-    return saved > 0 ? saved : DEFAULT_GOAL;
-  });
-
-  const [goal, setGoal] = useState(() => {
-    const saved = Number(
-      localStorage.getItem(MOVE_GOAL_KEY)
-    );
-
-    return saved > 0 ? saved : DEFAULT_GOAL;
-  });
-
-  /* =========================================================
-     PERSONAL SCHEDULE
-  ========================================================= */
-
-  const [savedSchedule, setSavedSchedule] = useState(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(MOVE_SCHEDULE_KEY)
-      );
-
-      return Array.isArray(saved) && saved.length > 0
-        ? saved
-        : DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    } catch {
-      return DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    }
-  });
-
-  const [schedule, setSchedule] = useState(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(MOVE_SCHEDULE_KEY)
-      );
-
-      return Array.isArray(saved) && saved.length > 0
-        ? saved
-        : DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    } catch {
-      return DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    }
-  });
-
-  /* =========================================================
-     ADMIN REWARD GOAL
-  ========================================================= */
-
-  const [rewardGoal, setRewardGoal] = useState(() => {
-    const saved = localStorage.getItem(
-      REWARD_CONFIG_KEY
-    );
-
-    return parseRewardGoal(saved);
-  });
-
-  const [saved, setSaved] = useState(false);
-  const [resetMessage, setResetMessage] = useState("");
-
-  /* =========================================================
-     LOAD ADMIN REWARD GOAL
-  ========================================================= */
-
-  const loadRewardGoal = useCallback(() => {
     const stored = localStorage.getItem(
       REWARD_CONFIG_KEY
     );
 
-    setRewardGoal(parseRewardGoal(stored));
-  }, []);
+    if (!stored) {
+      return DEFAULT_REWARD_GOAL;
+    }
 
-  /* =========================================================
-     SYNC ADMIN REWARD SETTINGS
-  ========================================================= */
+    const parsed = JSON.parse(stored);
 
-  useEffect(() => {
-    loadRewardGoal();
+    const value =
+      parsed?.moveReset?.rewardGoal ??
+      parsed?.move_reset?.rewardGoal ??
+      parsed?.moveReset?.reward_goal ??
+      parsed?.move_reset?.reward_goal ??
+      parsed?.rewardGoal ??
+      DEFAULT_REWARD_GOAL;
 
-    const handleRewardsUpdated = (event) => {
-      if (event?.detail) {
-        setRewardGoal(
-          parseRewardGoal(event.detail)
-        );
-      } else {
-        loadRewardGoal();
-      }
-    };
+    return Math.min(
+      Math.max(Number(value) || DEFAULT_REWARD_GOAL, 1),
+      MAX_GOAL
+    );
+  } catch {
+    return DEFAULT_REWARD_GOAL;
+  }
+};
 
-    const handleStorage = (event) => {
-      if (
-        !event?.key ||
-        event.key === REWARD_CONFIG_KEY
-      ) {
-        loadRewardGoal();
-      }
-    };
+const getStoredGoal = () => {
+  try {
+    const stored = localStorage.getItem(GOAL_KEY);
 
-    window.addEventListener(
-      "wellnessRewardsUpdated",
-      handleRewardsUpdated
+    if (!stored) {
+      return DEFAULT_GOAL;
+    }
+
+    const value = Number(stored);
+
+    if (!Number.isFinite(value)) {
+      return DEFAULT_GOAL;
+    }
+
+    return Math.min(
+      Math.max(value, 2),
+      MAX_GOAL
+    );
+  } catch {
+    return DEFAULT_GOAL;
+  }
+};
+
+const getStoredSchedule = () => {
+  try {
+    const stored =
+      localStorage.getItem(SCHEDULE_KEY);
+
+    if (!stored) {
+      return DEFAULT_SCHEDULE;
+    }
+
+    const parsed = JSON.parse(stored);
+
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length === 0
+    ) {
+      return DEFAULT_SCHEDULE;
+    }
+
+    return parsed;
+  } catch {
+    return DEFAULT_SCHEDULE;
+  }
+};
+
+const createScheduleForGoal = (
+  goal,
+  currentSchedule
+) => {
+  const base =
+    Array.isArray(currentSchedule) &&
+    currentSchedule.length
+      ? [...currentSchedule]
+      : [...DEFAULT_SCHEDULE];
+
+  const fallbackTimes = [
+    "09:00",
+    "10:30",
+    "12:00",
+    "14:00",
+    "15:30",
+    "17:00",
+    "19:00",
+    "21:00",
+  ];
+
+  if (goal <= base.length) {
+    return base.slice(0, goal);
+  }
+
+  const result = [...base];
+
+  while (result.length < goal) {
+    result.push(
+      fallbackTimes[result.length] || "21:00"
+    );
+  }
+
+  return result;
+};
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
+export default function MoveResetSettings() {
+  const navigate = useNavigate();
+
+  const initialGoal = getStoredGoal();
+
+  const [rewardGoal, setRewardGoal] =
+    useState(getStoredRewardGoal);
+
+  const [goal, setGoal] =
+    useState(initialGoal);
+
+  const [schedule, setSchedule] =
+    useState(() =>
+      createScheduleForGoal(
+        initialGoal,
+        getStoredSchedule()
+      )
     );
 
-    window.addEventListener(
-      "storage",
-      handleStorage
+  const [savedGoal, setSavedGoal] =
+    useState(initialGoal);
+
+  const [savedSchedule, setSavedSchedule] =
+    useState(() =>
+      createScheduleForGoal(
+        initialGoal,
+        getStoredSchedule()
+      )
     );
 
-    return () => {
-      window.removeEventListener(
-        "wellnessRewardsUpdated",
-        handleRewardsUpdated
-      );
+  const [saving, setSaving] =
+    useState(false);
 
-      window.removeEventListener(
-        "storage",
-        handleStorage
-      );
-    };
-  }, [loadRewardGoal]);
+  const [resetting, setResetting] =
+    useState(false);
 
-  // Backend is the source of truth; localStorage is only a fallback for offline use.
-  useEffect(() => {
-    api.get("/settings").then(({ data }) => {
-      const mr = data?.move_reset;
-      if (!mr) return;
-      if (typeof mr.goal === "number") {
-        setSavedGoal(mr.goal);
-        setGoal(mr.goal);
-      }
-      if (Array.isArray(mr.schedule) && mr.schedule.length > 0) {
-        setSavedSchedule(mr.schedule);
-        setSchedule(mr.schedule);
-      }
-    }).catch(() => {});
-  }, []);
-
-  /* =========================================================
-     CHANGE PERSONAL GOAL
-  ========================================================= */
-
-  const handleGoalChange = (newGoal) => {
-    setGoal(newGoal);
-
-    setSchedule((previous) => {
-      const updated = [...previous];
-
-      while (updated.length < newGoal) {
-        const nextDefault =
-          DEFAULT_SCHEDULE[updated.length] ||
-          "21:00";
-
-        updated.push(nextDefault);
-      }
-
-      return updated.slice(0, newGoal);
-    });
-  };
-
-  /* =========================================================
-     CHANGE SCHEDULE
-  ========================================================= */
-
-  const handleScheduleChange = (index, value) => {
-    setSchedule((previous) => {
-      const updated = [...previous];
-
-      updated[index] = value;
-
-      return updated;
-    });
-  };
+  const [message, setMessage] =
+    useState("");
 
   /* =========================================================
      UNSAVED CHANGES
   ========================================================= */
 
-  const activeSchedule = schedule.slice(0, goal);
-
-  const hasUnsavedChanges =
-    goal !== savedGoal ||
-    JSON.stringify(activeSchedule) !==
+  const hasChanges =
+    Number(goal) !== Number(savedGoal) ||
+    JSON.stringify(schedule) !==
       JSON.stringify(savedSchedule);
 
   /* =========================================================
-     SAVE PERSONAL SETTINGS
+     LOAD BACKEND SETTINGS
   ========================================================= */
 
-  const saveSettings = () => {
-    const finalSchedule =
-      schedule.slice(0, goal);
+  useEffect(() => {
+    let mounted = true;
 
-    localStorage.setItem(
-      MOVE_GOAL_KEY,
-      String(goal)
+    const loadSettings = async () => {
+      try {
+        const response =
+          await api.get("/settings");
+
+        const settings =
+          response?.data || {};
+
+        const backendRewardGoal =
+          settings?.move_reset?.reward_goal ??
+          settings?.move_reset?.rewardGoal ??
+          settings?.moveReset?.reward_goal ??
+          settings?.moveReset?.rewardGoal;
+
+        const backendGoal =
+          settings?.move_reset?.goal ??
+          settings?.moveReset?.goal;
+
+        const backendSchedule =
+          settings?.move_reset?.schedule ??
+          settings?.moveReset?.schedule;
+
+        if (!mounted) return;
+
+        let nextRewardGoal =
+          getStoredRewardGoal();
+
+        if (
+          Number.isFinite(
+            Number(backendRewardGoal)
+          )
+        ) {
+          nextRewardGoal = Math.min(
+            Math.max(
+              Number(backendRewardGoal),
+              1
+            ),
+            MAX_GOAL
+          );
+
+          setRewardGoal(
+            nextRewardGoal
+          );
+        }
+
+        /*
+          Personal goal is allowed from 2–5.
+          It is intentionally NOT disabled by
+          the admin reward display.
+        */
+        const nextGoal =
+          Number.isFinite(
+            Number(backendGoal)
+          )
+            ? Math.min(
+                Math.max(
+                  Number(backendGoal),
+                  2
+                ),
+                MAX_GOAL
+              )
+            : getStoredGoal();
+
+        const nextSchedule =
+          Array.isArray(
+            backendSchedule
+          )
+            ? createScheduleForGoal(
+                nextGoal,
+                backendSchedule
+              )
+            : createScheduleForGoal(
+                nextGoal,
+                getStoredSchedule()
+              );
+
+        setRewardGoal(
+          nextRewardGoal
+        );
+
+        setGoal(nextGoal);
+        setSchedule(nextSchedule);
+
+        setSavedGoal(nextGoal);
+        setSavedSchedule(
+          nextSchedule
+        );
+
+        localStorage.setItem(
+          GOAL_KEY,
+          String(nextGoal)
+        );
+
+        localStorage.setItem(
+          SCHEDULE_KEY,
+          JSON.stringify(
+            nextSchedule
+          )
+        );
+      } catch {
+        // Keep local settings.
+      }
+    };
+
+    loadSettings();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /* =========================================================
+     ADMIN REWARD CONFIG UPDATE
+  ========================================================= */
+
+  useEffect(() => {
+    const handleRewardUpdate = () => {
+      const nextRewardGoal =
+        getStoredRewardGoal();
+
+      setRewardGoal(
+        nextRewardGoal
+      );
+
+      /*
+        Reward goal is displayed as an
+        admin-controlled value only.
+        It does NOT disable personal
+        goal options.
+      */
+    };
+
+    window.addEventListener(
+      "wellness-reward-config-updated",
+      handleRewardUpdate
     );
 
-    localStorage.setItem(
-      MOVE_SCHEDULE_KEY,
-      JSON.stringify(finalSchedule)
+    window.addEventListener(
+      "wellnessSettingsUpdated",
+      handleRewardUpdate
     );
 
-    setSavedGoal(goal);
-    setSavedSchedule(finalSchedule);
+    return () => {
+      window.removeEventListener(
+        "wellness-reward-config-updated",
+        handleRewardUpdate
+      );
 
-    api.put("/settings", { move_reset: { goal, schedule: finalSchedule } }).catch(() => {});
-
-    window.dispatchEvent(
-      new CustomEvent(
+      window.removeEventListener(
         "wellnessSettingsUpdated",
-        {
-          detail: {
-            goal,
-            schedule: finalSchedule,
-          },
-        }
-      )
+        handleRewardUpdate
+      );
+    };
+  }, []);
+
+  /* =========================================================
+     GOAL
+  ========================================================= */
+
+  const handleGoalChange = (
+    value
+  ) => {
+    const nextGoal = Math.min(
+      Math.max(Number(value), 2),
+      MAX_GOAL
     );
 
-    window.dispatchEvent(
-      new Event("wellness-settings-updated")
+    setGoal(nextGoal);
+
+    setSchedule(
+      (currentSchedule) =>
+        createScheduleForGoal(
+          nextGoal,
+          currentSchedule
+        )
     );
 
-    /* Also notify MoveResetCard specifically */
-    window.dispatchEvent(
-      new CustomEvent(
-        "moveReset-settings-updated",
-        {
-          detail: {
-            goal,
-            schedule: finalSchedule,
-          },
-        }
-      )
-    );
-
-    setSaved(true);
-
-    setTimeout(() => {
-      setSaved(false);
-    }, 2000);
+    setMessage("");
   };
 
   /* =========================================================
-     RESET TODAY'S PROGRESS
+     SCHEDULE
   ========================================================= */
 
-  const resetToday = () => {
-    const today = new Date().toDateString();
-
-    localStorage.setItem(
-      "moveResetDate",
-      today
+  const updateScheduleTime = (
+    index,
+    value
+  ) => {
+    setSchedule((current) =>
+      current.map(
+        (time, i) =>
+          i === index
+            ? value
+            : time
+      )
     );
 
-    localStorage.setItem(
-      "moveResetCompleted",
-      "0"
+    setMessage("");
+  };
+
+  const addScheduleTime = () => {
+    if (schedule.length >= MAX_GOAL) {
+      return;
+    }
+
+    const fallbackTimes = [
+      "09:00",
+      "10:30",
+      "12:00",
+      "14:00",
+      "15:30",
+      "17:00",
+      "19:00",
+      "21:00",
+    ];
+
+    const nextTime =
+      fallbackTimes[
+        schedule.length
+      ] || "21:00";
+
+    const nextSchedule = [
+      ...schedule,
+      nextTime,
+    ];
+
+    setSchedule(nextSchedule);
+
+    setGoal(
+      Math.min(
+        Math.max(
+          nextSchedule.length,
+          2
+        ),
+        MAX_GOAL
+      )
+    );
+
+    setMessage("");
+  };
+
+  const removeScheduleTime = (
+    index
+  ) => {
+    if (schedule.length <= 2) {
+      return;
+    }
+
+    const nextSchedule =
+      schedule.filter(
+        (_, i) => i !== index
+      );
+
+    setSchedule(nextSchedule);
+
+    setGoal(
+      Math.min(
+        Math.max(
+          nextSchedule.length,
+          2
+        ),
+        MAX_GOAL
+      )
+    );
+
+    setMessage("");
+  };
+
+  /* =========================================================
+     SAVE
+  ========================================================= */
+
+  const handleSave = async () => {
+    if (!hasChanges || saving) {
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    const safeGoal = Math.min(
+      Math.max(
+        Number(goal) || DEFAULT_GOAL,
+        2
+      ),
+      MAX_GOAL
+    );
+
+    const safeSchedule =
+      createScheduleForGoal(
+        safeGoal,
+        schedule
+      );
+
+    try {
+      localStorage.setItem(
+        GOAL_KEY,
+        String(safeGoal)
+      );
+
+      localStorage.setItem(
+        SCHEDULE_KEY,
+        JSON.stringify(
+          safeSchedule
+        )
+      );
+
+      try {
+        await api.put("/settings", {
+          move_reset: {
+            goal: safeGoal,
+            schedule:
+              safeSchedule,
+          },
+        });
+      } catch {
+        // Keep local settings if API
+        // is temporarily unavailable.
+      }
+
+      setGoal(safeGoal);
+      setSchedule(safeSchedule);
+
+      setSavedGoal(safeGoal);
+      setSavedSchedule(
+        safeSchedule
+      );
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "wellnessSettingsUpdated",
+          {
+            detail: {
+              moveReset: {
+                goal: safeGoal,
+                schedule:
+                  safeSchedule,
+              },
+            },
+          }
+        )
+      );
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "wellness-settings-updated",
+          {
+            detail: {
+              moveReset: {
+                goal: safeGoal,
+                schedule:
+                  safeSchedule,
+              },
+            },
+          }
+        )
+      );
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "moveReset-settings-updated",
+          {
+            detail: {
+              goal: safeGoal,
+              schedule:
+                safeSchedule,
+            },
+          }
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* =========================================================
+     RESET TODAY
+  ========================================================= */
+
+  const handleResetToday = () => {
+    setResetting(true);
+    setMessage("");
+
+    const today =
+      new Date()
+        .toISOString()
+        .slice(0, 10);
+
+    localStorage.removeItem(
+      "moveResetDate"
+    );
+
+    localStorage.removeItem(
+      "moveResetCompleted"
     );
 
     localStorage.removeItem(
@@ -334,670 +616,926 @@ const MoveResetSettings = () => {
       `moveResetRewardedMilestones-${today}`
     );
 
-    /* Direct reset function if MoveResetCard provides it */
-    if (
-      typeof window.resetMoveResetToday ===
-      "function"
-    ) {
-      window.resetMoveResetToday();
+    try {
+      if (
+        typeof window.resetMoveResetToday ===
+        "function"
+      ) {
+        window.resetMoveResetToday();
+      }
+    } catch {
+      // Ignore reset callback errors.
     }
 
-    /* Reset event */
     window.dispatchEvent(
-      new Event("moveResetTodayReset")
+      new CustomEvent(
+        "moveResetTodayReset"
+      )
     );
 
-    /* Additional progress-reset event */
     window.dispatchEvent(
-      new Event("moveReset-progress-reset")
+      new CustomEvent(
+        "moveReset-progress-reset"
+      )
     );
 
-    setResetMessage(
-      "Today's movement progress has been reset."
+    setMessage(
+      "Today's Move & Reset progress has been reset."
     );
 
-    setTimeout(() => {
-      setResetMessage("");
-    }, 2500);
+    window.setTimeout(() => {
+      setResetting(false);
+    }, 500);
   };
 
+  /* =========================================================
+     STYLES
+     Compact version
+========================================================= */
+
+  const styles = {
+    page: {
+      minHeight: "100%",
+      padding: "18px 24px 28px",
+      background: "var(--cozy-bg)",
+      color: "var(--cozy-text)",
+    },
+
+    container: {
+      width: "100%",
+      maxWidth: "900px",
+      margin: "0 auto",
+    },
+
+    header: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      marginBottom: "18px",
+    },
+
+    backButton: {
+      width: "40px",
+      height: "40px",
+      borderRadius: "12px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-surface)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      flexShrink: 0,
+    },
+
+    headerIcon: {
+      width: "46px",
+      height: "46px",
+      borderRadius: "13px",
+      background:
+        "var(--cozy-primary)",
+      color: "#fff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+
+    title: {
+      margin: 0,
+      fontSize:
+        "clamp(1.35rem, 2.5vw, 1.8rem)",
+      lineHeight: 1.1,
+      fontWeight: 800,
+      color:
+        "var(--cozy-text)",
+    },
+
+    subtitle: {
+      margin: "3px 0 0",
+      color:
+        "var(--cozy-muted)",
+      fontSize: "0.82rem",
+    },
+
+    card: {
+      background:
+        "var(--cozy-surface)",
+      border:
+        "1px solid var(--cozy-border)",
+      borderRadius: "18px",
+      padding: "15px 17px",
+      marginBottom: "12px",
+      boxShadow:
+        "0 4px 12px rgba(0, 0, 0, 0.04)",
+    },
+
+    cardHeader: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      gap: "12px",
+      marginBottom: "12px",
+    },
+
+    cardTitleWrap: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      minWidth: 0,
+    },
+
+    cardIcon: {
+      width: "36px",
+      height: "36px",
+      borderRadius: "11px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+
+    cardTitle: {
+      margin: 0,
+      fontSize: "0.98rem",
+      lineHeight: 1.2,
+      fontWeight: 800,
+      color:
+        "var(--cozy-text)",
+    },
+
+    cardDescription: {
+      margin: "2px 0 0",
+      color:
+        "var(--cozy-muted)",
+      fontSize: "0.76rem",
+      lineHeight: 1.3,
+    },
+
+    lockBadge: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "5px",
+      padding: "6px 9px",
+      borderRadius: "9px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.7rem",
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    },
+
+    rewardValue: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      padding: "11px 13px",
+      borderRadius: "13px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+    },
+
+    rewardNumber: {
+      fontSize: "1.55rem",
+      lineHeight: 1,
+      fontWeight: 900,
+      color:
+        "var(--cozy-text)",
+    },
+
+    rewardText: {
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.82rem",
+      fontWeight: 800,
+    },
+
+    rewardSubtext: {
+      marginTop: "2px",
+      color:
+        "var(--cozy-muted)",
+      fontSize: "0.7rem",
+    },
+
+    label: {
+      display: "block",
+      marginBottom: "8px",
+      fontSize: "0.8rem",
+      fontWeight: 800,
+      color:
+        "var(--cozy-text)",
+    },
+
+    goalOptions: {
+      display: "grid",
+      gridTemplateColumns:
+        "repeat(4, minmax(0, 1fr))",
+      gap: "8px",
+    },
+
+    goalButton: {
+      minHeight: "44px",
+      borderRadius: "12px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.82rem",
+      fontWeight: 800,
+      cursor: "pointer",
+      transition:
+        "background 0.18s ease, border-color 0.18s ease",
+    },
+
+    activeGoalButton: {
+      background:
+        "var(--cozy-primary)",
+      borderColor:
+        "var(--cozy-primary)",
+      color: "#fff",
+    },
+
+    scheduleList: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "7px",
+    },
+
+    scheduleRow: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+    },
+
+    scheduleNumber: {
+      width: "32px",
+      height: "32px",
+      borderRadius: "9px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "0.78rem",
+      fontWeight: 900,
+      flexShrink: 0,
+    },
+
+    timeInput: {
+      flex: 1,
+      minHeight: "39px",
+      padding: "0 11px",
+      borderRadius: "11px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.82rem",
+      fontWeight: 700,
+      outline: "none",
+      colorScheme: "light dark",
+    },
+
+    removeButton: {
+      width: "34px",
+      height: "34px",
+      borderRadius: "9px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      flexShrink: 0,
+    },
+
+    addButton: {
+      marginTop: "8px",
+      width: "100%",
+      minHeight: "37px",
+      borderRadius: "10px",
+      border:
+        "1px dashed var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.78rem",
+      fontWeight: 800,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "6px",
+    },
+
+    resetCard: {
+      background:
+        "var(--cozy-surface)",
+      border:
+        "1px solid var(--cozy-border)",
+      borderRadius: "18px",
+      padding: "15px 17px",
+      marginBottom: "12px",
+    },
+
+    resetButton: {
+      width: "100%",
+      minHeight: "40px",
+      borderRadius: "11px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.8rem",
+      fontWeight: 800,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "7px",
+    },
+
+    message: {
+      marginTop: "8px",
+      padding: "8px 10px",
+      borderRadius: "10px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.75rem",
+      fontWeight: 700,
+      textAlign: "center",
+    },
+
+    saveCard: {
+      background:
+        "var(--cozy-primary)",
+      borderRadius: "18px",
+      padding: "10px",
+      marginTop: "4px",
+    },
+
+    saveButton: {
+      width: "100%",
+      minHeight: "42px",
+      border: "none",
+      borderRadius: "11px",
+      background:
+        "var(--cozy-surface)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.84rem",
+      fontWeight: 900,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "7px",
+    },
+  };
+
+  /* =========================================================
+     RENDER
+========================================================= */
+
   return (
-    <div className="move-care-settings">
+    <div style={styles.page}>
+      <div style={styles.container}>
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+        {/* HEADER */}
 
-      <div className="move-care-settings-header">
+        <div style={styles.header}>
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() =>
+              navigate(-1)
+            }
+            aria-label="Go back"
+          >
+            <ArrowLeft size={19} />
+          </button>
 
-        <button
-          type="button"
-          onClick={() => navigate("/settings")}
-          className="back-button"
-          aria-label="Back to settings"
-        >
-          <ArrowLeft size={20} />
-        </button>
-
-        <div>
-          <h2>Move & Reset</h2>
-
-          <p>
-            Customize your daily movement goal and
-            reminder schedule.
-          </p>
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          PERSONAL DAILY GOAL
-      ===================================================== */}
-
-      <div className="move-care-setting-card">
-
-        <div className="setting-header">
-
-          <div className="setting-icon">
-            🏃‍♂️
+          <div
+            style={styles.headerIcon}
+          >
+            <PersonStanding
+              size={25}
+              strokeWidth={2.5}
+            />
           </div>
 
           <div>
-            <h3>Daily Movement Goal</h3>
+            <h1 style={styles.title}>
+              Move &amp; Reset
+            </h1>
 
-            <p>
-              Choose how many movement breaks you
-              want to complete each day.
+            <p
+              style={styles.subtitle}
+            >
+              Set your daily movement
+              reminders and goal.
             </p>
           </div>
-
         </div>
 
-        <div className="goal-options">
+        {/* REWARD GOAL */}
 
-          {[2, 3, 4, 5].map((number) => (
-            <button
-              key={number}
-              type="button"
-              className={`goal-option ${
-                goal === number
-                  ? "active"
-                  : ""
-              }`}
-              onClick={() =>
-                handleGoalChange(number)
+        <section
+          style={styles.card}
+        >
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
               }
             >
-              {number}
-            </button>
-          ))}
-
-        </div>
-
-        <div className="goal-summary">
-          <strong>{goal}</strong>{" "}
-          movement sessions per day
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          ADMIN REWARD GOAL
-      ===================================================== */}
-
-      <div className="move-care-setting-card reward-goal-card">
-
-        <div className="setting-header">
-
-          <div className="setting-icon reward-setting-icon">
-            <Trophy size={22} />
-          </div>
-
-          <div>
-            <h3>Reward Goal</h3>
-
-            <p>
-              Set by your organization to calculate
-              movement rewards.
-            </p>
-          </div>
-
-        </div>
-
-        <div className="reward-goal-display">
-
-          <div className="reward-goal-value">
-            {rewardGoal}{" "}
-            <span>sessions</span>
-          </div>
-
-          <div className="reward-goal-readonly">
-            🔒 Set by Admin
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          SCHEDULE
-      ===================================================== */}
-
-      <div className="move-care-setting-card">
-
-        <div className="setting-header">
-
-          <div className="setting-icon clock-icon">
-            ⏰
-          </div>
-
-          <div>
-            <h3>Movement Schedule</h3>
-
-            <p>
-              Set the time for each of your daily
-              movement intervals.
-            </p>
-          </div>
-
-        </div>
-
-        <div className="schedule-list">
-
-          {schedule
-            .slice(0, goal)
-            .map((time, index) => (
               <div
-                className="schedule-row"
-                key={index}
+                style={
+                  styles.cardIcon
+                }
               >
+                <Trophy
+                  size={18}
+                  strokeWidth={2.4}
+                />
+              </div>
 
-                <div className="schedule-number">
-                  {index + 1}
-                </div>
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Reward Goal
+                </h2>
 
-                <div className="schedule-label">
-                  Move {index + 1}
-                </div>
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Maximum daily
+                  Move &amp; Reset
+                  rewards
+                </p>
+              </div>
+            </div>
 
-                <input
-                  type="time"
-                  value={time || ""}
-                  onChange={(event) =>
-                    handleScheduleChange(
-                      index,
-                      event.target.value
+            <div
+              style={
+                styles.lockBadge
+              }
+            >
+              <LockKeyhole
+                size={12}
+              />
+              Admin
+            </div>
+          </div>
+
+          <div
+            style={
+              styles.rewardValue
+            }
+          >
+            <div
+              style={
+                styles.rewardNumber
+              }
+            >
+              {rewardGoal}
+            </div>
+
+            <div>
+              <div
+                style={
+                  styles.rewardText
+                }
+              >
+                Move &amp; Reset
+                sessions
+              </div>
+
+              <div
+                style={
+                  styles.rewardSubtext
+                }
+              >
+                Controlled by your
+                organization
+                administrator.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* DAILY GOAL */}
+
+        <section
+          style={styles.card}
+        >
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
+              }
+            >
+              <div
+                style={
+                  styles.cardIcon
+                }
+              >
+                <PersonStanding
+                  size={18}
+                  strokeWidth={2.4}
+                />
+              </div>
+
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Daily Movement
+                  Goal
+                </h2>
+
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Choose how many
+                  Move &amp; Reset
+                  breaks you want
+                  to complete.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <label
+            style={styles.label}
+          >
+            Sessions per day
+          </label>
+
+          <div
+            style={
+              styles.goalOptions
+            }
+          >
+            {[2, 3, 4, 5].map(
+              (value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() =>
+                    handleGoalChange(
+                      value
                     )
                   }
-                  className="schedule-input"
+                  style={{
+                    ...styles.goalButton,
+                    ...(goal === value
+                      ? styles.activeGoalButton
+                      : {}),
+                  }}
+                >
+                  {value}
+                  {value === 2
+                    ? " breaks"
+                    : " breaks"}
+                </button>
+              )
+            )}
+          </div>
+        </section>
+
+        {/* MOVEMENT SCHEDULE */}
+
+        <section
+          style={styles.card}
+        >
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
+              }
+            >
+              <div
+                style={
+                  styles.cardIcon
+                }
+              >
+                <Clock3
+                  size={18}
+                  strokeWidth={2.4}
                 />
-
               </div>
-            ))}
 
-        </div>
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Movement
+                  Schedule
+                </h2>
 
-      </div>
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Choose when you
+                  would like your
+                  Move &amp; Reset
+                  reminders.
+                </p>
+              </div>
+            </div>
+          </div>
 
-      {/* =====================================================
-          SAVE SECTION
-      ===================================================== */}
+          <div
+            style={
+              styles.scheduleList
+            }
+          >
+            {schedule.map(
+              (time, index) => (
+                <div
+                  key={`${index}-${time}`}
+                  style={
+                    styles.scheduleRow
+                  }
+                >
+                  <div
+                    style={
+                      styles.scheduleNumber
+                    }
+                  >
+                    {index + 1}
+                  </div>
 
-      <div className="save-section">
+                  <input
+                    type="time"
+                    value={time}
+                    onChange={(
+                      event
+                    ) =>
+                      updateScheduleTime(
+                        index,
+                        event.target
+                          .value
+                      )
+                    }
+                    style={
+                      styles.timeInput
+                    }
+                    aria-label={`Movement reminder ${
+                      index + 1
+                    }`}
+                  />
 
-        <p className="save-status-text">
-          {hasUnsavedChanges
-            ? "You have unsaved changes."
-            : "Your settings are up to date."}
-        </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      removeScheduleTime(
+                        index
+                      )
+                    }
+                    disabled={
+                      schedule.length <=
+                      2
+                    }
+                    style={{
+                      ...styles.removeButton,
+                      opacity:
+                        schedule.length <=
+                        2
+                          ? 0.45
+                          : 1,
+                      cursor:
+                        schedule.length <=
+                        2
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                    aria-label={`Remove movement reminder ${
+                      index + 1
+                    }`}
+                  >
+                    <Trash2
+                      size={16}
+                    />
+                  </button>
+                </div>
+              )
+            )}
+          </div>
 
-        <button
-          type="button"
-          className={`save-button ${
-            !hasUnsavedChanges && !saved
-              ? "disabled"
-              : ""
-          }`}
-          onClick={saveSettings}
-          disabled={
-            !hasUnsavedChanges && !saved
+          {schedule.length <
+            MAX_GOAL && (
+            <button
+              type="button"
+              onClick={
+                addScheduleTime
+              }
+              style={
+                styles.addButton
+              }
+            >
+              <Plus size={16} />
+              Add reminder
+            </button>
+          )}
+        </section>
+
+        {/* RESET */}
+
+        <section
+          style={
+            styles.resetCard
           }
         >
-          {saved
-            ? "✓ Changes Saved"
-            : hasUnsavedChanges
-            ? "Save Changes"
-            : "✓ Saved"}
-        </button>
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
+              }
+            >
+              <div
+                style={
+                  styles.cardIcon
+                }
+              >
+                <RotateCcw
+                  size={18}
+                  strokeWidth={2.4}
+                />
+              </div>
 
-      </div>
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Reset Today&apos;s
+                  Progress
+                </h2>
 
-      {/* =====================================================
-          RESET TODAY
-      ===================================================== */}
-
-      <div className="reset-card">
-
-        <div className="reset-header">
-
-          <div className="reset-icon">
-            ↻
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Start today&apos;s
+                  Move &amp; Reset
+                  progress from zero.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <h3>
-              Reset Today's Movement
-            </h3>
+          <button
+            type="button"
+            onClick={
+              handleResetToday
+            }
+            disabled={resetting}
+            style={{
+              ...styles.resetButton,
+              opacity:
+                resetting
+                  ? 0.6
+                  : 1,
+            }}
+          >
+            <RotateCcw
+              size={16}
+            />
 
-            <p>
-              Restart today's movement progress.
-              Your goal and schedule will stay
-              unchanged.
-            </p>
-          </div>
+            {resetting
+              ? "Resetting..."
+              : "Reset Today's Progress"}
+          </button>
 
-        </div>
+          {message && (
+            <div
+              style={
+                styles.message
+              }
+            >
+              {message}
+            </div>
+          )}
+        </section>
 
-        <button
-          type="button"
-          className="reset-today-button"
-          onClick={resetToday}
+        {/* SAVE */}
+
+        <section
+          style={
+            styles.saveCard
+          }
         >
-          Reset Today's Progress
-        </button>
-
-        {resetMessage && (
-          <div className="reset-message">
-            ✓ {resetMessage}
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={
+              handleSave
+            }
+            disabled={
+              saving ||
+              !hasChanges
+            }
+            style={{
+              ...styles.saveButton,
+              opacity:
+                saving
+                  ? 0.7
+                  : 1,
+              cursor:
+                saving ||
+                !hasChanges
+                  ? "default"
+                  : "pointer",
+            }}
+          >
+            {saving ? (
+              <>
+                <Check
+                  size={17}
+                  strokeWidth={3}
+                />
+                Saving...
+              </>
+            ) : hasChanges ? (
+              <>
+                <Check
+                  size={17}
+                  strokeWidth={3}
+                />
+                Save Goal
+              </>
+            ) : (
+              <>
+                <Check
+                  size={17}
+                  strokeWidth={3}
+                />
+                Saved
+              </>
+            )}
+          </button>
+        </section>
 
       </div>
-
-      {/* =====================================================
-          STYLES
-      ===================================================== */}
-
-      <style>{`
-
-        .move-care-settings {
-          width: 100%;
-          max-width: 850px;
-          margin: 0 auto;
-          padding: 10px 0 40px;
-          color: #374139;
-        }
-
-        .move-care-settings-header {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-
-        .back-button {
-          width: 44px;
-          height: 44px;
-          border: 3px solid #000;
-          border-radius: 14px;
-          background: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          box-shadow: 3px 3px 0 #000;
-          transition: 0.15s ease;
-          flex-shrink: 0;
-        }
-
-        .back-button:hover {
-          transform: translate(-1px, -1px);
-          box-shadow: 4px 4px 0 #000;
-        }
-
-        .back-button:active {
-          transform: translate(2px, 2px);
-          box-shadow: 1px 1px 0 #000;
-        }
-
-        .move-care-settings-header h2 {
-          margin: 0 0 4px;
-          font-size: 28px;
-          font-weight: 700;
-        }
-
-        .move-care-settings-header p {
-          margin: 0;
-          color: #6b7280;
-          font-size: 14px;
-        }
-
-        .move-care-setting-card {
-          background: #ffffff;
-          border: 3px solid #000;
-          border-radius: 22px;
-          padding: 22px;
-          margin-bottom: 20px;
-          box-shadow: 5px 5px 0 #000;
-        }
-
-        .setting-header {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          margin-bottom: 22px;
-        }
-
-        .setting-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: 14px;
-          background: #dbeafe;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 22px;
-          flex-shrink: 0;
-        }
-
-        .clock-icon {
-          background: #dcfce7;
-        }
-
-        .setting-header h3 {
-          margin: 0 0 5px;
-          font-size: 18px;
-        }
-
-        .setting-header p {
-          margin: 0;
-          color: #6b7280;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        /* =====================================================
-           REWARD GOAL
-        ===================================================== */
-
-        .reward-goal-card {
-          background: #fffbeb;
-        }
-
-        .reward-setting-icon {
-          background: #fef3c7;
-        }
-
-        .reward-goal-display {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 16px;
-          border: 2px solid #000;
-          border-radius: 16px;
-          background: #fff;
-        }
-
-        .reward-goal-value {
-          font-size: 30px;
-          font-weight: 800;
-        }
-
-        .reward-goal-value span {
-          font-size: 15px;
-          font-weight: 600;
-          color: #6b7280;
-        }
-
-        .reward-goal-readonly {
-          padding: 7px 12px;
-          border: 2px solid #000;
-          border-radius: 10px;
-          background: #f1f5f9;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        /* =====================================================
-           GOAL OPTIONS
-        ===================================================== */
-
-        .goal-options {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .goal-option {
-          width: 48px;
-          height: 48px;
-          border: 2px solid #000;
-          border-radius: 14px;
-          background: #f8fafc;
-          font-size: 16px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: 0.2s ease;
-        }
-
-        .goal-option:hover {
-          transform: translateY(-2px);
-        }
-
-        .goal-option.active {
-          background: #bde3f4;
-          box-shadow: 3px 3px 0 #000;
-          transform: translate(-2px, -2px);
-        }
-
-        .goal-summary {
-          margin-top: 14px;
-          color: #6b7280;
-          font-size: 14px;
-        }
-
-        /* =====================================================
-           SCHEDULE
-        ===================================================== */
-
-        .schedule-list {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .schedule-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .schedule-number {
-          width: 34px;
-          height: 34px;
-          border-radius: 50%;
-          background: #dbeafe;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .schedule-label {
-          width: 80px;
-          font-size: 14px;
-          font-weight: 600;
-        }
-
-        .schedule-input {
-          width: 160px;
-          padding: 10px 12px;
-          border: 2px solid #000;
-          border-radius: 12px;
-          background: #f8fafc;
-          font-size: 15px;
-          font-family: inherit;
-          outline: none;
-        }
-
-        .schedule-input:focus {
-          background: #fff;
-          box-shadow: 3px 3px 0 #000;
-        }
-
-        /* =====================================================
-           SAVE
-        ===================================================== */
-
-        .save-section {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin: 24px 0;
-        }
-
-        .save-status-text {
-          font-size: 13px;
-          color: #6b7280;
-          margin: 0;
-        }
-
-        .save-button {
-          padding: 12px 22px;
-          border: 2px solid #000;
-          border-radius: 14px;
-          background: #bde3f4;
-          box-shadow: 4px 4px 0 #000;
-          font-family: inherit;
-          font-weight: 700;
-          cursor: pointer;
-          transition: 0.15s ease;
-        }
-
-        .save-button:active:not(.disabled) {
-          transform: translate(3px, 3px);
-          box-shadow: 1px 1px 0 #000;
-        }
-
-        .save-button.disabled {
-          background: #e2e8f0;
-          opacity: 0.7;
-          cursor: default;
-          box-shadow: 2px 2px 0 #000;
-        }
-
-        /* =====================================================
-           RESET
-        ===================================================== */
-
-        .reset-card {
-          padding: 20px;
-          border: 3px solid #000;
-          border-radius: 22px;
-          background: #fff7ed;
-          box-shadow: 5px 5px 0 #000;
-        }
-
-        .reset-header {
-          display: flex;
-          align-items: flex-start;
-          gap: 14px;
-          margin-bottom: 18px;
-        }
-
-        .reset-icon {
-          width: 45px;
-          height: 45px;
-          border-radius: 13px;
-          background: #fed7aa;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .reset-header h3 {
-          margin: 0 0 5px;
-          font-size: 17px;
-        }
-
-        .reset-header p {
-          margin: 0;
-          color: #6b7280;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        .reset-today-button {
-          padding: 11px 17px;
-          border: 2px solid #000;
-          border-radius: 12px;
-          background: #ffffff;
-          font-family: inherit;
-          font-weight: 700;
-          cursor: pointer;
-        }
-
-        .reset-today-button:hover {
-          background: #fef3c7;
-        }
-
-        .reset-message {
-          margin-top: 12px;
-          padding: 10px 12px;
-          border-radius: 10px;
-          background: #dcfce7;
-          color: #166534;
-          font-size: 13px;
-          font-weight: 600;
-        }
-
-        /* =====================================================
-           MOBILE
-        ===================================================== */
-
-        @media (max-width: 600px) {
-
-          .move-care-setting-card {
-            padding: 17px;
-          }
-
-          .schedule-label {
-            display: none;
-          }
-
-          .schedule-input {
-            flex: 1;
-          }
-
-          .save-section {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 12px;
-          }
-
-          .save-button {
-            width: 100%;
-          }
-
-          .reward-goal-display {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 12px;
-          }
-
-          .reward-goal-readonly {
-            align-self: flex-start;
-          }
-        }
-
-      `}</style>
     </div>
   );
-};
-
-export default MoveResetSettings;
+}

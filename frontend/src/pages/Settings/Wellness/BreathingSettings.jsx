@@ -1,10 +1,25 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, Trophy } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  Trophy,
+  LockKeyhole,
+  Clock3,
+  RotateCcw,
+  Wind,
+  Plus,
+  Trash2,
+  Check,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../lib/api";
 
+/* =========================================================
+   BREATHE SETTINGS
+========================================================= */
+
 const DEFAULT_GOAL = 3;
 const DEFAULT_REWARD_GOAL = 3;
+const MAX_GOAL = 5;
 
 const DEFAULT_SCHEDULE = [
   "10:00",
@@ -15,311 +30,665 @@ const DEFAULT_SCHEDULE = [
 ];
 
 const REWARD_CONFIG_KEY = "wellness-reward-config";
-const BREATHING_GOAL_KEY = "breathingGoal";
-const BREATHING_SCHEDULE_KEY = "breathingSchedule";
+const GOAL_KEY = "breathingGoal";
+const SCHEDULE_KEY = "breathingSchedule";
 
 /* =========================================================
-   PARSE ADMIN REWARD GOAL
+   STORAGE HELPERS
 ========================================================= */
 
-const parseRewardGoal = (savedData) => {
+const getStoredRewardGoal = () => {
   try {
-    if (!savedData) {
-      return DEFAULT_REWARD_GOAL;
-    }
-
-    const parsed =
-      typeof savedData === "string"
-        ? JSON.parse(savedData)
-        : savedData;
-
-    const rawGoal =
-      parsed?.breathing?.rewardGoal ??
-      parsed?.rewardGoal;
-
-    const goal = Number(rawGoal);
-
-    return Number.isFinite(goal) && goal > 0
-      ? goal
-      : DEFAULT_REWARD_GOAL;
-  } catch (error) {
-    console.error(
-      "Failed to parse breathing reward goal:",
-      error
-    );
-
-    return DEFAULT_REWARD_GOAL;
-  }
-};
-
-const BreathingSettings = () => {
-  const navigate = useNavigate();
-
-  /* =========================================================
-     PERSONAL GOAL
-  ========================================================= */
-
-  const [savedGoal, setSavedGoal] = useState(() => {
-    const saved = Number(
-      localStorage.getItem(BREATHING_GOAL_KEY)
-    );
-
-    return saved > 0 ? saved : DEFAULT_GOAL;
-  });
-
-  const [goal, setGoal] = useState(() => {
-    const saved = Number(
-      localStorage.getItem(BREATHING_GOAL_KEY)
-    );
-
-    return saved > 0 ? saved : DEFAULT_GOAL;
-  });
-
-  /* =========================================================
-     PERSONAL SCHEDULE
-  ========================================================= */
-
-  const [savedSchedule, setSavedSchedule] = useState(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(BREATHING_SCHEDULE_KEY)
-      );
-
-      return Array.isArray(saved) && saved.length > 0
-        ? saved
-        : DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    } catch {
-      return DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    }
-  });
-
-  const [schedule, setSchedule] = useState(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(BREATHING_SCHEDULE_KEY)
-      );
-
-      return Array.isArray(saved) && saved.length > 0
-        ? saved
-        : DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    } catch {
-      return DEFAULT_SCHEDULE.slice(0, DEFAULT_GOAL);
-    }
-  });
-
-  /* =========================================================
-     ADMIN REWARD GOAL
-  ========================================================= */
-
-  const [rewardGoal, setRewardGoal] = useState(() => {
-    const saved = localStorage.getItem(
-      REWARD_CONFIG_KEY
-    );
-
-    return parseRewardGoal(saved);
-  });
-
-  const [saved, setSaved] = useState(false);
-  const [resetMessage, setResetMessage] = useState("");
-
-  /* =========================================================
-     LOAD ADMIN REWARD GOAL
-  ========================================================= */
-
-  const loadRewardGoal = useCallback(() => {
     const stored = localStorage.getItem(
       REWARD_CONFIG_KEY
     );
 
-    setRewardGoal(parseRewardGoal(stored));
-  }, []);
+    if (!stored) {
+      return DEFAULT_REWARD_GOAL;
+    }
 
-  /* =========================================================
-     SYNC ADMIN REWARD SETTINGS
-  ========================================================= */
+    const parsed = JSON.parse(stored);
 
-  useEffect(() => {
-    loadRewardGoal();
+    const value =
+      parsed?.breathing?.rewardGoal ??
+      parsed?.breathing?.reward_goal ??
+      parsed?.rewardGoal ??
+      parsed?.reward_goal ??
+      DEFAULT_REWARD_GOAL;
 
-    const handleRewardsUpdated = (event) => {
-      if (event?.detail) {
-        setRewardGoal(
-          parseRewardGoal(event.detail)
-        );
-      } else {
-        loadRewardGoal();
-      }
-    };
+    return Math.min(
+      Math.max(
+        Number(value) || DEFAULT_REWARD_GOAL,
+        1
+      ),
+      MAX_GOAL
+    );
+  } catch {
+    return DEFAULT_REWARD_GOAL;
+  }
+};
 
-    const handleStorage = (event) => {
-      if (
-        !event?.key ||
-        event.key === REWARD_CONFIG_KEY
-      ) {
-        loadRewardGoal();
-      }
-    };
-
-    window.addEventListener(
-      "wellnessRewardsUpdated",
-      handleRewardsUpdated
+const getStoredGoal = () => {
+  try {
+    const stored = localStorage.getItem(
+      GOAL_KEY
     );
 
-    window.addEventListener(
-      "storage",
-      handleStorage
+    if (!stored) {
+      return DEFAULT_GOAL;
+    }
+
+    const value = Number(stored);
+
+    if (!Number.isFinite(value)) {
+      return DEFAULT_GOAL;
+    }
+
+    return Math.min(
+      Math.max(value, 2),
+      MAX_GOAL
+    );
+  } catch {
+    return DEFAULT_GOAL;
+  }
+};
+
+const getStoredSchedule = () => {
+  try {
+    const stored = localStorage.getItem(
+      SCHEDULE_KEY
     );
 
-    return () => {
-      window.removeEventListener(
-        "wellnessRewardsUpdated",
-        handleRewardsUpdated
+    if (!stored) {
+      return DEFAULT_SCHEDULE.slice(
+        0,
+        DEFAULT_GOAL
       );
+    }
 
-      window.removeEventListener(
-        "storage",
-        handleStorage
+    const parsed = JSON.parse(stored);
+
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length === 0
+    ) {
+      return DEFAULT_SCHEDULE.slice(
+        0,
+        DEFAULT_GOAL
       );
-    };
-  }, [loadRewardGoal]);
+    }
 
-  // Backend is the source of truth; localStorage is only a fallback for offline use.
-  useEffect(() => {
-    api.get("/settings").then(({ data }) => {
-      const b = data?.breathing;
-      if (!b) return;
-      if (typeof b.goal === "number") {
-        setSavedGoal(b.goal);
-        setGoal(b.goal);
-      }
-      if (Array.isArray(b.schedule) && b.schedule.length > 0) {
-        setSavedSchedule(b.schedule);
-        setSchedule(b.schedule);
-      }
-    }).catch(() => {});
-  }, []);
+    return parsed;
+  } catch {
+    return DEFAULT_SCHEDULE.slice(
+      0,
+      DEFAULT_GOAL
+    );
+  }
+};
 
-  /* =========================================================
-     CHANGE PERSONAL GOAL
-  ========================================================= */
+const createScheduleForGoal = (
+  goal,
+  currentSchedule
+) => {
+  const base =
+    Array.isArray(currentSchedule) &&
+    currentSchedule.length
+      ? [...currentSchedule]
+      : [...DEFAULT_SCHEDULE];
 
-  const handleGoalChange = (newGoal) => {
-    setGoal(newGoal);
+  const fallbackTimes = [
+    "09:00",
+    "10:00",
+    "12:00",
+    "14:00",
+    "16:00",
+    "18:00",
+    "20:00",
+    "22:00",
+  ];
 
-    setSchedule((previous) => {
-      const updated = [...previous];
+  if (goal <= base.length) {
+    return base.slice(0, goal);
+  }
 
-      while (updated.length < newGoal) {
-        updated.push(
-          DEFAULT_SCHEDULE[updated.length] ||
-            "22:00"
-        );
-      }
+  const result = [...base];
 
-      return updated.slice(0, newGoal);
-    });
-  };
+  while (result.length < goal) {
+    result.push(
+      fallbackTimes[result.length] ||
+        "22:00"
+    );
+  }
 
-  /* =========================================================
-     CHANGE SCHEDULE
-  ========================================================= */
+  return result;
+};
 
-  const handleScheduleChange = (index, value) => {
-    setSchedule((previous) => {
-      const updated = [...previous];
+/* =========================================================
+   COMPONENT
+========================================================= */
 
-      updated[index] = value;
+export default function BreathingSettings() {
+  const navigate = useNavigate();
 
-      return updated;
-    });
-  };
+  const initialGoal = getStoredGoal();
+
+  const [rewardGoal, setRewardGoal] =
+    useState(getStoredRewardGoal);
+
+  const [goal, setGoal] =
+    useState(initialGoal);
+
+  const [schedule, setSchedule] =
+    useState(() =>
+      createScheduleForGoal(
+        initialGoal,
+        getStoredSchedule()
+      )
+    );
+
+  const [savedGoal, setSavedGoal] =
+    useState(initialGoal);
+
+  const [savedSchedule, setSavedSchedule] =
+    useState(() =>
+      createScheduleForGoal(
+        initialGoal,
+        getStoredSchedule()
+      )
+    );
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [resetting, setResetting] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
 
   /* =========================================================
      UNSAVED CHANGES
   ========================================================= */
 
-  const activeSchedule = schedule.slice(0, goal);
-
-  const hasUnsavedChanges =
-    goal !== savedGoal ||
-    JSON.stringify(activeSchedule) !==
+  const hasChanges =
+    Number(goal) !== Number(savedGoal) ||
+    JSON.stringify(schedule) !==
       JSON.stringify(savedSchedule);
 
   /* =========================================================
-     SAVE PERSONAL SETTINGS
+     LOAD BACKEND SETTINGS
   ========================================================= */
 
-  const saveSettings = () => {
-    const finalSchedule =
-      schedule.slice(0, goal);
+  useEffect(() => {
+    let mounted = true;
 
-    localStorage.setItem(
-      BREATHING_GOAL_KEY,
-      String(goal)
+    const loadSettings = async () => {
+      try {
+        const response =
+          await api.get("/settings");
+
+        const settings =
+          response?.data || {};
+
+        const backendRewardGoal =
+          settings?.breathing?.reward_goal ??
+          settings?.breathing?.rewardGoal;
+
+        const backendGoal =
+          settings?.breathing?.goal;
+
+        const backendSchedule =
+          settings?.breathing?.schedule;
+
+        if (!mounted) return;
+
+        let nextRewardGoal =
+          getStoredRewardGoal();
+
+        if (
+          Number.isFinite(
+            Number(backendRewardGoal)
+          )
+        ) {
+          nextRewardGoal = Math.min(
+            Math.max(
+              Number(backendRewardGoal),
+              1
+            ),
+            MAX_GOAL
+          );
+
+          setRewardGoal(
+            nextRewardGoal
+          );
+        }
+
+        const nextGoal =
+          Number.isFinite(
+            Number(backendGoal)
+          )
+            ? Math.min(
+                Math.max(
+                  Number(backendGoal),
+                  2
+                ),
+                MAX_GOAL
+              )
+            : getStoredGoal();
+
+        const nextSchedule =
+          Array.isArray(
+            backendSchedule
+          )
+            ? createScheduleForGoal(
+                nextGoal,
+                backendSchedule
+              )
+            : createScheduleForGoal(
+                nextGoal,
+                getStoredSchedule()
+              );
+
+        setRewardGoal(
+          nextRewardGoal
+        );
+
+        setGoal(nextGoal);
+        setSchedule(nextSchedule);
+
+        setSavedGoal(nextGoal);
+        setSavedSchedule(
+          nextSchedule
+        );
+
+        localStorage.setItem(
+          GOAL_KEY,
+          String(nextGoal)
+        );
+
+        localStorage.setItem(
+          SCHEDULE_KEY,
+          JSON.stringify(
+            nextSchedule
+          )
+        );
+      } catch {
+        // Keep local settings.
+      }
+    };
+
+    loadSettings();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /* =========================================================
+     ADMIN REWARD CONFIG UPDATE
+  ========================================================= */
+
+  useEffect(() => {
+    const handleRewardUpdate = (
+      event
+    ) => {
+      if (event?.detail) {
+        try {
+          const detail =
+            typeof event.detail ===
+            "string"
+              ? JSON.parse(
+                  event.detail
+                )
+              : event.detail;
+
+          const value =
+            detail?.breathing
+              ?.rewardGoal ??
+            detail?.breathing
+              ?.reward_goal ??
+            detail?.rewardGoal ??
+            detail?.reward_goal;
+
+          if (
+            Number.isFinite(
+              Number(value)
+            )
+          ) {
+            setRewardGoal(
+              Math.min(
+                Math.max(
+                  Number(value),
+                  1
+                ),
+                MAX_GOAL
+              )
+            );
+
+            return;
+          }
+        } catch {
+          // Fall back to local storage.
+        }
+      }
+
+      setRewardGoal(
+        getStoredRewardGoal()
+      );
+    };
+
+    window.addEventListener(
+      "wellness-reward-config-updated",
+      handleRewardUpdate
     );
 
-    localStorage.setItem(
-      BREATHING_SCHEDULE_KEY,
-      JSON.stringify(finalSchedule)
+    window.addEventListener(
+      "wellnessRewardsUpdated",
+      handleRewardUpdate
     );
 
-    setSavedGoal(goal);
-    setSavedSchedule(finalSchedule);
+    window.addEventListener(
+      "wellnessSettingsUpdated",
+      handleRewardUpdate
+    );
 
-    api.put("/settings", { breathing: { goal, schedule: finalSchedule } }).catch(() => {});
+    window.addEventListener(
+      "storage",
+      handleRewardUpdate
+    );
 
-    window.dispatchEvent(
-      new CustomEvent(
+    return () => {
+      window.removeEventListener(
+        "wellness-reward-config-updated",
+        handleRewardUpdate
+      );
+
+      window.removeEventListener(
+        "wellnessRewardsUpdated",
+        handleRewardUpdate
+      );
+
+      window.removeEventListener(
         "wellnessSettingsUpdated",
-        {
-          detail: {
-            goal,
-            schedule: finalSchedule,
-          },
-        }
-      )
+        handleRewardUpdate
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleRewardUpdate
+      );
+    };
+  }, []);
+
+  /* =========================================================
+     GOAL
+  ========================================================= */
+
+  const handleGoalChange = (
+    value
+  ) => {
+    const nextGoal = Math.min(
+      Math.max(
+        Number(value),
+        2
+      ),
+      MAX_GOAL
     );
 
-    window.dispatchEvent(
-      new Event("wellness-settings-updated")
+    setGoal(nextGoal);
+
+    setSchedule(
+      (currentSchedule) =>
+        createScheduleForGoal(
+          nextGoal,
+          currentSchedule
+        )
     );
 
-    /* Breathing-specific settings event */
-    window.dispatchEvent(
-      new CustomEvent(
-        "breathing-settings-updated",
-        {
-          detail: {
-            goal,
-            schedule: finalSchedule,
-          },
-        }
-      )
-    );
-
-    setSaved(true);
-
-    setTimeout(() => {
-      setSaved(false);
-    }, 2000);
+    setMessage("");
   };
 
   /* =========================================================
-     RESET TODAY'S PROGRESS
+     SCHEDULE
   ========================================================= */
 
-  const resetToday = () => {
-    const today =
-      new Date().toDateString();
-
-    localStorage.setItem(
-      "breathingDate",
-      today
+  const updateScheduleTime = (
+    index,
+    value
+  ) => {
+    setSchedule((current) =>
+      current.map(
+        (time, i) =>
+          i === index
+            ? value
+            : time
+      )
     );
 
-    localStorage.setItem(
-      "breathingCompleted",
-      "0"
+    setMessage("");
+  };
+
+  const addScheduleTime = () => {
+    if (
+      schedule.length >=
+      MAX_GOAL
+    ) {
+      return;
+    }
+
+    const fallbackTimes = [
+      "09:00",
+      "10:00",
+      "12:00",
+      "14:00",
+      "16:00",
+      "18:00",
+      "20:00",
+      "22:00",
+    ];
+
+    const nextTime =
+      fallbackTimes[
+        schedule.length
+      ] || "22:00";
+
+    const nextSchedule = [
+      ...schedule,
+      nextTime,
+    ];
+
+    setSchedule(nextSchedule);
+
+    setGoal(
+      Math.min(
+        Math.max(
+          nextSchedule.length,
+          2
+        ),
+        MAX_GOAL
+      )
+    );
+
+    setMessage("");
+  };
+
+  const removeScheduleTime = (
+    index
+  ) => {
+    if (
+      schedule.length <= 2
+    ) {
+      return;
+    }
+
+    const nextSchedule =
+      schedule.filter(
+        (_, i) =>
+          i !== index
+      );
+
+    setSchedule(nextSchedule);
+
+    setGoal(
+      Math.min(
+        Math.max(
+          nextSchedule.length,
+          2
+        ),
+        MAX_GOAL
+      )
+    );
+
+    setMessage("");
+  };
+
+  /* =========================================================
+     SAVE
+  ========================================================= */
+
+  const handleSave = async () => {
+    if (
+      !hasChanges ||
+      saving
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    const safeGoal =
+      Math.min(
+        Math.max(
+          Number(goal) ||
+            DEFAULT_GOAL,
+          2
+        ),
+        MAX_GOAL
+      );
+
+    const safeSchedule =
+      createScheduleForGoal(
+        safeGoal,
+        schedule
+      );
+
+    try {
+      localStorage.setItem(
+        GOAL_KEY,
+        String(safeGoal)
+      );
+
+      localStorage.setItem(
+        SCHEDULE_KEY,
+        JSON.stringify(
+          safeSchedule
+        )
+      );
+
+      try {
+        await api.put(
+          "/settings",
+          {
+            breathing: {
+              goal: safeGoal,
+              schedule:
+                safeSchedule,
+            },
+          }
+        );
+      } catch {
+        // Keep local settings if API is unavailable.
+      }
+
+      setGoal(safeGoal);
+      setSchedule(
+        safeSchedule
+      );
+
+      setSavedGoal(
+        safeGoal
+      );
+
+      setSavedSchedule(
+        safeSchedule
+      );
+
+      /* =====================================================
+         GLOBAL SETTINGS EVENT
+      ===================================================== */
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "wellnessSettingsUpdated",
+          {
+            detail: {
+              breathing: {
+                goal: safeGoal,
+                schedule:
+                  safeSchedule,
+              },
+            },
+          }
+        )
+      );
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "wellness-settings-updated",
+          {
+            detail: {
+              breathing: {
+                goal: safeGoal,
+                schedule:
+                  safeSchedule,
+              },
+            },
+          }
+        )
+      );
+
+      /* =====================================================
+         BREATHING-SPECIFIC EVENT
+      ===================================================== */
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "breathing-settings-updated",
+          {
+            detail: {
+              goal: safeGoal,
+              schedule:
+                safeSchedule,
+            },
+          }
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* =========================================================
+     RESET TODAY
+  ========================================================= */
+
+  const handleResetToday = () => {
+    setResetting(true);
+    setMessage("");
+
+    const today =
+      new Date()
+        .toISOString()
+        .slice(0, 10);
+
+    localStorage.removeItem(
+      "breathingDate"
+    );
+
+    localStorage.removeItem(
+      "breathingCompleted"
     );
 
     localStorage.removeItem(
@@ -327,643 +696,927 @@ const BreathingSettings = () => {
     );
 
     localStorage.removeItem(
+      "breathingCompletedSlots"
+    );
+
+    localStorage.removeItem(
       `breathingRewardedMilestones-${today}`
     );
 
-    if (
-      typeof window.resetBreathingToday ===
-      "function"
-    ) {
-      window.resetBreathingToday();
+    try {
+      if (
+        typeof window.resetBreathingToday ===
+        "function"
+      ) {
+        window.resetBreathingToday();
+      }
+    } catch {
+      // Ignore reset callback errors.
     }
 
     window.dispatchEvent(
-      new Event("breathingTodayReset")
+      new CustomEvent(
+        "breathingTodayReset"
+      )
     );
 
     window.dispatchEvent(
-      new Event("breathing-progress-reset")
+      new CustomEvent(
+        "breathing-progress-reset"
+      )
     );
 
-    setResetMessage(
+    setMessage(
       "Today's breathing progress has been reset."
     );
 
-    setTimeout(() => {
-      setResetMessage("");
-    }, 2500);
+    window.setTimeout(() => {
+      setResetting(false);
+    }, 500);
   };
 
+  /* =========================================================
+     STYLES
+     SAME COMPACT DESIGN AS MOVE & RESET
+  ========================================================= */
+
+  const styles = {
+    page: {
+      minHeight: "100%",
+      padding: "18px 24px 28px",
+      background: "var(--cozy-bg)",
+      color: "var(--cozy-text)",
+    },
+
+    container: {
+      width: "100%",
+      maxWidth: "900px",
+      margin: "0 auto",
+    },
+
+    header: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      marginBottom: "18px",
+    },
+
+    backButton: {
+      width: "40px",
+      height: "40px",
+      borderRadius: "12px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-surface)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      flexShrink: 0,
+    },
+
+    headerIcon: {
+      width: "46px",
+      height: "46px",
+      borderRadius: "13px",
+      background:
+        "var(--cozy-primary)",
+      color: "#fff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+
+    title: {
+      margin: 0,
+      fontSize:
+        "clamp(1.35rem, 2.5vw, 1.8rem)",
+      lineHeight: 1.1,
+      fontWeight: 800,
+      color:
+        "var(--cozy-text)",
+    },
+
+    subtitle: {
+      margin: "3px 0 0",
+      color:
+        "var(--cozy-muted)",
+      fontSize: "0.82rem",
+    },
+
+    card: {
+      background:
+        "var(--cozy-surface)",
+      border:
+        "1px solid var(--cozy-border)",
+      borderRadius: "18px",
+      padding: "15px 17px",
+      marginBottom: "12px",
+      boxShadow:
+        "0 4px 12px rgba(0, 0, 0, 0.04)",
+    },
+
+    cardHeader: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      gap: "12px",
+      marginBottom: "12px",
+    },
+
+    cardTitleWrap: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      minWidth: 0,
+    },
+
+    cardIcon: {
+      width: "36px",
+      height: "36px",
+      borderRadius: "11px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+
+    cardTitle: {
+      margin: 0,
+      fontSize: "0.98rem",
+      lineHeight: 1.2,
+      fontWeight: 800,
+      color:
+        "var(--cozy-text)",
+    },
+
+    cardDescription: {
+      margin: "2px 0 0",
+      color:
+        "var(--cozy-muted)",
+      fontSize: "0.76rem",
+      lineHeight: 1.3,
+    },
+
+    lockBadge: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "5px",
+      padding: "6px 9px",
+      borderRadius: "9px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.7rem",
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    },
+
+    rewardValue: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      padding: "11px 13px",
+      borderRadius: "13px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+    },
+
+    rewardNumber: {
+      fontSize: "1.55rem",
+      lineHeight: 1,
+      fontWeight: 900,
+      color:
+        "var(--cozy-text)",
+    },
+
+    rewardText: {
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.82rem",
+      fontWeight: 800,
+    },
+
+    rewardSubtext: {
+      marginTop: "2px",
+      color:
+        "var(--cozy-muted)",
+      fontSize: "0.7rem",
+    },
+
+    label: {
+      display: "block",
+      marginBottom: "8px",
+      fontSize: "0.8rem",
+      fontWeight: 800,
+      color:
+        "var(--cozy-text)",
+    },
+
+    goalOptions: {
+      display: "grid",
+      gridTemplateColumns:
+        "repeat(4, minmax(0, 1fr))",
+      gap: "8px",
+    },
+
+    goalButton: {
+      minHeight: "44px",
+      borderRadius: "12px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.82rem",
+      fontWeight: 800,
+      cursor: "pointer",
+      transition:
+        "background 0.18s ease, border-color 0.18s ease",
+    },
+
+    activeGoalButton: {
+      background:
+        "var(--cozy-primary)",
+      borderColor:
+        "var(--cozy-primary)",
+      color: "#fff",
+    },
+
+    scheduleList: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "7px",
+    },
+
+    scheduleRow: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+    },
+
+    scheduleNumber: {
+      width: "32px",
+      height: "32px",
+      borderRadius: "9px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "0.78rem",
+      fontWeight: 900,
+      flexShrink: 0,
+    },
+
+    timeInput: {
+      flex: 1,
+      minHeight: "39px",
+      padding: "0 11px",
+      borderRadius: "11px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.82rem",
+      fontWeight: 700,
+      outline: "none",
+      colorScheme: "light dark",
+    },
+
+    removeButton: {
+      width: "34px",
+      height: "34px",
+      borderRadius: "9px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      flexShrink: 0,
+    },
+
+    addButton: {
+      marginTop: "8px",
+      width: "100%",
+      minHeight: "37px",
+      borderRadius: "10px",
+      border:
+        "1px dashed var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.78rem",
+      fontWeight: 800,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "6px",
+    },
+
+    resetCard: {
+      background:
+        "var(--cozy-surface)",
+      border:
+        "1px solid var(--cozy-border)",
+      borderRadius: "18px",
+      padding: "15px 17px",
+      marginBottom: "12px",
+    },
+
+    resetButton: {
+      width: "100%",
+      minHeight: "40px",
+      borderRadius: "11px",
+      border:
+        "1px solid var(--cozy-border)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.8rem",
+      fontWeight: 800,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "7px",
+    },
+
+    message: {
+      marginTop: "8px",
+      padding: "8px 10px",
+      borderRadius: "10px",
+      background:
+        "var(--cozy-bg)",
+      border:
+        "1px solid var(--cozy-border)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.75rem",
+      fontWeight: 700,
+      textAlign: "center",
+    },
+
+    saveCard: {
+      background:
+        "var(--cozy-primary)",
+      borderRadius: "18px",
+      padding: "10px",
+      marginTop: "4px",
+    },
+
+    saveButton: {
+      width: "100%",
+      minHeight: "42px",
+      border: "none",
+      borderRadius: "11px",
+      background:
+        "var(--cozy-surface)",
+      color:
+        "var(--cozy-text)",
+      fontSize: "0.84rem",
+      fontWeight: 900,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "7px",
+    },
+  };
+
+  /* =========================================================
+     RENDER
+  ========================================================= */
+
   return (
-    <div className="breathing-care-settings">
+    <div style={styles.page}>
+      <div style={styles.container}>
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+        {/* HEADER */}
 
-      <div className="breathing-care-settings-header">
+        <div style={styles.header}>
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() =>
+              navigate(-1)
+            }
+            aria-label="Go back"
+          >
+            <ArrowLeft size={19} />
+          </button>
 
-        <button
-          type="button"
-          className="back-button"
-          onClick={() => navigate("/settings")}
-          aria-label="Back to settings"
-        >
-          <ArrowLeft size={20} />
-        </button>
-
-        <div>
-          <h2>Breathe</h2>
-
-          <p>
-            Customize your daily breathing goals
-            and reminder schedule.
-          </p>
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          PERSONAL DAILY GOAL
-      ===================================================== */}
-
-      <div className="breathing-care-setting-card">
-
-        <div className="setting-header">
-
-          <div className="setting-icon">
-            💨
+          <div
+            style={styles.headerIcon}
+          >
+            <Wind
+              size={25}
+              strokeWidth={2.5}
+            />
           </div>
 
           <div>
-            <h3>Daily Breathing Goal</h3>
+            <h1 style={styles.title}>
+              Breathe
+            </h1>
 
-            <p>
-              Choose how many sessions to complete
-              each day.
+            <p
+              style={styles.subtitle}
+            >
+              Set your daily breathing
+              reminders and goal.
             </p>
           </div>
-
         </div>
 
-        <div className="goal-options">
+        {/* REWARD GOAL */}
 
-          {[2, 3, 4, 5].map((number) => (
-            <button
-              key={number}
-              type="button"
-              className={`goal-option ${
-                goal === number
-                  ? "active"
-                  : ""
-              }`}
-              onClick={() =>
-                handleGoalChange(number)
+        <section
+          style={styles.card}
+        >
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
               }
             >
-              {number}
-            </button>
-          ))}
-
-        </div>
-
-        <div className="goal-summary">
-          <strong>{goal}</strong>{" "}
-          breathing sessions per day
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          ADMIN REWARD GOAL
-      ===================================================== */}
-
-      <div className="breathing-care-setting-card reward-goal-card">
-
-        <div className="setting-header">
-
-          <div className="setting-icon reward-setting-icon">
-            <Trophy size={22} />
-          </div>
-
-          <div>
-            <h3>Reward Goal</h3>
-
-            <p>
-              Set by your organization to calculate
-              breathing rewards.
-            </p>
-          </div>
-
-        </div>
-
-        <div className="reward-goal-display">
-
-          <div className="reward-goal-value">
-            {rewardGoal}{" "}
-            <span>sessions</span>
-          </div>
-
-          <div className="reward-goal-readonly">
-            🔒 Set by Admin
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          REMINDER SCHEDULE
-      ===================================================== */}
-
-      <div className="breathing-care-setting-card">
-
-        <div className="setting-header">
-
-          <div className="setting-icon clock-icon">
-            ⏰
-          </div>
-
-          <div>
-            <h3>Reminder Schedule</h3>
-
-            <p>
-              Set the time for each breathing
-              session.
-            </p>
-          </div>
-
-        </div>
-
-        <div className="schedule-list">
-
-          {schedule
-            .slice(0, goal)
-            .map((time, index) => (
               <div
-                className="schedule-row"
-                key={index}
+                style={
+                  styles.cardIcon
+                }
               >
+                <Trophy
+                  size={18}
+                  strokeWidth={2.4}
+                />
+              </div>
 
-                <div className="schedule-number">
-                  {index + 1}
-                </div>
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Reward Goal
+                </h2>
 
-                <input
-                  type="time"
-                  value={time || ""}
-                  onChange={(event) =>
-                    handleScheduleChange(
-                      index,
-                      event.target.value
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Maximum daily
+                  breathing rewards
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={
+                styles.lockBadge
+              }
+            >
+              <LockKeyhole
+                size={12}
+              />
+              Admin
+            </div>
+          </div>
+
+          <div
+            style={
+              styles.rewardValue
+            }
+          >
+            <div
+              style={
+                styles.rewardNumber
+              }
+            >
+              {rewardGoal}
+            </div>
+
+            <div>
+              <div
+                style={
+                  styles.rewardText
+                }
+              >
+                Breathing sessions
+              </div>
+
+              <div
+                style={
+                  styles.rewardSubtext
+                }
+              >
+                Controlled by your
+                organization
+                administrator.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* DAILY GOAL */}
+
+        <section
+          style={styles.card}
+        >
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
+              }
+            >
+              <div
+                style={
+                  styles.cardIcon
+                }
+              >
+                <Wind
+                  size={18}
+                  strokeWidth={2.4}
+                />
+              </div>
+
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Daily Breathing
+                  Goal
+                </h2>
+
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Choose how many
+                  breathing sessions
+                  you want to complete.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <label
+            style={styles.label}
+          >
+            Sessions per day
+          </label>
+
+          <div
+            style={
+              styles.goalOptions
+            }
+          >
+            {[2, 3, 4, 5].map(
+              (value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() =>
+                    handleGoalChange(
+                      value
                     )
                   }
-                  className="schedule-input"
+                  style={{
+                    ...styles.goalButton,
+                    ...(goal === value
+                      ? styles.activeGoalButton
+                      : {}),
+                  }}
+                >
+                  {value}{" "}
+                  {value === 1
+                    ? "session"
+                    : "sessions"}
+                </button>
+              )
+            )}
+          </div>
+        </section>
+
+        {/* BREATHING SCHEDULE */}
+
+        <section
+          style={styles.card}
+        >
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
+              }
+            >
+              <div
+                style={
+                  styles.cardIcon
+                }
+              >
+                <Clock3
+                  size={18}
+                  strokeWidth={2.4}
                 />
-
               </div>
-            ))}
 
-        </div>
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Breathing
+                  Schedule
+                </h2>
 
-      </div>
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Choose when you
+                  would like your
+                  breathing reminders.
+                </p>
+              </div>
+            </div>
+          </div>
 
-      {/* =====================================================
-          SAVE SECTION
-      ===================================================== */}
+          <div
+            style={
+              styles.scheduleList
+            }
+          >
+            {schedule.map(
+              (time, index) => (
+                <div
+                  key={`${index}-${time}`}
+                  style={
+                    styles.scheduleRow
+                  }
+                >
+                  <div
+                    style={
+                      styles.scheduleNumber
+                    }
+                  >
+                    {index + 1}
+                  </div>
 
-      <div className="save-section">
+                  <input
+                    type="time"
+                    value={time}
+                    onChange={(event) =>
+                      updateScheduleTime(
+                        index,
+                        event.target
+                          .value
+                      )
+                    }
+                    style={
+                      styles.timeInput
+                    }
+                    aria-label={`Breathing reminder ${
+                      index + 1
+                    }`}
+                  />
 
-        <p className="save-status-text">
-          {hasUnsavedChanges
-            ? "You have unsaved changes."
-            : "Settings up to date."}
-        </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      removeScheduleTime(
+                        index
+                      )
+                    }
+                    disabled={
+                      schedule.length <=
+                      2
+                    }
+                    style={{
+                      ...styles.removeButton,
+                      opacity:
+                        schedule.length <=
+                        2
+                          ? 0.45
+                          : 1,
+                      cursor:
+                        schedule.length <=
+                        2
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                    aria-label={`Remove breathing reminder ${
+                      index + 1
+                    }`}
+                  >
+                    <Trash2
+                      size={16}
+                    />
+                  </button>
+                </div>
+              )
+            )}
+          </div>
 
-        <button
-          type="button"
-          className={`save-button ${
-            !hasUnsavedChanges && !saved
-              ? "disabled"
-              : ""
-          }`}
-          onClick={saveSettings}
-          disabled={
-            !hasUnsavedChanges && !saved
+          {schedule.length <
+            MAX_GOAL && (
+            <button
+              type="button"
+              onClick={
+                addScheduleTime
+              }
+              style={
+                styles.addButton
+              }
+            >
+              <Plus size={16} />
+              Add reminder
+            </button>
+          )}
+        </section>
+
+        {/* RESET */}
+
+        <section
+          style={
+            styles.resetCard
           }
         >
-          {saved
-            ? "✓ Changes Saved"
-            : hasUnsavedChanges
-            ? "Save Changes"
-            : "✓ Saved"}
-        </button>
+          <div
+            style={styles.cardHeader}
+          >
+            <div
+              style={
+                styles.cardTitleWrap
+              }
+            >
+              <div
+                style={
+                  styles.cardIcon
+                }
+              >
+                <RotateCcw
+                  size={18}
+                  strokeWidth={2.4}
+                />
+              </div>
 
-      </div>
+              <div>
+                <h2
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Reset Today&apos;s
+                  Progress
+                </h2>
 
-      {/* =====================================================
-          RESET TODAY
-      ===================================================== */}
-
-      <div className="reset-card">
-
-        <div className="reset-header">
-
-          <div className="reset-icon">
-            ↻
+                <p
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Start today&apos;s
+                  breathing progress
+                  from zero.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <h3>
-              Reset Today's Progress
-            </h3>
+          <button
+            type="button"
+            onClick={
+              handleResetToday
+            }
+            disabled={resetting}
+            style={{
+              ...styles.resetButton,
+              opacity:
+                resetting
+                  ? 0.6
+                  : 1,
+            }}
+          >
+            <RotateCcw
+              size={16}
+            />
 
-            <p>
-              Restart today's breathing count
-              without changing your settings.
-            </p>
-          </div>
+            {resetting
+              ? "Resetting..."
+              : "Reset Today's Progress"}
+          </button>
 
-        </div>
+          {message && (
+            <div
+              style={
+                styles.message
+              }
+            >
+              {message}
+            </div>
+          )}
+        </section>
 
-        <button
-          type="button"
-          className="reset-today-button"
-          onClick={resetToday}
+        {/* SAVE */}
+
+        <section
+          style={
+            styles.saveCard
+          }
         >
-          Reset Today
-        </button>
-
-        {resetMessage && (
-          <div className="reset-message">
-            ✓ {resetMessage}
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={
+              handleSave
+            }
+            disabled={
+              saving ||
+              !hasChanges
+            }
+            style={{
+              ...styles.saveButton,
+              opacity:
+                saving
+                  ? 0.7
+                  : 1,
+              cursor:
+                saving ||
+                !hasChanges
+                  ? "default"
+                  : "pointer",
+            }}
+          >
+            {saving ? (
+              <>
+                <Check
+                  size={17}
+                  strokeWidth={3}
+                />
+                Saving...
+              </>
+            ) : hasChanges ? (
+              <>
+                <Check
+                  size={17}
+                  strokeWidth={3}
+                />
+                Save Goal
+              </>
+            ) : (
+              <>
+                <Check
+                  size={17}
+                  strokeWidth={3}
+                />
+                Saved
+              </>
+            )}
+          </button>
+        </section>
 
       </div>
-
-      {/* =====================================================
-          STYLES
-      ===================================================== */}
-
-      <style>{`
-
-        .breathing-care-settings {
-          width: 100%;
-          max-width: 850px;
-          margin: 0 auto;
-          padding: 10px 0 40px;
-          color: #374139;
-        }
-
-        .breathing-care-settings-header {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-
-        .back-button {
-          width: 44px;
-          height: 44px;
-          border: 3px solid #000;
-          border-radius: 14px;
-          background: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          box-shadow: 3px 3px 0 #000;
-          transition: 0.15s ease;
-          flex-shrink: 0;
-        }
-
-        .back-button:hover {
-          transform: translate(-1px, -1px);
-          box-shadow: 4px 4px 0 #000;
-        }
-
-        .back-button:active {
-          transform: translate(2px, 2px);
-          box-shadow: 1px 1px 0 #000;
-        }
-
-        .breathing-care-settings-header h2 {
-          margin: 0 0 4px;
-          font-size: 28px;
-          font-weight: 700;
-        }
-
-        .breathing-care-settings-header p {
-          margin: 0;
-          color: #6b7280;
-          font-size: 14px;
-        }
-
-        .breathing-care-setting-card {
-          background: #fff;
-          border: 3px solid #000;
-          border-radius: 22px;
-          padding: 22px;
-          margin-bottom: 20px;
-          box-shadow: 5px 5px 0 #000;
-        }
-
-        .setting-header {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          margin-bottom: 22px;
-        }
-
-        .setting-icon {
-          width: 48px;
-          height: 48px;
-          border-radius: 14px;
-          background: #dcefdc;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 22px;
-          flex-shrink: 0;
-        }
-
-        .clock-icon {
-          background: #dcfce7;
-        }
-
-        .setting-header h3 {
-          margin: 0 0 5px;
-          font-size: 18px;
-        }
-
-        .setting-header p {
-          margin: 0;
-          color: #6b7280;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        /* =====================================================
-           GOAL OPTIONS
-        ===================================================== */
-
-        .goal-options {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .goal-option {
-          width: 48px;
-          height: 48px;
-          border: 2px solid #000;
-          border-radius: 14px;
-          background: #f8fafc;
-          font-weight: 700;
-          cursor: pointer;
-          transition: 0.2s ease;
-        }
-
-        .goal-option:hover {
-          transform: translateY(-2px);
-        }
-
-        .goal-option.active {
-          background: #dcefdc;
-          box-shadow: 3px 3px 0 #000;
-          transform: translate(-2px, -2px);
-        }
-
-        .goal-summary {
-          margin-top: 14px;
-          color: #6b7280;
-          font-size: 14px;
-        }
-
-        /* =====================================================
-           REWARD GOAL
-        ===================================================== */
-
-        .reward-goal-card {
-          background: #fffbeb;
-        }
-
-        .reward-setting-icon {
-          background: #fef3c7;
-        }
-
-        .reward-goal-display {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 16px;
-          border: 2px solid #000;
-          border-radius: 16px;
-          background: #fff;
-        }
-
-        .reward-goal-value {
-          font-size: 30px;
-          font-weight: 800;
-        }
-
-        .reward-goal-value span {
-          font-size: 15px;
-          font-weight: 600;
-          color: #6b7280;
-        }
-
-        .reward-goal-readonly {
-          padding: 7px 12px;
-          border: 2px solid #000;
-          border-radius: 10px;
-          background: #f1f5f9;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        /* =====================================================
-           SCHEDULE
-        ===================================================== */
-
-        .schedule-list {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .schedule-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .schedule-number {
-          width: 34px;
-          height: 34px;
-          border-radius: 50%;
-          background: #dcefdc;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .schedule-input {
-          width: 160px;
-          padding: 10px 12px;
-          border: 2px solid #000;
-          border-radius: 12px;
-          background: #f8fafc;
-          outline: none;
-          font-family: inherit;
-          font-size: 15px;
-        }
-
-        .schedule-input:focus {
-          background: #fff;
-          box-shadow: 3px 3px 0 #000;
-        }
-
-        /* =====================================================
-           SAVE
-        ===================================================== */
-
-        .save-section {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin: 24px 0;
-        }
-
-        .save-status-text {
-          font-size: 13px;
-          color: #6b7280;
-          margin: 0;
-        }
-
-        .save-button {
-          padding: 12px 22px;
-          border: 2px solid #000;
-          border-radius: 14px;
-          background: #dcefdc;
-          box-shadow: 4px 4px 0 #000;
-          font-weight: 700;
-          cursor: pointer;
-          transition: 0.15s ease;
-        }
-
-        .save-button:active:not(.disabled) {
-          transform: translate(3px, 3px);
-          box-shadow: 1px 1px 0 #000;
-        }
-
-        .save-button.disabled {
-          background: #e2e8f0;
-          opacity: 0.7;
-          cursor: default;
-        }
-
-        /* =====================================================
-           RESET
-        ===================================================== */
-
-        .reset-card {
-          padding: 20px;
-          border: 3px solid #000;
-          border-radius: 22px;
-          background: #fff7ed;
-          box-shadow: 5px 5px 0 #000;
-        }
-
-        .reset-header {
-          display: flex;
-          align-items: flex-start;
-          gap: 14px;
-          margin-bottom: 18px;
-        }
-
-        .reset-icon {
-          width: 45px;
-          height: 45px;
-          border-radius: 13px;
-          background: #fed7aa;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .reset-header h3 {
-          margin: 0 0 5px;
-          font-size: 17px;
-        }
-
-        .reset-header p {
-          margin: 0;
-          color: #6b7280;
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        .reset-today-button {
-          padding: 11px 17px;
-          border: 2px solid #000;
-          border-radius: 12px;
-          background: #fff;
-          font-weight: 700;
-          cursor: pointer;
-          transition: 0.15s ease;
-        }
-
-        .reset-today-button:hover {
-          background: #fef3c7;
-        }
-
-        .reset-message {
-          margin-top: 12px;
-          padding: 10px 12px;
-          border-radius: 10px;
-          background: #dcfce7;
-          color: #166534;
-          font-weight: 600;
-        }
-
-        /* =====================================================
-           MOBILE
-        ===================================================== */
-
-        @media (max-width: 600px) {
-
-          .breathing-care-setting-card {
-            padding: 17px;
-          }
-
-          .save-section {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 12px;
-          }
-
-          .save-button {
-            width: 100%;
-          }
-
-          .reward-goal-display {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 12px;
-          }
-
-        }
-
-      `}</style>
     </div>
   );
-};
-
-export default BreathingSettings;
+}

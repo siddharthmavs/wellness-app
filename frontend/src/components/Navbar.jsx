@@ -28,37 +28,107 @@ import {
   Settings,
 } from "lucide-react";
 
+/* =========================================================
+   PRIMARY NAVIGATION
+========================================================= */
+
 const PRIMARY = [
-  { to: "/", label: "Home", icon: Home },
-  { to: "/journey", label: "Journey", icon: Trophy },
-  { to: "/mood", label: "Mood", icon: Smile },
-  { to: "/funwall", label: "Community", icon: MessageSquare },
-  { to: "/shoutouts", label: "Kudos", icon: Sparkles },
+  {
+    to: "/",
+    label: "Home",
+    icon: Home,
+  },
+  {
+    to: "/leaderboard",
+    label: "Journey",
+    icon: Trophy,
+  },
+  {
+    to: "/mood",
+    label: "Mood",
+    icon: Smile,
+  },
+  {
+    to: "/funwall",
+    label: "Community",
+    icon: MessageSquare,
+  },
+  {
+    to: "/shoutouts",
+    label: "Kudos",
+    icon: Sparkles,
+  },
 ];
 
+/* =========================================================
+   MORE MENU
+========================================================= */
+
 const MORE = [
-  { to: "/help", label: "Help", icon: HandHelping },
-  { to: "/music", label: "Music", icon: Music },
-  { to: "/polls", label: "Polls", icon: Vote },
-  { to: "/games", label: "Games", icon: Gamepad2 },
-  { to: "/quiz", label: "Quiz", icon: Brain },
-  { to: "/learn", label: "Learn", icon: BookOpen },
-  { to: "/events", label: "Events", icon: Cake },
-  { to: "/teams", label: "Teams", icon: Swords },
-  { to: "/me", label: "Me", icon: User },
+  {
+    to: "/help",
+    label: "Help",
+    icon: HandHelping,
+  },
+  {
+    to: "/music",
+    label: "Music",
+    icon: Music,
+  },
+  {
+    to: "/polls",
+    label: "Polls",
+    icon: Vote,
+  },
+  {
+    to: "/games",
+    label: "Games",
+    icon: Gamepad2,
+  },
+  {
+    to: "/quiz",
+    label: "Quiz",
+    icon: Brain,
+  },
+  {
+    to: "/learn",
+    label: "Learn",
+    icon: BookOpen,
+  },
+  {
+    to: "/events",
+    label: "Events",
+    icon: Cake,
+  },
+  {
+    to: "/teams",
+    label: "Teams",
+    icon: Swords,
+  },
+  {
+    to: "/profile",
+    label: "Me",
+    icon: User,
+  },
 ];
+
+/* =========================================================
+   NAVBAR
+========================================================= */
 
 export const Navbar = () => {
   const { user, logout } = useAuthStore();
   const { theme, toggle: toggleTheme } = useThemeStore();
-  const nav = useNavigate();
+  const navigate = useNavigate();
 
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // Reference for the entire More dropdown area
   const moreRef = useRef(null);
 
-  // Close dropdown when clicking anywhere outside it
+  /* =======================================================
+     CLOSE MORE WHEN CLICKING OUTSIDE
+  ======================================================= */
+
   useEffect(() => {
     const handleOutsideClick = (event) => {
       if (
@@ -70,13 +140,23 @@ export const Navbar = () => {
     };
 
     if (moreOpen) {
-      document.addEventListener("mousedown", handleOutsideClick);
+      document.addEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
     }
 
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
     };
   }, [moreOpen]);
+
+  /* =======================================================
+     BUILD MORE MENU
+  ======================================================= */
 
   const more = [...MORE];
 
@@ -88,70 +168,140 @@ export const Navbar = () => {
     });
   }
 
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
     <header
       data-testid="navbar"
-      className="sticky top-0 z-40 bg-cozy-surface"
+      className="global-navigation sticky top-0 z-40"
       style={{
+        background: "var(--navbar-bg)",
         borderBottom: "1px solid var(--cozy-border)",
         backdropFilter: "blur(8px)",
       }}
     >
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4 flex-wrap">
+      <div
+        className="
+          max-w-7xl
+          mx-auto
+          px-4
+          md:px-6
+          py-3
+          flex
+          items-center
+          gap-3
+          md:gap-4
+          flex-wrap
+        "
+      >
 
-        {/* BRAND */}
+        {/* =================================================
+            BRAND
+        ================================================= */}
+
         <motion.div
           whileHover={{ scale: 1.04 }}
-          className="flex items-center gap-2 font-display font-semibold text-lg text-cozy-primary-dark"
+          className="
+            flex
+            items-center
+            gap-2
+            font-display
+            font-semibold
+            text-lg
+            text-cozy-primary-dark
+          "
         >
           <span className="text-2xl"></span>
+
           <span className="hidden sm:inline">
             Wellness Garden
           </span>
         </motion.div>
 
-        {/* NAVIGATION */}
+        {/* =================================================
+            PRIMARY NAVIGATION
+        ================================================= */}
+
         <nav
           className="flex gap-1.5 flex-wrap"
           data-testid="nav-links"
         >
-          {PRIMARY.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.to === "/"}
-              data-testid={`nav-${l.label.toLowerCase()}`}
-              className={({ isActive }) =>
-                `flex items-center gap-1.5 font-semibold text-xs md:text-sm px-3 py-2 rounded-full transition-all ${
-                  isActive
-                    ? "bg-cozy-primary text-white shadow-cozy"
-                    : "text-cozy-text hover:bg-cozy-secondary/60"
-                }`
-              }
-            >
-              <l.icon className="w-4 h-4" />
-              {l.label}
-            </NavLink>
-          ))}
+          {PRIMARY.map((item) => {
+            const Icon = item.icon;
 
-          {/* MORE DROPDOWN */}
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/"}
+                data-testid={`nav-${item.label.toLowerCase()}`}
+                className={({ isActive }) =>
+                  `
+                    navbar-nav-item
+                    flex
+                    items-center
+                    gap-1.5
+                    font-semibold
+                    text-xs
+                    md:text-sm
+                    px-3
+                    py-2
+                    rounded-full
+                    transition-all
+                    ${
+                      isActive
+                        ? "bg-cozy-primary text-white shadow-cozy"
+                        : "text-cozy-text hover:bg-cozy-secondary/60"
+                    }
+                  `
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+
+          {/* ===============================================
+              MORE BUTTON + DROPDOWN
+          =============================================== */}
+
           <div
             ref={moreRef}
             className="relative"
           >
-           <button
-  type="button"
-  data-testid="nav-more-btn"
-  onClick={() => setMoreOpen((prev) => !prev)}
-  className={`flex items-center gap-1.5 font-semibold text-xs md:text-sm px-3 py-2 rounded-full transition-all ${
-    moreOpen
-      ? "bg-cozy-secondary shadow-cozy"
-      : "text-cozy-text hover:bg-cozy-secondary/60"
-  }`}
->
-  <MoreHorizontal className="w-4 h-4" />
-  More
-</button>
+            <button
+              type="button"
+              data-testid="nav-more-btn"
+              onClick={() =>
+                setMoreOpen((previous) => !previous)
+              }
+              className={`
+                navbar-more-button
+                flex
+                items-center
+                gap-1.5
+                font-semibold
+                text-xs
+                md:text-sm
+                px-3
+                py-2
+                rounded-full
+                transition-all
+                ${
+                  moreOpen
+                    ? "bg-cozy-secondary shadow-cozy"
+                    : "text-cozy-text hover:bg-cozy-secondary/60"
+                }
+              `}
+            >
+              <MoreHorizontal className="w-4 h-4 shrink-0" />
+
+              <span>More</span>
+            </button>
 
             <AnimatePresence>
               {moreOpen && (
@@ -171,43 +321,83 @@ export const Navbar = () => {
                   transition={{
                     duration: 0.18,
                   }}
-                  className="absolute top-full right-0 mt-2 z-50 bg-cozy-surface shadow-cozy-lg p-2 grid grid-cols-2 gap-1.5 min-w-[280px]"
-                  style={{
-                    border: "1px solid var(--cozy-border)",
-                    borderRadius: 20,
-                  }}
+                  className="
+                    more-dropdown
+                    absolute
+                    top-full
+                    right-0
+                    mt-2
+                    z-50
+                    p-2
+                    grid
+                    grid-cols-2
+                    gap-1.5
+                    min-w-[280px]
+                    shadow-cozy-lg
+                  "
                   data-testid="nav-more-menu"
                 >
-                  {more.map((l) => (
-                    <NavLink
-                      key={l.to}
-                      to={l.to}
-                      onClick={() => setMoreOpen(false)}
-                      data-testid={`nav-${l.label.toLowerCase()}`}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2 font-semibold text-xs px-3 py-2 rounded-full transition ${
-                          isActive
-                            ? "bg-cozy-primary text-white"
-                            : "text-cozy-text hover:bg-cozy-secondary/50"
-                        }`
-                      }
-                    >
-                      <l.icon className="w-4 h-4" />
-                      {l.label}
-                    </NavLink>
-                  ))}
+                  {more.map((item) => {
+                    const Icon = item.icon;
+
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMoreOpen(false)}
+                        data-testid={`nav-${item.label.toLowerCase()}`}
+                        className={({ isActive }) =>
+                          `
+                            more-dropdown-item
+                            flex
+                            items-center
+                            gap-2
+                            font-semibold
+                            text-xs
+                            px-3
+                            py-2
+                            rounded-full
+                            transition
+                            ${
+                              isActive
+                                ? "bg-cozy-primary text-white"
+                                : "text-cozy-text hover:bg-cozy-secondary/50"
+                            }
+                          `
+                        }
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+
+                        <span>{item.label}</span>
+                      </NavLink>
+                    );
+                  })}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </nav>
 
-        {/* RIGHT SIDE */}
+        {/* =================================================
+            RIGHT SIDE
+        ================================================= */}
+
         <div className="ml-auto flex items-center gap-2">
 
-          {/* STREAK + POINTS */}
+          {/* ===============================================
+              STREAK + POINTS
+          =============================================== */}
+
           <div
-            className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full"
+            className="
+              hidden
+              md:flex
+              items-center
+              gap-2
+              px-3
+              py-1
+              rounded-full
+            "
             style={{
               background: "var(--cozy-secondary)",
             }}
@@ -229,20 +419,33 @@ export const Navbar = () => {
             </span>
           </div>
 
-          {/* NOTIFICATIONS */}
+          {/* ===============================================
+              NOTIFICATIONS
+          =============================================== */}
+
           <NotificationBell />
 
-          {/* THEME */}
+          {/* ===============================================
+              THEME TOGGLE
+          =============================================== */}
+
           <motion.button
             whileTap={{ scale: 0.9 }}
+            type="button"
             data-testid="theme-toggle"
             onClick={toggleTheme}
-            className="p-2 rounded-full shadow-cozy"
+            className="
+              navbar-icon-button
+              p-2
+              rounded-full
+              shadow-cozy
+            "
             style={{
               background: "var(--cozy-surface)",
               border: "1px solid var(--cozy-border)",
             }}
             title="Toggle theme"
+            aria-label="Toggle theme"
           >
             {theme === "dark" ? (
               <Sun className="w-4 h-4" />
@@ -251,39 +454,66 @@ export const Navbar = () => {
             )}
           </motion.button>
 
-          {/* SETTINGS */}
+          {/* ===============================================
+              SETTINGS
+          =============================================== */}
+
           <motion.button
             whileTap={{ scale: 0.9 }}
+            type="button"
             data-testid="settings-btn"
-            onClick={() => nav("/settings")}
-            className="p-2 rounded-full shadow-cozy"
+            onClick={() => navigate("/settings")}
+            className="
+              navbar-icon-button
+              p-2
+              rounded-full
+              shadow-cozy
+            "
             style={{
               background: "var(--cozy-surface)",
               border: "1px solid var(--cozy-border)",
             }}
             title="Settings"
+            aria-label="Settings"
           >
             <Settings className="w-4 h-4" />
           </motion.button>
 
-          {/* LOGOUT */}
+          {/* ===============================================
+              LOGOUT
+          =============================================== */}
+
           <motion.button
             whileTap={{ scale: 0.95 }}
+            type="button"
             data-testid="logout-btn"
             onClick={() => {
               logout();
-              nav("/login");
+              navigate("/login");
             }}
-            className="px-3 py-2 rounded-full font-semibold text-xs flex items-center gap-1 text-cozy-text shadow-cozy"
+            className="
+              navbar-logout
+              px-3
+              py-2
+              rounded-full
+              font-semibold
+              text-xs
+              flex
+              items-center
+              gap-1
+              shadow-cozy
+            "
             style={{
               background: "var(--cozy-accent)",
             }}
           >
-            <LogOut className="w-4 h-4" />
-            Sign out
+            <LogOut className="w-4 h-4 shrink-0" />
+
+            <span>Sign out</span>
           </motion.button>
         </div>
       </div>
     </header>
   );
 };
+

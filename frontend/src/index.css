@@ -1,4 +1,3 @@
-
 @import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&family=Kalam:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
 
 @tailwind base;
@@ -17,8 +16,9 @@
   --cozy-primary: #7FAE62;
   --cozy-primary-dark: #5B8A44;
 
-  --cozy-secondary: #F4D6C2;
-  --cozy-accent: #F2B5A7;
+  /* GREEN — replaces old peach/pink */
+  --cozy-secondary: #DCE8D0;
+  --cozy-accent: #BFD7AD;
 
   --cozy-text: #3F4A3E;
   --cozy-muted: #7D8A74;
@@ -46,8 +46,9 @@ html.dark {
   --cozy-primary: #8FBF72;
   --cozy-primary-dark: #6E9B57;
 
-  --cozy-secondary: #D9A98A;
-  --cozy-accent: #E39C8C;
+  /* DARK GREEN — replaces old peach/orange */
+  --cozy-secondary: #304038;
+  --cozy-accent: #3A4A36;
 
   --cozy-text: #EDF2E6;
   --cozy-muted: #A6B29C;
@@ -88,8 +89,7 @@ body {
 
   font-weight: 500;
 
-  background:
-    var(--cozy-bg);
+  background: var(--cozy-bg);
 
   transition:
     background-color 0.35s ease,
@@ -159,9 +159,14 @@ html[data-background="cloud"] {
   --cozy-tint: #DCEBF1;
 }
 
+/*
+  Bloom used to introduce a pink background.
+  It is now a soft neutral-green option so the
+  application does not reintroduce pink.
+*/
 html[data-background="bloom"] {
-  --cozy-bg: #FBF1F5;
-  --cozy-tint: #F2DCE5;
+  --cozy-bg: #EEF3E9;
+  --cozy-tint: #DDE7D5;
 }
 
 /* =========================================================
@@ -183,9 +188,12 @@ html.dark[data-background="cloud"] {
   --cozy-tint: #222F38;
 }
 
+/*
+  Dark bloom also changed from pink to green-neutral.
+*/
 html.dark[data-background="bloom"] {
-  --cozy-bg: #2B2024;
-  --cozy-tint: #35272C;
+  --cozy-bg: #222A20;
+  --cozy-tint: #2D372A;
 }
 
 /* =========================================================
@@ -232,7 +240,7 @@ html[data-layout="compact"] {
     ),
     radial-gradient(
       ellipse 28% 22% at 25% 70%,
-      rgba(244, 214, 194, 0.05),
+      rgba(127, 174, 98, 0.05),
       transparent 70%
     );
 
@@ -264,6 +272,10 @@ html.dark .paper-grain::before {
   color: var(--cozy-text);
 }
 
+/*
+  Legacy pink class now uses the green accent.
+  This prevents older components from becoming pink.
+*/
 .bg-brutal-pink {
   background-color: var(--cozy-accent) !important;
   color: var(--cozy-text);
@@ -279,24 +291,32 @@ html.dark .paper-grain::before {
   color: var(--cozy-surface) !important;
 }
 
+/* =========================================================
+   DARK CARD COLORS
+========================================================= */
+
 html.dark .bg-white {
   background-color: var(--cozy-surface) !important;
 }
 
 html.dark .bg-brutal-yellow {
-  background-color: #7A5A44 !important;
+  background-color: var(--cozy-secondary) !important;
+  color: var(--cozy-text) !important;
 }
 
 html.dark .bg-brutal-cyan {
-  background-color: #4A6A80 !important;
+  background-color: #334A57 !important;
+  color: var(--cozy-text) !important;
 }
 
 html.dark .bg-brutal-pink {
-  background-color: #7A4E4A !important;
+  background-color: var(--cozy-accent) !important;
+  color: var(--cozy-text) !important;
 }
 
 html.dark .bg-brutal-green {
   background-color: var(--cozy-primary) !important;
+  color: #fff !important;
 }
 
 /* =========================================================
@@ -408,6 +428,22 @@ select:focus {
 
   border-color:
     var(--cozy-primary) !important;
+}
+
+/* =========================================================
+   TIME INPUTS — DARK MODE
+========================================================= */
+
+input[type="time"],
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: light;
+}
+
+html.dark input[type="time"],
+html.dark input[type="date"],
+html.dark input[type="datetime-local"] {
+  color-scheme: dark;
 }
 
 /* =========================================================
@@ -586,4 +622,3 @@ html.dark .brutal-skeleton {
     padding-bottom: 76px;
   }
 }
-

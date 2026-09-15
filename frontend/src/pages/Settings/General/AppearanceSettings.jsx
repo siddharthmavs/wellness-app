@@ -275,6 +275,7 @@ function applyAppearance(settings) {
   root.dataset.background = backgroundMode;
   root.dataset.layout = layout;
   root.dataset.fontStyle = fontStyle;
+
   root.dataset.accent =
     settings.accentMode === "custom"
       ? "custom"
@@ -373,6 +374,10 @@ function applyAppearance(settings) {
       );
     });
 
+  /* =======================================================
+     ACCENT COLORS
+  ======================================================= */
+
   if (settings.accentMode === "custom") {
     const accent =
       settings.accentColor ||
@@ -413,14 +418,18 @@ function applyAppearance(settings) {
       "#5B8A44"
     );
 
+    /*
+      Keep the default secondary tone soft and neutral.
+      This avoids the pink appearance in dark mode.
+    */
     root.style.setProperty(
       "--cozy-secondary",
-      "#F4D6C2"
+      "#DCE8D0"
     );
 
     root.style.setProperty(
       "--cozy-accent",
-      "#F2B5A7"
+      "#B8D99D"
     );
 
     root.style.setProperty(
@@ -440,23 +449,51 @@ export default function AppearanceSettings() {
   const [settings, setSettings] =
     useState(loadSettings);
 
-  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  /* Backend is the source of truth */
   const loadedFromBackend = useRef(false);
+
   useEffect(() => {
-    api.get("/settings").then(({ data }) => {
-      const a = data?.appearance;
-      loadedFromBackend.current = true;
-      if (!a) return;
-      setSettings((prev) => ({
-        ...prev,
-        background: a.background ?? prev.background,
-        solidColor: a.solid_color ?? prev.solidColor,
-        accentMode: a.accent_mode ?? prev.accentMode,
-        accentColor: a.accent_color ?? prev.accentColor,
-        layout: a.layout ?? prev.layout,
-        fontStyle: a.font_style ?? prev.fontStyle,
-      }));
-    }).catch(() => { loadedFromBackend.current = true; });
+    api
+      .get("/settings")
+      .then(({ data }) => {
+        const appearance = data?.appearance;
+
+        loadedFromBackend.current = true;
+
+        if (!appearance) {
+          return;
+        }
+
+        setSettings((previous) => ({
+          ...previous,
+          background:
+            appearance.background ??
+            previous.background,
+
+          solidColor:
+            appearance.solid_color ??
+            previous.solidColor,
+
+          accentMode:
+            appearance.accent_mode ??
+            previous.accentMode,
+
+          accentColor:
+            appearance.accent_color ??
+            previous.accentColor,
+
+          layout:
+            appearance.layout ??
+            previous.layout,
+
+          fontStyle:
+            appearance.font_style ??
+            previous.fontStyle,
+        }));
+      })
+      .catch(() => {
+        loadedFromBackend.current = true;
+      });
   }, []);
 
   useEffect(() => {
@@ -484,18 +521,24 @@ export default function AppearanceSettings() {
     );
 
     if (loadedFromBackend.current) {
-      api.put("/settings", {
-        appearance: {
-          background: settings.background,
-          solid_color: settings.solidColor,
-          accent_mode: settings.accentMode,
-          accent_color: settings.accentColor,
-          layout: settings.layout,
-          font_style: settings.fontStyle,
-        },
-      }).catch(() => {});
+      api
+        .put("/settings", {
+          appearance: {
+            background: settings.background,
+            solid_color: settings.solidColor,
+            accent_mode: settings.accentMode,
+            accent_color: settings.accentColor,
+            layout: settings.layout,
+            font_style: settings.fontStyle,
+          },
+        })
+        .catch(() => {});
     }
   }, [settings]);
+
+  /* =======================================================
+     BACKGROUND
+  ======================================================= */
 
   const selectDefaultBackground = () => {
     setSettings((previous) => ({
@@ -518,6 +561,10 @@ export default function AppearanceSettings() {
       solidColor: event.target.value,
     }));
   };
+
+  /* =======================================================
+     ACCENT
+  ======================================================= */
 
   const selectDefaultAccent = () => {
     setSettings((previous) => ({
@@ -543,12 +590,20 @@ export default function AppearanceSettings() {
     }));
   };
 
+  /* =======================================================
+     LAYOUT
+  ======================================================= */
+
   const selectLayout = (layout) => {
     setSettings((previous) => ({
       ...previous,
       layout,
     }));
   };
+
+  /* =======================================================
+     FONT
+  ======================================================= */
 
   const selectFontStyle = (event) => {
     setSettings((previous) => ({
@@ -563,6 +618,10 @@ export default function AppearanceSettings() {
       fontStyle: "default",
     }));
   };
+
+  /* =======================================================
+     RESET
+  ======================================================= */
 
   const resetAppearance = () => {
     setSettings({
@@ -580,6 +639,22 @@ export default function AppearanceSettings() {
     getFontFamily(settings.fontStyle) ||
     '"Nunito", sans-serif';
 
+  /* =======================================================
+     ICON STYLE
+     High contrast in both light and dark mode.
+  ======================================================= */
+
+  const sectionIconStyle = {
+    width: "38px",
+    height: "38px",
+    borderRadius: "12px",
+    display: "grid",
+    placeItems: "center",
+    background: "var(--cozy-primary)",
+    color: "#ffffff",
+    flexShrink: 0,
+  };
+
   return (
     <div
       style={{
@@ -587,10 +662,14 @@ export default function AppearanceSettings() {
         margin: "0 auto",
         padding: "8px 0 30px",
         fontFamily: previewFont,
+        color: "var(--cozy-text)",
         transition: "font-family 0.2s ease",
       }}
     >
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <div
         style={{
           display: "flex",
@@ -658,7 +737,10 @@ export default function AppearanceSettings() {
         </div>
       </div>
 
-      {/* BACKGROUND */}
+      {/* =====================================================
+          BACKGROUND
+      ===================================================== */}
+
       <section
         style={{
           marginBottom: "28px",
@@ -672,20 +754,11 @@ export default function AppearanceSettings() {
             marginBottom: "14px",
           }}
         >
-          <div
-            style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "12px",
-              display: "grid",
-              placeItems: "center",
-              background:
-                "var(--cozy-secondary)",
-              color:
-                "var(--cozy-primary-dark)",
-            }}
-          >
-            <Leaf size={19} />
+          <div style={sectionIconStyle}>
+            <Leaf
+              size={19}
+              strokeWidth={2.5}
+            />
           </div>
 
           <div>
@@ -714,6 +787,7 @@ export default function AppearanceSettings() {
         </div>
 
         {/* DEFAULT BACKGROUND */}
+
         <button
           type="button"
           onClick={selectDefaultBackground}
@@ -837,6 +911,7 @@ export default function AppearanceSettings() {
         </button>
 
         {/* CUSTOM BACKGROUND */}
+
         <div
           style={{
             marginTop: "12px",
@@ -926,7 +1001,8 @@ export default function AppearanceSettings() {
               >
                 <Palette
                   size={16}
-                  color="var(--cozy-primary-dark)"
+                  color="var(--cozy-primary)"
+                  strokeWidth={2.5}
                 />
 
                 <div
@@ -993,7 +1069,10 @@ export default function AppearanceSettings() {
         </div>
       </section>
 
-      {/* ACCENT COLOR */}
+      {/* =====================================================
+          ACCENT COLOR
+      ===================================================== */}
+
       <section
         style={{
           marginBottom: "28px",
@@ -1007,20 +1086,11 @@ export default function AppearanceSettings() {
             marginBottom: "14px",
           }}
         >
-          <div
-            style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "12px",
-              display: "grid",
-              placeItems: "center",
-              background:
-                "var(--cozy-secondary)",
-              color:
-                "var(--cozy-primary-dark)",
-            }}
-          >
-            <Palette size={19} />
+          <div style={sectionIconStyle}>
+            <Palette
+              size={19}
+              strokeWidth={2.5}
+            />
           </div>
 
           <div>
@@ -1048,6 +1118,7 @@ export default function AppearanceSettings() {
         </div>
 
         {/* DEFAULT ACCENT */}
+
         <button
           type="button"
           onClick={selectDefaultAccent}
@@ -1129,6 +1200,7 @@ export default function AppearanceSettings() {
         </button>
 
         {/* CUSTOM ACCENT */}
+
         <div
           style={{
             position: "relative",
@@ -1243,7 +1315,10 @@ export default function AppearanceSettings() {
         </div>
       </section>
 
-      {/* LAYOUT */}
+      {/* =====================================================
+          LAYOUT
+      ===================================================== */}
+
       <section
         style={{
           marginBottom: "28px",
@@ -1257,20 +1332,11 @@ export default function AppearanceSettings() {
             marginBottom: "14px",
           }}
         >
-          <div
-            style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "12px",
-              display: "grid",
-              placeItems: "center",
-              background:
-                "var(--cozy-secondary)",
-              color:
-                "var(--cozy-primary-dark)",
-            }}
-          >
-            <LayoutDashboard size={19} />
+          <div style={sectionIconStyle}>
+            <LayoutDashboard
+              size={19}
+              strokeWidth={2.5}
+            />
           </div>
 
           <div>
@@ -1381,7 +1447,10 @@ export default function AppearanceSettings() {
         </div>
       </section>
 
-      {/* FONT STYLE */}
+      {/* =====================================================
+          FONT STYLE
+      ===================================================== */}
+
       <section
         style={{
           marginBottom: "28px",
@@ -1395,20 +1464,11 @@ export default function AppearanceSettings() {
             marginBottom: "14px",
           }}
         >
-          <div
-            style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "12px",
-              display: "grid",
-              placeItems: "center",
-              background:
-                "var(--cozy-secondary)",
-              color:
-                "var(--cozy-primary-dark)",
-            }}
-          >
-            <Type size={19} />
+          <div style={sectionIconStyle}>
+            <Type
+              size={19}
+              strokeWidth={2.5}
+            />
           </div>
 
           <div>
@@ -1437,6 +1497,7 @@ export default function AppearanceSettings() {
         </div>
 
         {/* DEFAULT FONT */}
+
         <button
           type="button"
           onClick={selectDefaultFont}
@@ -1499,6 +1560,7 @@ export default function AppearanceSettings() {
         </button>
 
         {/* CUSTOM FONT */}
+
         <div
           style={{
             position: "relative",
@@ -1602,7 +1664,10 @@ export default function AppearanceSettings() {
         </div>
       </section>
 
-      {/* RESET */}
+      {/* =====================================================
+          RESET
+      ===================================================== */}
+
       <div
         style={{
           marginTop: "28px",

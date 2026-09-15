@@ -1527,8 +1527,9 @@ export default function MoveResetCard({
                     {remaining}
                   </div>
 
+                            
                   <div className="move-exercise-description">
-                    {currentActivity.description}
+                    {currentActivity.preview}
                   </div>
 
                   <div className="move-exercise-dots">

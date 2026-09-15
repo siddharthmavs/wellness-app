@@ -1,10 +1,14 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { api } from "../../../lib/api";
-import { pushSupported, getPushSubscriptionStatus, enablePush, disablePush } from "../../../notifications/pushService";
+import {
+  pushSupported,
+  getPushSubscriptionStatus,
+  enablePush,
+  disablePush,
+} from "../../../notifications/pushService";
 
 import {
   ArrowLeft,
@@ -80,50 +84,102 @@ const NotificationSettings = () => {
     return "default";
   });
 
-  const [pushStatus, setPushStatus] = useState("checking"); // checking | none | subscribed | unsupported
+  const [pushStatus, setPushStatus] = useState("checking");
   const [pushBusy, setPushBusy] = useState(false);
 
+  /* =========================================================
+     CHECK BROWSER PUSH STATUS
+  ========================================================= */
+
   useEffect(() => {
-    if (!pushSupported()) { setPushStatus("unsupported"); return; }
-    getPushSubscriptionStatus().then(setPushStatus).catch(() => setPushStatus("none"));
+    if (!pushSupported()) {
+      setPushStatus("unsupported");
+      return;
+    }
+
+    getPushSubscriptionStatus()
+      .then(setPushStatus)
+      .catch(() => setPushStatus("none"));
   }, []);
+
+  /* =========================================================
+     TOGGLE BROWSER PUSH
+  ========================================================= */
 
   const togglePush = async () => {
     setPushBusy(true);
+
     try {
       if (pushStatus === "subscribed") {
         await disablePush();
         setPushStatus("none");
+
         toast.success("Browser push disabled");
       } else {
         await enablePush();
         setPushStatus("subscribed");
-        toast.success("Browser push enabled — you'll get reminders even when this tab is closed");
+
+        toast.success(
+          "Browser push enabled — you'll get reminders even when this tab is closed"
+        );
       }
     } catch (err) {
-      toast.error(err?.message || "Could not update browser push");
+      toast.error(
+        err?.message || "Could not update browser push"
+      );
     } finally {
       setPushBusy(false);
     }
   };
 
-  // Backend is the source of truth; localStorage is only a fallback for offline use.
+  /* =========================================================
+     LOAD SETTINGS FROM BACKEND
+  ========================================================= */
+
   const loadedFromBackend = useRef(false);
+
   useEffect(() => {
-    api.get("/notifications/settings").then(({ data }) => {
-      loadedFromBackend.current = true;
-      setSettings((prev) => ({
-        ...prev,
-        notificationsEnabled: data.notifications_enabled ?? prev.notificationsEnabled,
-        desktopNotifications: data.desktop_notifications ?? prev.desktopNotifications,
-        inAppPopup: data.in_app_popup ?? prev.inAppPopup,
-        sound: data.sound ?? prev.sound,
-        water: data.water ?? prev.water,
-        eyeCare: data.eye_care ?? prev.eyeCare,
-        moveReset: data.move_reset ?? prev.moveReset,
-        breathe: data.breathing ?? prev.breathe,
-      }));
-    }).catch(() => {});
+    api
+      .get("/notifications/settings")
+      .then(({ data }) => {
+        loadedFromBackend.current = true;
+
+        setSettings((prev) => ({
+          ...prev,
+          notificationsEnabled:
+            data.notifications_enabled ??
+            prev.notificationsEnabled,
+
+          desktopNotifications:
+            data.desktop_notifications ??
+            prev.desktopNotifications,
+
+          inAppPopup:
+            data.in_app_popup ??
+            prev.inAppPopup,
+
+          sound:
+            data.sound ??
+            prev.sound,
+
+          water:
+            data.water ??
+            prev.water,
+
+          eyeCare:
+            data.eye_care ??
+            prev.eyeCare,
+
+          moveReset:
+            data.move_reset ??
+            prev.moveReset,
+
+          breathe:
+            data.breathing ??
+            prev.breathe,
+        }));
+      })
+      .catch(() => {});
   }, []);
 
   /* =========================================================
@@ -146,21 +202,38 @@ const NotificationSettings = () => {
     );
 
     if (loadedFromBackend.current) {
-      api.put("/notifications/settings", {
-        notifications_enabled: settings.notificationsEnabled,
-        desktop_notifications: settings.desktopNotifications,
-        in_app_popup: settings.inAppPopup,
-        sound: settings.sound,
-        water: settings.water,
-        eye_care: settings.eyeCare,
-        move_reset: settings.moveReset,
-        breathing: settings.breathe,
-      }).catch(() => {});
+      api
+        .put("/notifications/settings", {
+          notifications_enabled:
+            settings.notificationsEnabled,
+
+          desktop_notifications:
+            settings.desktopNotifications,
+
+          in_app_popup:
+            settings.inAppPopup,
+
+          sound:
+            settings.sound,
+
+          water:
+            settings.water,
+
+          eye_care:
+            settings.eyeCare,
+
+          move_reset:
+            settings.moveReset,
+
+          breathing:
+            settings.breathe,
+        })
+        .catch(() => {});
     }
   }, [settings]);
 
   /* =========================================================
-     TOGGLE
+     TOGGLE SETTING
   ========================================================= */
 
   const toggleSetting = (key) => {
@@ -226,23 +299,35 @@ const NotificationSettings = () => {
         <div
           className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
           style={{
-            background:
-              "var(--cozy-secondary)",
-            color:
-              "var(--cozy-primary-dark)",
+            background: "var(--cozy-primary)",
+            color: "#ffffff",
           }}
         >
-          <Icon className="w-5 h-5" />
+          <Icon
+            className="w-5 h-5"
+            strokeWidth={2.5}
+          />
         </div>
 
         {/* TEXT */}
 
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-sm text-cozy-text">
+          <h3
+            className="font-bold text-sm"
+            style={{
+              color: "var(--cozy-text)",
+            }}
+          >
             {title}
           </h3>
 
-          <p className="text-xs mt-1 opacity-60 text-cozy-text">
+          <p
+            className="text-xs mt-1"
+            style={{
+              color: "var(--cozy-text)",
+              opacity: 0.6,
+            }}
+          >
             {description}
           </p>
         </div>
@@ -307,7 +392,10 @@ const NotificationSettings = () => {
           aria-label="Back to Settings"
           title="Back to Settings"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft
+            className="w-5 h-5"
+            strokeWidth={2.5}
+          />
         </button>
 
         {/* NOTIFICATION ICON */}
@@ -315,22 +403,35 @@ const NotificationSettings = () => {
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
           style={{
-            background:
-              "var(--cozy-primary)",
-            color: "white",
+            background: "var(--cozy-primary)",
+            color: "#ffffff",
           }}
         >
-          <Bell className="w-7 h-7" />
+          <Bell
+            className="w-7 h-7"
+            strokeWidth={2.5}
+          />
         </div>
 
         {/* TITLE */}
 
         <div>
-          <h1 className="font-display font-black text-3xl md:text-4xl text-cozy-text">
+          <h1
+            className="font-display font-black text-3xl md:text-4xl"
+            style={{
+              color: "var(--cozy-text)",
+            }}
+          >
             Notifications
           </h1>
 
-          <p className="text-sm opacity-60 mt-1 text-cozy-text">
+          <p
+            className="text-sm mt-1"
+            style={{
+              color: "var(--cozy-text)",
+              opacity: 0.6,
+            }}
+          >
             Manage wellness notifications and reminders.
           </p>
         </div>
@@ -343,13 +444,20 @@ const NotificationSettings = () => {
 
       <section className="mb-8">
 
-        <h2 className="px-2 mb-3 text-xs font-black uppercase tracking-widest opacity-50">
+        <h2
+          className="px-2 mb-3 text-xs font-black uppercase tracking-widest"
+          style={{
+            color: "var(--cozy-text)",
+            opacity: 0.5,
+          }}
+        >
           Notification Controls
         </h2>
 
         <div
-          className="overflow-hidden bg-cozy-surface shadow-cozy"
+          className="overflow-hidden shadow-cozy"
           style={{
+            background: "var(--cozy-surface)",
             border:
               "1px solid var(--cozy-border)",
             borderRadius: 20,
@@ -413,13 +521,20 @@ const NotificationSettings = () => {
       {settings.notificationsEnabled && (
         <section className="mb-8">
 
-          <h2 className="px-2 mb-3 text-xs font-black uppercase tracking-widest opacity-50">
+          <h2
+            className="px-2 mb-3 text-xs font-black uppercase tracking-widest"
+            style={{
+              color: "var(--cozy-text)",
+              opacity: 0.5,
+            }}
+          >
             Desktop Permission
           </h2>
 
           <div
-            className="bg-cozy-surface p-5 shadow-cozy"
+            className="p-5 shadow-cozy"
             style={{
+              background: "var(--cozy-surface)",
               border:
                 "1px solid var(--cozy-border)",
               borderRadius: 20,
@@ -429,11 +544,22 @@ const NotificationSettings = () => {
             <div className="flex items-center justify-between gap-4">
 
               <div>
-                <h3 className="font-bold text-sm text-cozy-text">
+                <h3
+                  className="font-bold text-sm"
+                  style={{
+                    color: "var(--cozy-text)",
+                  }}
+                >
                   Browser notification permission
                 </h3>
 
-                <p className="text-xs mt-1 opacity-60">
+                <p
+                  className="text-xs mt-1"
+                  style={{
+                    color: "var(--cozy-text)",
+                    opacity: 0.6,
+                  }}
+                >
                   {permission === "granted"
                     ? "Desktop notifications are allowed."
                     : permission === "denied"
@@ -448,6 +574,7 @@ const NotificationSettings = () => {
                   style={{
                     background:
                       "var(--cozy-secondary)",
+                    color: "var(--cozy-text)",
                   }}
                 >
                   ✓ Allowed
@@ -465,7 +592,7 @@ const NotificationSettings = () => {
                   style={{
                     background:
                       "var(--cozy-primary)",
-                    color: "white",
+                    color: "#ffffff",
                   }}
                 >
                   Allow
@@ -480,64 +607,112 @@ const NotificationSettings = () => {
       )}
 
       {/* =====================================================
-          BROWSER PUSH (doc section 8.4)
+          BROWSER PUSH
       ===================================================== */}
 
-      {settings.notificationsEnabled && pushStatus !== "unsupported" && (
-        <section className="mb-8">
+      {settings.notificationsEnabled &&
+        pushStatus !== "unsupported" && (
+          <section className="mb-8">
 
-          <h2 className="px-2 mb-3 text-xs font-black uppercase tracking-widest opacity-50">
-            Browser Push
-          </h2>
+            <h2
+              className="px-2 mb-3 text-xs font-black uppercase tracking-widest"
+              style={{
+                color: "var(--cozy-text)",
+                opacity: 0.5,
+              }}
+            >
+              Browser Push
+            </h2>
 
-          <div
-            className="bg-cozy-surface p-5 shadow-cozy"
-            style={{
-              border: "1px solid var(--cozy-border)",
-              borderRadius: 20,
-            }}
-          >
+            <div
+              className="p-5 shadow-cozy"
+              style={{
+                background:
+                  "var(--cozy-surface)",
+                border:
+                  "1px solid var(--cozy-border)",
+                borderRadius: 20,
+              }}
+            >
 
-            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
 
-              <div className="flex items-center gap-4">
-                <div
-                  className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
-                  style={{ background: "var(--cozy-secondary)", color: "var(--cozy-primary-dark)" }}
+                <div className="flex items-center gap-4">
+
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                    style={{
+                      background:
+                        "var(--cozy-primary)",
+                      color: "#ffffff",
+                    }}
+                  >
+                    <Smartphone
+                      className="w-5 h-5"
+                      strokeWidth={2.5}
+                    />
+                  </div>
+
+                  <div>
+                    <h3
+                      className="font-bold text-sm"
+                      style={{
+                        color:
+                          "var(--cozy-text)",
+                      }}
+                    >
+                      Notifications outside the browser tab
+                    </h3>
+
+                    <p
+                      className="text-xs mt-1"
+                      style={{
+                        color:
+                          "var(--cozy-text)",
+                        opacity: 0.6,
+                      }}
+                    >
+                      {pushStatus === "subscribed"
+                        ? "Enabled — reminders will reach you even when this tab is closed."
+                        : "Get reminders on your device even when Wellness Garden isn't open."}
+                    </p>
+                  </div>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={togglePush}
+                  disabled={
+                    pushBusy ||
+                    pushStatus === "checking"
+                  }
+                  className="px-4 py-2 rounded-xl font-bold text-sm shadow-cozy transition hover:opacity-90 disabled:opacity-50 shrink-0"
+                  style={{
+                    background:
+                      pushStatus === "subscribed"
+                        ? "var(--cozy-secondary)"
+                        : "var(--cozy-primary)",
+
+                    color:
+                      pushStatus === "subscribed"
+                        ? "var(--cozy-text)"
+                        : "#ffffff",
+                  }}
                 >
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-cozy-text">
-                    Notifications outside the browser tab
-                  </h3>
-                  <p className="text-xs mt-1 opacity-60">
-                    {pushStatus === "subscribed"
-                      ? "Enabled — reminders will reach you even when this tab is closed."
-                      : "Get reminders on your device even when Wellness Garden isn't open."}
-                  </p>
-                </div>
-              </div>
+                  {pushBusy
+                    ? "..."
+                    : pushStatus === "subscribed"
+                    ? "Disable"
+                    : "Enable"}
+                </button>
 
-              <button
-                type="button"
-                onClick={togglePush}
-                disabled={pushBusy || pushStatus === "checking"}
-                className="px-4 py-2 rounded-xl font-bold text-sm shadow-cozy transition hover:opacity-90 disabled:opacity-50 shrink-0"
-                style={{
-                  background: pushStatus === "subscribed" ? "var(--cozy-secondary)" : "var(--cozy-primary)",
-                  color: pushStatus === "subscribed" ? "var(--cozy-text)" : "white",
-                }}
-              >
-                {pushBusy ? "..." : pushStatus === "subscribed" ? "Disable" : "Enable"}
-              </button>
+              </div>
 
             </div>
 
-          </div>
-
-        </section>
-      )}
+          </section>
+        )}
 
       {/* =====================================================
           WELLNESS TYPES
@@ -545,13 +720,20 @@ const NotificationSettings = () => {
 
       <section>
 
-        <h2 className="px-2 mb-3 text-xs font-black uppercase tracking-widest opacity-50">
+        <h2
+          className="px-2 mb-3 text-xs font-black uppercase tracking-widest"
+          style={{
+            color: "var(--cozy-text)",
+            opacity: 0.5,
+          }}
+        >
           Wellness Reminders
         </h2>
 
         <div
-          className="overflow-hidden bg-cozy-surface shadow-cozy"
+          className="overflow-hidden shadow-cozy"
           style={{
+            background: "var(--cozy-surface)",
             border:
               "1px solid var(--cozy-border)",
             borderRadius: 20,
@@ -609,27 +791,6 @@ const NotificationSettings = () => {
         </div>
 
       </section>
-
-      {/* =====================================================
-          INFO
-      ===================================================== */}
-
-      <div
-        className="mt-6 p-4 rounded-2xl"
-        style={{
-          background:
-            "var(--cozy-secondary)",
-          color: "var(--cozy-text)",
-        }}
-      >
-        <p className="text-xs opacity-70">
-          Your wellness schedules are managed
-          separately in Water, Eye Care,
-          Move & Reset, and Breathe settings.
-          These controls decide which reminders
-          are allowed to notify you.
-        </p>
-      </div>
 
     </main>
   );

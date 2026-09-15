@@ -1,6 +1,7 @@
 /* =========================================================
-   MYWELLNESS 
+   MYWELLNESS
    GLOBAL APPLICATION STYLES
+   Cozy Green / Premium Wellness Theme
 ========================================================= */
 
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Kalam:wght@400;700&family=Manrope:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&display=swap");
@@ -19,11 +20,20 @@
   --cozy-tint: #DCE8D0;
   --cozy-surface: #FFFDF8;
 
+  /* Navbar */
+  --navbar-bg: #FFFDF8;
+
+  /* Main green */
   --cozy-primary: #7FAE62;
   --cozy-primary-dark: #5B8A44;
 
-  --cozy-secondary: #F4D6C2;
-  --cozy-accent: #F2B5A7;
+  /*
+     IMPORTANT:
+     Secondary and accent are now GREEN/NEUTRAL.
+     No peach / pink.
+  */
+  --cozy-secondary: #DCE8D0;
+  --cozy-accent: #BFD7AD;
 
   --cozy-text: #3F4A3E;
   --cozy-muted: #7D8A74;
@@ -69,11 +79,18 @@ html.dark {
   --cozy-tint: #232B1F;
   --cozy-surface: #262E22;
 
+  --navbar-bg: #303A2C;
+
   --cozy-primary: #8FBF72;
   --cozy-primary-dark: #6E9B57;
 
-  --cozy-secondary: #D9A98A;
-  --cozy-accent: #E39C8C;
+  /*
+     IMPORTANT:
+     Dark mode secondary/accent are also green/neutral.
+     No orange / peach / pink.
+  */
+  --cozy-secondary: #304038;
+  --cozy-accent: #3A4A36;
 
   --cozy-text: #EDF2E6;
   --cozy-muted: #A6B29C;
@@ -91,27 +108,11 @@ html.dark {
    FONT SIZE
 ========================================================= */
 
-/*
-   The Appearance Settings page stores:
-
-   default
-   small
-   large
-   extra-large
-
-   Root font-size controls rem-based Tailwind
-   typography.
-
-   --app-font-scale is also used by common UI
-   elements below so the difference is more visible.
-*/
-
 html[data-font-size="default"] {
   font-size: 100%;
   --app-font-scale: 1;
   --appearance-font-scale: 1;
 }
-
 
 html[data-font-size="small"] {
   font-size: 93.75%;
@@ -119,13 +120,11 @@ html[data-font-size="small"] {
   --appearance-font-scale: 0.92;
 }
 
-
 html[data-font-size="large"] {
   font-size: 112.5%;
   --app-font-scale: 1.12;
   --appearance-font-scale: 1.12;
 }
-
 
 html[data-font-size="extra-large"] {
   font-size: 125%;
@@ -137,15 +136,6 @@ html[data-font-size="extra-large"] {
 /* =========================================================
    FONT STYLE — DEFAULT
 ========================================================= */
-
-/*
-   Default keeps Wellness Garden's original typography:
-
-   Body       → Nunito
-   Headings   → Fredoka
-   Hand text  → Kalam
-   Display    → Fredoka
-*/
 
 html[data-font-style="default"] {
   --app-font-family:
@@ -165,13 +155,11 @@ html[data-font-style="nunito"] {
     sans-serif;
 }
 
-
 html[data-font-style="fredoka"] {
   --app-font-family:
     "Fredoka",
     sans-serif;
 }
-
 
 html[data-font-style="jakarta"],
 html[data-font-style="plus-jakarta"] {
@@ -180,13 +168,11 @@ html[data-font-style="plus-jakarta"] {
     sans-serif;
 }
 
-
 html[data-font-style="kalam"] {
   --app-font-family:
     "Kalam",
     cursive;
 }
-
 
 html[data-font-style="poppins"] {
   --app-font-family:
@@ -194,13 +180,11 @@ html[data-font-style="poppins"] {
     sans-serif;
 }
 
-
 html[data-font-style="quicksand"] {
   --app-font-family:
     "Quicksand",
     sans-serif;
 }
-
 
 html[data-font-style="dm-sans"],
 html[data-font-style="dmSans"] {
@@ -209,13 +193,11 @@ html[data-font-style="dmSans"] {
     sans-serif;
 }
 
-
 html[data-font-style="manrope"] {
   --app-font-family:
     "Manrope",
     sans-serif;
 }
-
 
 html[data-font-style="inter"] {
   --app-font-family:
@@ -227,7 +209,6 @@ html[data-font-style="inter"] {
 /* =========================================================
    CUSTOM FONT — GLOBAL APPLICATION
 ========================================================= */
-
 
 html[data-font-style]:not([data-font-style="default"]) body,
 html[data-font-style]:not([data-font-style="default"]) button,
@@ -254,7 +235,6 @@ html[data-font-style]:not([data-font-style="default"]) .font-hand {
     var(--app-font-family) !important;
 }
 
-
 html[data-font-style]:not([data-font-style="default"]) h1,
 html[data-font-style]:not([data-font-style="default"]) h2,
 html[data-font-style]:not([data-font-style="default"]) h3,
@@ -278,12 +258,10 @@ body,
   padding: 0;
 }
 
-
 html {
   background:
     var(--cozy-bg);
 }
-
 
 body {
   min-height: 100vh;
@@ -292,9 +270,7 @@ body {
     var(--cozy-text);
 
   font-family:
-    "Nunito",
-    "Plus Jakarta Sans",
-    sans-serif;
+    var(--app-font-family);
 
   font-weight: 500;
 
@@ -308,7 +284,6 @@ body {
     background-color 0.35s ease,
     color 0.35s ease;
 }
-
 
 #root {
   min-height: 100vh;
@@ -340,12 +315,10 @@ h5 {
     var(--cozy-text);
 }
 
-
 h6 {
   color:
     var(--cozy-text);
 }
-
 
 .font-hand {
   font-family:
@@ -353,13 +326,11 @@ h6 {
     cursive;
 }
 
-
 .font-display {
   font-family:
     "Fredoka",
     sans-serif;
 }
-
 
 .font-body {
   font-family:
@@ -372,6 +343,14 @@ h6 {
    CUSTOM ACCENT COLOR
 ========================================================= */
 
+/*
+   Keep the user's custom PRIMARY accent.
+
+   Secondary and accent are deliberately kept in the
+   green wellness palette so old pink custom values
+   cannot bring peach/pink back into the application.
+*/
+
 html[data-accent="custom"] {
   --cozy-primary:
     var(--custom-primary);
@@ -380,13 +359,13 @@ html[data-accent="custom"] {
     var(--custom-primary-dark);
 
   --cozy-secondary:
-    var(--custom-secondary);
+    #DCE8D0;
 
   --cozy-accent:
-    var(--custom-accent);
+    #BFD7AD;
 
   --cozy-border:
-    var(--custom-border);
+    var(--custom-border, #D8E2CF);
 }
 
 
@@ -434,18 +413,6 @@ html[data-background="bloom"] {
    BACKGROUND — SOLID / CUSTOM
 ========================================================= */
 
-/*
-   IMPORTANT:
-
-   AppearanceSettings stores the custom option as:
-       background: "solid"
-
-   App.js restores it as:
-       data-background="solid"
-
-   Therefore this selector MUST use "solid".
-*/
-
 html[data-background="solid"] {
   --cozy-bg:
     var(--appearance-bg, #F5F5F5);
@@ -456,7 +423,7 @@ html[data-background="solid"] {
 
 
 /*
-   Keep support for any older saved "custom" setting.
+   Support older saved "custom" setting.
 */
 
 html[data-background="custom"] {
@@ -477,18 +444,15 @@ html.dark[data-background="garden"] {
   --cozy-tint: #232B1F;
 }
 
-
 html.dark[data-background="morning"] {
   --cozy-bg: #29251D;
   --cozy-tint: #342F24;
 }
 
-
 html.dark[data-background="cloud"] {
   --cozy-bg: #1C252C;
   --cozy-tint: #222F38;
 }
-
 
 html.dark[data-background="bloom"] {
   --cozy-bg: #2B2024;
@@ -645,7 +609,6 @@ html[data-layout="compact"] {
     infinite;
 }
 
-
 .appearance-leaf-one {
   top: 8%;
   left: 5%;
@@ -656,7 +619,6 @@ html[data-layout="compact"] {
   animation-duration:
     8s;
 }
-
 
 .appearance-leaf-two {
   top: 36%;
@@ -675,7 +637,6 @@ html[data-layout="compact"] {
     1.4s;
 }
 
-
 .appearance-leaf-three {
   top: 67%;
   left: 11%;
@@ -692,7 +653,6 @@ html[data-layout="compact"] {
   animation-delay:
     0.8s;
 }
-
 
 .appearance-leaf-four {
   bottom: 8%;
@@ -743,7 +703,6 @@ html[data-layout="compact"] {
     infinite;
 }
 
-
 .appearance-cloud-one {
   top: 14%;
   left: 31%;
@@ -754,7 +713,6 @@ html[data-layout="compact"] {
   animation-duration:
     9s;
 }
-
 
 .appearance-cloud-two {
   top: 53%;
@@ -769,7 +727,6 @@ html[data-layout="compact"] {
   animation-delay:
     2s;
 }
-
 
 .appearance-cloud-three {
   bottom: 9%;
@@ -817,7 +774,6 @@ html[data-layout="compact"] {
     infinite;
 }
 
-
 .appearance-sparkle-one {
   top: 11%;
   right: 28%;
@@ -825,7 +781,6 @@ html[data-layout="compact"] {
   animation-delay:
     0.5s;
 }
-
 
 .appearance-sparkle-two {
   top: 44%;
@@ -838,7 +793,6 @@ html[data-layout="compact"] {
     1.3s;
 }
 
-
 .appearance-sparkle-three {
   bottom: 17%;
   left: 49%;
@@ -849,7 +803,6 @@ html[data-layout="compact"] {
   animation-delay:
     2s;
 }
-
 
 .appearance-sparkle-four {
   top: 72%;
@@ -898,18 +851,15 @@ html[data-layout="comfortable"] .private-content {
     24px;
 }
 
-
 html[data-layout="compact"] .private-content {
   gap:
     16px;
 }
 
-
 .private-content > * + * {
   margin-top:
     var(--cozy-section-gap);
 }
-
 
 html[data-layout="compact"] .private-content > * + * {
   margin-top:
@@ -927,7 +877,6 @@ html[data-layout="compact"] .private-content > * + * {
   z-index: 50;
 }
 
-
 .global-bottom-navigation {
   position: relative;
 
@@ -943,7 +892,6 @@ html[data-layout="comfortable"] .cozy-card {
   padding:
     var(--cozy-card-padding);
 }
-
 
 html[data-layout="compact"] .cozy-card {
   padding:
@@ -961,7 +909,6 @@ html[data-layout="compact"] .cozy-card {
     transparent;
 }
 
-
 .private-layout > .paper-grain {
   background:
     transparent !important;
@@ -975,7 +922,6 @@ html[data-layout="compact"] .cozy-card {
 .paper-grain {
   position: relative;
 }
-
 
 .paper-grain::before {
   content:
@@ -997,6 +943,11 @@ html[data-layout="compact"] .cozy-card {
   mix-blend-mode:
     multiply;
 
+  /*
+     GREEN ONLY.
+     Removed the old peach rgba value.
+  */
+
   background-image:
     radial-gradient(
       ellipse 32% 24% at 65% 30%,
@@ -1005,7 +956,7 @@ html[data-layout="compact"] .cozy-card {
     ),
     radial-gradient(
       ellipse 28% 22% at 25% 70%,
-      rgba(244, 214, 194, 0.05),
+      rgba(127, 174, 98, 0.05),
       transparent 70%
     );
 
@@ -1015,7 +966,6 @@ html[data-layout="compact"] .cozy-card {
   background-attachment:
     fixed;
 }
-
 
 html.dark .paper-grain::before {
   opacity:
@@ -1039,6 +989,10 @@ html.dark .paper-grain::before {
 }
 
 
+/*
+   Legacy yellow now uses soft green.
+*/
+
 .bg-brutal-yellow {
   background-color:
     var(--cozy-secondary) !important;
@@ -1047,6 +1001,10 @@ html.dark .paper-grain::before {
     var(--cozy-text);
 }
 
+
+/*
+   Legacy cyan stays a calm blue-green neutral.
+*/
 
 .bg-brutal-cyan {
   background-color:
@@ -1057,6 +1015,10 @@ html.dark .paper-grain::before {
 }
 
 
+/*
+   Legacy pink is now green.
+*/
+
 .bg-brutal-pink {
   background-color:
     var(--cozy-accent) !important;
@@ -1066,14 +1028,22 @@ html.dark .paper-grain::before {
 }
 
 
+/*
+   Main green.
+*/
+
 .bg-brutal-green {
   background-color:
     var(--cozy-primary) !important;
 
   color:
-    #fff;
+    #ffffff;
 }
 
+
+/*
+   Legacy black.
+*/
 
 .bg-black {
   background-color:
@@ -1091,30 +1061,57 @@ html.dark .paper-grain::before {
 html.dark .bg-white {
   background-color:
     var(--cozy-surface) !important;
+
+  color:
+    var(--cozy-text) !important;
 }
 
+
+/*
+   Dark yellow → dark green.
+*/
 
 html.dark .bg-brutal-yellow {
   background-color:
-    #7A5A44 !important;
+    #304038 !important;
+
+  color:
+    #EDF2E6 !important;
 }
 
+
+/*
+   Dark cyan.
+*/
 
 html.dark .bg-brutal-cyan {
   background-color:
-    #4A6A80 !important;
+    #344B58 !important;
+
+  color:
+    #EDF2E6 !important;
 }
 
 
+/*
+   Dark pink → dark green.
+*/
+
 html.dark .bg-brutal-pink {
   background-color:
-    #7A4E4A !important;
+    #3A4A36 !important;
+
+  color:
+    #EDF2E6 !important;
 }
 
 
 html.dark .bg-brutal-green {
   background-color:
     var(--cozy-primary) !important;
+
+  color:
+    #ffffff !important;
 }
 
 
@@ -1127,24 +1124,20 @@ html.dark .bg-brutal-green {
     var(--cozy-border) !important;
 }
 
-
 .border-\[3px\] {
   border-width:
     1px !important;
 }
-
 
 .border-\[4px\] {
   border-width:
     2px !important;
 }
 
-
 .border-\[6px\] {
   border-width:
     2px !important;
 }
-
 
 .border-\[2px\] {
   border-width:
@@ -1160,7 +1153,6 @@ html.dark .bg-brutal-green {
   border-radius:
     16px !important;
 }
-
 
 .rounded-\[4px\] {
   border-radius:
@@ -1182,7 +1174,6 @@ html.dark .bg-brutal-green {
     var(--shadow-cozy) !important;
 }
 
-
 .shadow-brutal-lg:hover,
 .shadow-brutal-xl:hover {
   box-shadow:
@@ -1198,7 +1189,6 @@ html.dark .bg-brutal-green {
   color:
     var(--cozy-text) !important;
 }
-
 
 .text-gray-600,
 .text-gray-700 {
@@ -1246,6 +1236,11 @@ select {
     box-shadow 0.2s ease;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color:
+    var(--cozy-muted);
+}
 
 input:focus,
 textarea:focus,
@@ -1259,6 +1254,30 @@ select:focus {
 
   border-color:
     var(--cozy-primary) !important;
+}
+
+
+/*
+   Native time/date controls.
+   This helps dark mode inputs display correctly.
+*/
+
+input[type="time"],
+input[type="date"] {
+  color-scheme:
+    light;
+}
+
+html.dark input[type="time"],
+html.dark input[type="date"] {
+  color-scheme:
+    dark;
+}
+
+html.dark input[type="time"]::-webkit-calendar-picker-indicator,
+html.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter:
+    invert(1);
 }
 
 
@@ -1293,7 +1312,6 @@ select:focus {
   }
 }
 
-
 .brutal-skeleton {
   background:
     var(--cozy-border);
@@ -1311,7 +1329,6 @@ select:focus {
     infinite;
 }
 
-
 html.dark .brutal-skeleton {
   background:
     #3A4634;
@@ -1327,7 +1344,6 @@ html.dark .brutal-skeleton {
     transform 0.25s ease,
     box-shadow 0.25s ease;
 }
-
 
 .cozy-lift:hover {
   transform:
@@ -1356,7 +1372,8 @@ html.dark .brutal-skeleton {
 ========================================================= */
 
 .washi-tag {
-  position: relative;
+  position:
+    relative;
 
   background:
     var(--cozy-secondary);
@@ -1398,7 +1415,7 @@ html.dark .brutal-skeleton {
     var(--cozy-primary);
 
   color:
-    #fff;
+    #ffffff;
 
   padding:
     2px 8px;
@@ -1464,12 +1481,10 @@ html.dark .brutal-skeleton {
     10px;
 }
 
-
 ::-webkit-scrollbar-track {
   background:
     transparent;
 }
-
 
 ::-webkit-scrollbar-thumb {
   background:
@@ -1478,7 +1493,6 @@ html.dark .brutal-skeleton {
   border-radius:
     10px;
 }
-
 
 ::-webkit-scrollbar-thumb:hover {
   background:
@@ -1518,7 +1532,6 @@ html.dark .brutal-skeleton {
   }
 }
 
-
 @keyframes appearance-cloud-float {
   0%,
   100% {
@@ -1533,7 +1546,6 @@ html.dark .brutal-skeleton {
       translateY(-6px);
   }
 }
-
 
 @keyframes appearance-sparkle-float {
   0%,
@@ -1564,88 +1576,107 @@ html.dark .brutal-skeleton {
       76px;
   }
 
-
   .appearance-leaf {
     opacity:
       0.14;
   }
-
 
   .appearance-cloud {
     opacity:
       0.12;
   }
 
-
   .appearance-sparkle {
     opacity:
       0.18;
   }
 
-
   .appearance-leaf-one {
-    top: 9%;
-    left: 3%;
-  }
+    top:
+      9%;
 
+    left:
+      3%;
+  }
 
   .appearance-leaf-two {
-    top: 39%;
-    right: 3%;
-  }
+    top:
+      39%;
 
+    right:
+      3%;
+  }
 
   .appearance-leaf-three {
-    top: 69%;
-    left: 4%;
-  }
+    top:
+      69%;
 
+    left:
+      4%;
+  }
 
   .appearance-leaf-four {
-    bottom: 9%;
-    right: 5%;
-  }
+    bottom:
+      9%;
 
+    right:
+      5%;
+  }
 
   .appearance-cloud-one {
-    top: 17%;
-    left: 42%;
-  }
+    top:
+      17%;
 
+    left:
+      42%;
+  }
 
   .appearance-cloud-two {
-    top: 55%;
-    right: 3%;
-  }
+    top:
+      55%;
 
+    right:
+      3%;
+  }
 
   .appearance-cloud-three {
-    bottom: 12%;
-    left: 3%;
-  }
+    bottom:
+      12%;
 
+    left:
+      3%;
+  }
 
   .appearance-sparkle-one {
-    top: 13%;
-    right: 12%;
-  }
+    top:
+      13%;
 
+    right:
+      12%;
+  }
 
   .appearance-sparkle-two {
-    top: 46%;
-    left: 4%;
-  }
+    top:
+      46%;
 
+    left:
+      4%;
+  }
 
   .appearance-sparkle-three {
-    bottom: 19%;
-    left: 52%;
+    bottom:
+      19%;
+
+    left:
+      52%;
   }
 
-
   .appearance-sparkle-four {
-    top: 74%;
-    right: 4%;
+    top:
+      74%;
+
+    right:
+      4%;
   }
 
 
@@ -1693,4 +1724,443 @@ html.dark .brutal-skeleton {
     transition:
       none;
   }
+}
+
+
+/* =========================================================
+   NAVBAR — DARK MODE
+========================================================= */
+
+html.dark .global-navigation,
+html.dark .global-navigation a,
+html.dark .global-navigation button {
+  color:
+    #ffffff !important;
+}
+
+html.dark .global-navigation a.bg-cozy-primary,
+html.dark .global-navigation button.bg-cozy-secondary {
+  color:
+    #ffffff !important;
+}
+
+html.dark [data-testid="nav-more-menu"] a {
+  color:
+    #ffffff !important;
+}
+
+html.dark [data-testid="nav-more-menu"] a:hover {
+  color:
+    #ffffff !important;
+}
+
+
+/* =========================================================
+   SETTINGS PAGE
+========================================================= */
+
+.settings-page-title {
+  color:
+    var(--cozy-text) !important;
+}
+
+.settings-page-description {
+  color:
+    var(--cozy-text) !important;
+}
+
+html.dark .settings-page-title {
+  color:
+    #FFFFFF !important;
+}
+
+html.dark .settings-page-description {
+  color:
+    #FFFFFF !important;
+}
+
+
+/* =========================================================
+   NAVBAR — LIGHT MODE
+========================================================= */
+
+html:not(.dark) .global-navigation .navbar-nav-item:not(.bg-cozy-primary),
+html:not(.dark) .global-navigation .navbar-more-button:not(.bg-cozy-secondary) {
+  color:
+    var(--cozy-text) !important;
+}
+
+html:not(.dark) .global-navigation .navbar-nav-item.bg-cozy-primary {
+  color:
+    #ffffff !important;
+}
+
+html:not(.dark) .global-navigation .navbar-more-button.bg-cozy-secondary {
+  color:
+    var(--cozy-text) !important;
+}
+
+html:not(.dark) .more-dropdown-item {
+  color:
+    var(--cozy-text) !important;
+}
+
+
+/* =========================================================
+   NAVBAR — DARK MODE
+========================================================= */
+
+html.dark .global-navigation .navbar-nav-item {
+  color:
+    #ffffff !important;
+}
+
+html.dark .global-navigation .navbar-more-button {
+  color:
+    #ffffff !important;
+}
+
+html.dark .global-navigation .navbar-icon-button {
+  color:
+    #ffffff !important;
+}
+
+html.dark .global-navigation .navbar-logout {
+  color:
+    #ffffff !important;
+}
+
+
+/* =========================================================
+   MORE DROPDOWN — LIGHT MODE
+========================================================= */
+
+.more-dropdown {
+  background:
+    var(--cozy-surface);
+
+  border:
+    1px solid
+    var(--cozy-border);
+
+  border-radius:
+    20px;
+}
+
+.more-dropdown-item {
+  color:
+    var(--cozy-text);
+}
+
+.more-dropdown-item:hover {
+  background:
+    var(--cozy-secondary);
+
+  color:
+    var(--cozy-text);
+}
+
+
+/* =========================================================
+   MORE DROPDOWN — DARK MODE
+========================================================= */
+
+html.dark .more-dropdown {
+  background:
+    var(--cozy-surface);
+
+  border-color:
+    var(--cozy-border);
+}
+
+html.dark .more-dropdown-item {
+  color:
+    #ffffff !important;
+}
+
+html.dark .more-dropdown-item:hover {
+  background:
+    #3A4634 !important;
+
+  color:
+    #ffffff !important;
+}
+
+html.dark .more-dropdown-item.bg-cozy-primary {
+  background:
+    var(--cozy-primary) !important;
+
+  color:
+    #ffffff !important;
+}
+
+
+/* =========================================================
+   GLOBAL DARK MODE COMPATIBILITY
+========================================================= */
+
+html.dark,
+html.dark body {
+  background-color:
+    var(--cozy-bg) !important;
+
+  color:
+    var(--cozy-text) !important;
+}
+
+html.dark #root,
+html.dark .App,
+html.dark .private-layout,
+html.dark .private-content {
+  color:
+    var(--cozy-text) !important;
+}
+
+
+/* =========================================================
+   COMMON DARK SURFACES
+========================================================= */
+
+html.dark .bg-white {
+  background-color:
+    var(--cozy-surface) !important;
+
+  color:
+    var(--cozy-text) !important;
+}
+
+html.dark .bg-gray-50 {
+  background-color:
+    var(--cozy-tint) !important;
+
+  color:
+    var(--cozy-text) !important;
+}
+
+html.dark .bg-gray-100 {
+  background-color:
+    var(--cozy-tint) !important;
+
+  color:
+    var(--cozy-text) !important;
+}
+
+html.dark .bg-gray-200 {
+  background-color:
+    var(--cozy-border) !important;
+
+  color:
+    var(--cozy-text) !important;
+}
+
+
+/* =========================================================
+   DARK TEXT
+========================================================= */
+
+html.dark .text-black {
+  color:
+    var(--cozy-text) !important;
+}
+
+html.dark .text-gray-500,
+html.dark .text-gray-600,
+html.dark .text-gray-700,
+html.dark .text-gray-800,
+html.dark .text-gray-900 {
+  color:
+    var(--cozy-muted) !important;
+}
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color:
+    var(--cozy-text) !important;
+}
+
+
+/* =========================================================
+   DARK BORDERS
+========================================================= */
+
+html.dark .border-black,
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300,
+html.dark .border-gray-400 {
+  border-color:
+    var(--cozy-border) !important;
+}
+
+
+/* =========================================================
+   DARK FORMS
+========================================================= */
+
+html.dark input,
+html.dark textarea,
+html.dark select,
+html.dark option {
+  background-color:
+    var(--cozy-surface) !important;
+
+  color:
+    var(--cozy-text) !important;
+
+  border-color:
+    var(--cozy-border) !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color:
+    var(--cozy-muted) !important;
+}
+
+
+/* =========================================================
+   DARK LINKS
+========================================================= */
+
+html.dark a {
+  color:
+    inherit;
+}
+
+
+/* =========================================================
+   DARK CARDS / SURFACES
+========================================================= */
+
+html.dark .cozy-card,
+html.dark .card,
+html.dark .surface,
+html.dark .bg-cozy-surface {
+  background-color:
+    var(--cozy-surface) !important;
+
+  color:
+    var(--cozy-text) !important;
+}
+
+
+/* =========================================================
+   DARK DIVIDERS
+========================================================= */
+
+html.dark hr {
+  border-color:
+    var(--cozy-border) !important;
+}
+
+
+/* =========================================================
+   DARK TABLES
+========================================================= */
+
+html.dark table {
+  color:
+    var(--cozy-text);
+}
+
+html.dark th,
+html.dark td {
+  border-color:
+    var(--cozy-border) !important;
+}
+
+
+/* =========================================================
+   DARK NAVBAR
+========================================================= */
+
+html.dark .global-navigation {
+  background:
+    var(--navbar-bg) !important;
+
+  color:
+    #ffffff !important;
+}
+
+html.dark .global-navigation a,
+html.dark .global-navigation button {
+  color:
+    #ffffff !important;
+}
+
+
+/* =========================================================
+   DARK MORE MENU
+========================================================= */
+
+html.dark .more-dropdown {
+  background:
+    var(--cozy-surface) !important;
+
+  border-color:
+    var(--cozy-border) !important;
+}
+
+html.dark .more-dropdown-item {
+  color:
+    #ffffff !important;
+}
+
+html.dark .more-dropdown-item:hover {
+  background:
+    var(--cozy-tint) !important;
+
+  color:
+    #ffffff !important;
+}
+
+
+/* =========================================================
+   DARK MODALS / DIALOGS
+========================================================= */
+
+html.dark [role="dialog"],
+html.dark .modal,
+html.dark .dialog {
+  background-color:
+    var(--cozy-surface) !important;
+
+  color:
+    var(--cozy-text) !important;
+
+  border-color:
+    var(--cozy-border) !important;
+}
+
+
+/* =========================================================
+   DARK WHITE ELEMENTS
+========================================================= */
+
+html.dark .bg-white\/90,
+html.dark .bg-white\/95 {
+  background-color:
+    var(--cozy-surface) !important;
+}
+
+html.dark .text-white {
+  color:
+    #ffffff !important;
+}
+
+
+/* =========================================================
+   DARK SELECTION
+========================================================= */
+
+html.dark ::selection {
+  background:
+    var(--cozy-primary);
+
+  color:
+    #ffffff;
 }
