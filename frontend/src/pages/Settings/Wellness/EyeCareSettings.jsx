@@ -97,9 +97,7 @@ const getStoredGoal = () => {
 const getStoredSchedule = () => {
   try {
     const stored =
-      localStorage.getItem(
-        SCHEDULE_KEY
-      );
+      localStorage.getItem(SCHEDULE_KEY);
 
     if (!stored) {
       return DEFAULT_SCHEDULE;
@@ -174,8 +172,74 @@ export default function EyeCareSettings() {
       getStoredSchedule()
     );
 
+  /* =========================================================
+     THEME DETECTION
+
+     This is important for the native time picker.
+     It prevents the clock/control from becoming
+     white and invisible in bright mode.
+  ========================================================= */
+
+  const getIsDarkMode = () => {
+    if (
+      typeof document === "undefined"
+    ) {
+      return false;
+    }
+
+    return document.documentElement.classList.contains(
+      "dark"
+    );
+  };
+
+  const [isDarkMode, setIsDarkMode] =
+    useState(getIsDarkMode);
+
+  useEffect(() => {
+    if (
+      typeof document === "undefined"
+    ) {
+      return undefined;
+    }
+
+    const updateTheme = () => {
+      setIsDarkMode(
+        document.documentElement.classList.contains(
+          "dark"
+        )
+      );
+    };
+
+    updateTheme();
+
+    const observer =
+      new MutationObserver(
+        updateTheme
+      );
+
+    observer.observe(
+      document.documentElement,
+      {
+        attributes: true,
+        attributeFilter: ["class"],
+      }
+    );
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  /* =========================================================
+     REWARD GOAL
+  ========================================================= */
+
   const [rewardGoal, setRewardGoal] =
     useState(getStoredRewardGoal);
+
+  /* =========================================================
+     PERSONAL GOAL
+  ========================================================= */
 
   const [goal, setGoal] =
     useState(initialGoal);
@@ -188,6 +252,10 @@ export default function EyeCareSettings() {
 
   const [savedSchedule, setSavedSchedule] =
     useState(initialSchedule);
+
+  /* =========================================================
+     UI STATE
+  ========================================================= */
 
   const [saving, setSaving] =
     useState(false);
@@ -236,7 +304,13 @@ export default function EyeCareSettings() {
           settings?.eye_break?.schedule ??
           settings?.eyeBreak?.schedule;
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
+
+        /* =====================================================
+           ADMIN REWARD GOAL
+        ===================================================== */
 
         let nextRewardGoal =
           getStoredRewardGoal();
@@ -246,13 +320,16 @@ export default function EyeCareSettings() {
             Number(backendRewardGoal)
           )
         ) {
-          nextRewardGoal = Math.min(
-            Math.max(
-              Number(backendRewardGoal),
-              1
-            ),
-            MAX_GOAL
-          );
+          nextRewardGoal =
+            Math.min(
+              Math.max(
+                Number(
+                  backendRewardGoal
+                ),
+                1
+              ),
+              MAX_GOAL
+            );
 
           setRewardGoal(
             nextRewardGoal
@@ -283,13 +360,9 @@ export default function EyeCareSettings() {
           }
         }
 
-        /*
-          Personal Eye Care goal is
-          intentionally independent from
-          the displayed admin reward goal.
-
-          Allowed personal goal: 2–5.
-        */
+        /* =====================================================
+           PERSONAL EYE CARE GOAL
+        ===================================================== */
 
         const nextGoal =
           Number.isFinite(
@@ -297,12 +370,18 @@ export default function EyeCareSettings() {
           )
             ? Math.min(
                 Math.max(
-                  Number(backendGoal),
+                  Number(
+                    backendGoal
+                  ),
                   2
                 ),
                 MAX_GOAL
               )
             : getStoredGoal();
+
+        /* =====================================================
+           SCHEDULE
+        ===================================================== */
 
         const nextSchedule =
           Array.isArray(
@@ -357,19 +436,51 @@ export default function EyeCareSettings() {
   ========================================================= */
 
   useEffect(() => {
-    const handleRewardUpdate = () => {
-      const nextRewardGoal =
-        getStoredRewardGoal();
+    const handleRewardUpdate = (
+      event
+    ) => {
+      const detail =
+        event?.detail;
+
+      if (detail) {
+        const incoming =
+          detail?.eyeBreak
+            ?.rewardGoal ??
+          detail?.eyeBreak
+            ?.reward_goal ??
+          detail?.eye_break
+            ?.rewardGoal ??
+          detail?.eye_break
+            ?.reward_goal;
+
+        if (
+          Number.isFinite(
+            Number(incoming)
+          )
+        ) {
+          const next =
+            Math.min(
+              Math.max(
+                Number(incoming),
+                1
+              ),
+              MAX_GOAL
+            );
+
+          setRewardGoal(next);
+          return;
+        }
+      }
 
       setRewardGoal(
-        nextRewardGoal
+        getStoredRewardGoal()
       );
+    };
 
-      /*
-        Reward goal is displayed only.
-        It does NOT disable personal
-        goal options.
-      */
+    const handleStorage = () => {
+      setRewardGoal(
+        getStoredRewardGoal()
+      );
     };
 
     window.addEventListener(
@@ -378,8 +489,18 @@ export default function EyeCareSettings() {
     );
 
     window.addEventListener(
+      "wellnessRewardsUpdated",
+      handleRewardUpdate
+    );
+
+    window.addEventListener(
       "wellnessSettingsUpdated",
       handleRewardUpdate
+    );
+
+    window.addEventListener(
+      "storage",
+      handleStorage
     );
 
     return () => {
@@ -389,8 +510,18 @@ export default function EyeCareSettings() {
       );
 
       window.removeEventListener(
+        "wellnessRewardsUpdated",
+        handleRewardUpdate
+      );
+
+      window.removeEventListener(
         "wellnessSettingsUpdated",
         handleRewardUpdate
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleStorage
       );
     };
   }, []);
@@ -402,13 +533,14 @@ export default function EyeCareSettings() {
   const handleGoalChange = (
     value
   ) => {
-    const nextGoal = Math.min(
-      Math.max(
-        Number(value),
-        2
-      ),
-      MAX_GOAL
-    );
+    const nextGoal =
+      Math.min(
+        Math.max(
+          Number(value),
+          2
+        ),
+        MAX_GOAL
+      );
 
     setGoal(nextGoal);
 
@@ -431,13 +563,14 @@ export default function EyeCareSettings() {
     index,
     value
   ) => {
-    setSchedule((current) =>
-      current.map(
-        (time, i) =>
-          i === index
-            ? value
-            : time
-      )
+    setSchedule(
+      (current) =>
+        current.map(
+          (time, i) =>
+            i === index
+              ? value
+              : time
+        )
     );
 
     setMessage("");
@@ -445,7 +578,8 @@ export default function EyeCareSettings() {
 
   const addScheduleTime = () => {
     if (
-      schedule.length >= MAX_GOAL
+      schedule.length >=
+      MAX_GOAL
     ) {
       return;
     }
@@ -553,6 +687,10 @@ export default function EyeCareSettings() {
       );
 
     try {
+      /* =====================================================
+         LOCAL STORAGE
+      ===================================================== */
+
       localStorage.setItem(
         GOAL_KEY,
         String(safeGoal)
@@ -564,6 +702,10 @@ export default function EyeCareSettings() {
           safeSchedule
         )
       );
+
+      /* =====================================================
+         BACKEND
+      ===================================================== */
 
       try {
         await api.put(
@@ -577,11 +719,15 @@ export default function EyeCareSettings() {
           }
         );
       } catch {
-        // Keep local settings if API
-        // is temporarily unavailable.
+        // Keep local settings.
       }
 
+      /* =====================================================
+         STATE
+      ===================================================== */
+
       setGoal(safeGoal);
+
       setSchedule(
         safeSchedule
       );
@@ -593,6 +739,10 @@ export default function EyeCareSettings() {
       setSavedSchedule(
         safeSchedule
       );
+
+      /* =====================================================
+         EVENTS
+      ===================================================== */
 
       window.dispatchEvent(
         new CustomEvent(
@@ -708,8 +858,6 @@ export default function EyeCareSettings() {
 
   /* =========================================================
      STYLES
-     Same compact design as Move & Reset.
-     All theme colors use Appearance Settings.
   ========================================================= */
 
   const styles = {
@@ -964,6 +1112,19 @@ export default function EyeCareSettings() {
       flexShrink: 0,
     },
 
+    /* =====================================================
+       FIXED TIME INPUT
+
+       Bright mode:
+       colorScheme = light
+
+       Dark mode:
+       colorScheme = dark
+
+       This controls the native browser time-picker
+       clock/icon and popup appearance.
+    ===================================================== */
+
     timeInput: {
       flex: 1,
       minHeight: "39px",
@@ -978,7 +1139,24 @@ export default function EyeCareSettings() {
       fontSize: "0.82rem",
       fontWeight: 700,
       outline: "none",
-      colorScheme: "light dark",
+      fontFamily: "inherit",
+
+      /*
+        IMPORTANT:
+        Do NOT use "light dark" here.
+        It can cause the bright-mode clock
+        to become white/invisible.
+
+        Instead the value is controlled
+        dynamically from isDarkMode.
+      */
+      colorScheme:
+        isDarkMode
+          ? "dark"
+          : "light",
+
+      WebkitAppearance:
+        "auto",
     },
 
     removeButton: {
@@ -1123,7 +1301,9 @@ export default function EyeCareSettings() {
           </div>
 
           <div>
-            <h1 style={styles.title}>
+            <h1
+              style={styles.title}
+            >
               Eye Care
             </h1>
 
@@ -1306,8 +1486,7 @@ export default function EyeCareSettings() {
                   }
                   style={{
                     ...styles.goalButton,
-                    ...(goal ===
-                    value
+                    ...(goal === value
                       ? styles.activeGoalButton
                       : {}),
                   }}
@@ -1400,8 +1579,7 @@ export default function EyeCareSettings() {
                     ) =>
                       updateScheduleTime(
                         index,
-                        event.target
-                          .value
+                        event.target.value
                       )
                     }
                     style={
@@ -1602,7 +1780,7 @@ export default function EyeCareSettings() {
                   size={17}
                   strokeWidth={3}
                 />
-                Save Goal
+                Save 
               </>
             ) : (
               <>

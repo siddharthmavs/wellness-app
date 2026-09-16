@@ -58,7 +58,10 @@ const getStoredRewardGoal = () => {
       DEFAULT_REWARD_GOAL;
 
     return Math.min(
-      Math.max(Number(value) || DEFAULT_REWARD_GOAL, 1),
+      Math.max(
+        Number(value) || DEFAULT_REWARD_GOAL,
+        1
+      ),
       MAX_GOAL
     );
   } catch {
@@ -68,7 +71,8 @@ const getStoredRewardGoal = () => {
 
 const getStoredGoal = () => {
   try {
-    const stored = localStorage.getItem(GOAL_KEY);
+    const stored =
+      localStorage.getItem(GOAL_KEY);
 
     if (!stored) {
       return DEFAULT_GOAL;
@@ -92,7 +96,9 @@ const getStoredGoal = () => {
 const getStoredSchedule = () => {
   try {
     const stored =
-      localStorage.getItem(SCHEDULE_KEY);
+      localStorage.getItem(
+        SCHEDULE_KEY
+      );
 
     if (!stored) {
       return DEFAULT_SCHEDULE;
@@ -142,11 +148,31 @@ const createScheduleForGoal = (
 
   while (result.length < goal) {
     result.push(
-      fallbackTimes[result.length] || "21:00"
+      fallbackTimes[result.length] ||
+        "21:00"
     );
   }
 
   return result;
+};
+
+/* =========================================================
+   THEME HELPER
+========================================================= */
+
+const getCurrentTheme = () => {
+  const root =
+    document.documentElement;
+
+  if (
+    root.classList.contains("dark") ||
+    root.getAttribute("data-theme") ===
+      "dark"
+  ) {
+    return "dark";
+  }
+
+  return "light";
 };
 
 /* =========================================================
@@ -156,7 +182,8 @@ const createScheduleForGoal = (
 export default function MoveResetSettings() {
   const navigate = useNavigate();
 
-  const initialGoal = getStoredGoal();
+  const initialGoal =
+    getStoredGoal();
 
   const [rewardGoal, setRewardGoal] =
     useState(getStoredRewardGoal);
@@ -193,11 +220,79 @@ export default function MoveResetSettings() {
     useState("");
 
   /* =========================================================
+     THEME
+     Keeps the native time picker adaptive
+     to Wellness Garden light/dark mode.
+  ========================================================= */
+
+  const [theme, setTheme] =
+    useState(getCurrentTheme);
+
+  useEffect(() => {
+    const root =
+      document.documentElement;
+
+    const updateTheme = () => {
+      setTheme(getCurrentTheme());
+    };
+
+    updateTheme();
+
+    const observer =
+      new MutationObserver(
+        updateTheme
+      );
+
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: [
+        "class",
+        "data-theme",
+      ],
+    });
+
+    window.addEventListener(
+      "wellness-appearance-updated",
+      updateTheme
+    );
+
+    window.addEventListener(
+      "appearanceSettingsUpdated",
+      updateTheme
+    );
+
+    window.addEventListener(
+      "themeChanged",
+      updateTheme
+    );
+
+    return () => {
+      observer.disconnect();
+
+      window.removeEventListener(
+        "wellness-appearance-updated",
+        updateTheme
+      );
+
+      window.removeEventListener(
+        "appearanceSettingsUpdated",
+        updateTheme
+      );
+
+      window.removeEventListener(
+        "themeChanged",
+        updateTheme
+      );
+    };
+  }, []);
+
+  /* =========================================================
      UNSAVED CHANGES
   ========================================================= */
 
   const hasChanges =
-    Number(goal) !== Number(savedGoal) ||
+    Number(goal) !==
+      Number(savedGoal) ||
     JSON.stringify(schedule) !==
       JSON.stringify(savedSchedule);
 
@@ -217,10 +312,14 @@ export default function MoveResetSettings() {
           response?.data || {};
 
         const backendRewardGoal =
-          settings?.move_reset?.reward_goal ??
-          settings?.move_reset?.rewardGoal ??
-          settings?.moveReset?.reward_goal ??
-          settings?.moveReset?.rewardGoal;
+          settings?.move_reset
+            ?.reward_goal ??
+          settings?.move_reset
+            ?.rewardGoal ??
+          settings?.moveReset
+            ?.reward_goal ??
+          settings?.moveReset
+            ?.rewardGoal;
 
         const backendGoal =
           settings?.move_reset?.goal ??
@@ -240,24 +339,18 @@ export default function MoveResetSettings() {
             Number(backendRewardGoal)
           )
         ) {
-          nextRewardGoal = Math.min(
-            Math.max(
-              Number(backendRewardGoal),
-              1
-            ),
-            MAX_GOAL
-          );
-
-          setRewardGoal(
-            nextRewardGoal
-          );
+          nextRewardGoal =
+            Math.min(
+              Math.max(
+                Number(
+                  backendRewardGoal
+                ),
+                1
+              ),
+              MAX_GOAL
+            );
         }
 
-        /*
-          Personal goal is allowed from 2–5.
-          It is intentionally NOT disabled by
-          the admin reward display.
-        */
         const nextGoal =
           Number.isFinite(
             Number(backendGoal)
@@ -307,6 +400,30 @@ export default function MoveResetSettings() {
             nextSchedule
           )
         );
+
+        try {
+          const existing =
+            JSON.parse(
+              localStorage.getItem(
+                REWARD_CONFIG_KEY
+              ) || "{}"
+            );
+
+          localStorage.setItem(
+            REWARD_CONFIG_KEY,
+            JSON.stringify({
+              ...existing,
+              moveReset: {
+                ...(existing?.moveReset ||
+                  {}),
+                rewardGoal:
+                  nextRewardGoal,
+              },
+            })
+          );
+        } catch {
+          // Ignore localStorage errors.
+        }
       } catch {
         // Keep local settings.
       }
@@ -331,13 +448,6 @@ export default function MoveResetSettings() {
       setRewardGoal(
         nextRewardGoal
       );
-
-      /*
-        Reward goal is displayed as an
-        admin-controlled value only.
-        It does NOT disable personal
-        goal options.
-      */
     };
 
     window.addEventListener(
@@ -370,10 +480,14 @@ export default function MoveResetSettings() {
   const handleGoalChange = (
     value
   ) => {
-    const nextGoal = Math.min(
-      Math.max(Number(value), 2),
-      MAX_GOAL
-    );
+    const nextGoal =
+      Math.min(
+        Math.max(
+          Number(value),
+          2
+        ),
+        MAX_GOAL
+      );
 
     setGoal(nextGoal);
 
@@ -409,7 +523,9 @@ export default function MoveResetSettings() {
   };
 
   const addScheduleTime = () => {
-    if (schedule.length >= MAX_GOAL) {
+    if (
+      schedule.length >= MAX_GOAL
+    ) {
       return;
     }
 
@@ -434,7 +550,9 @@ export default function MoveResetSettings() {
       nextTime,
     ];
 
-    setSchedule(nextSchedule);
+    setSchedule(
+      nextSchedule
+    );
 
     setGoal(
       Math.min(
@@ -452,16 +570,21 @@ export default function MoveResetSettings() {
   const removeScheduleTime = (
     index
   ) => {
-    if (schedule.length <= 2) {
+    if (
+      schedule.length <= 2
+    ) {
       return;
     }
 
     const nextSchedule =
       schedule.filter(
-        (_, i) => i !== index
+        (_, i) =>
+          i !== index
       );
 
-    setSchedule(nextSchedule);
+    setSchedule(
+      nextSchedule
+    );
 
     setGoal(
       Math.min(
@@ -481,20 +604,25 @@ export default function MoveResetSettings() {
   ========================================================= */
 
   const handleSave = async () => {
-    if (!hasChanges || saving) {
+    if (
+      !hasChanges ||
+      saving
+    ) {
       return;
     }
 
     setSaving(true);
     setMessage("");
 
-    const safeGoal = Math.min(
-      Math.max(
-        Number(goal) || DEFAULT_GOAL,
-        2
-      ),
-      MAX_GOAL
-    );
+    const safeGoal =
+      Math.min(
+        Math.max(
+          Number(goal) ||
+            DEFAULT_GOAL,
+          2
+        ),
+        MAX_GOAL
+      );
 
     const safeSchedule =
       createScheduleForGoal(
@@ -516,22 +644,30 @@ export default function MoveResetSettings() {
       );
 
       try {
-        await api.put("/settings", {
-          move_reset: {
-            goal: safeGoal,
-            schedule:
-              safeSchedule,
-          },
-        });
+        await api.put(
+          "/settings",
+          {
+            move_reset: {
+              goal: safeGoal,
+              schedule:
+                safeSchedule,
+            },
+          }
+        );
       } catch {
         // Keep local settings if API
         // is temporarily unavailable.
       }
 
       setGoal(safeGoal);
-      setSchedule(safeSchedule);
+      setSchedule(
+        safeSchedule
+      );
 
-      setSavedGoal(safeGoal);
+      setSavedGoal(
+        safeGoal
+      );
+
       setSavedSchedule(
         safeSchedule
       );
@@ -650,15 +786,16 @@ export default function MoveResetSettings() {
 
   /* =========================================================
      STYLES
-     Compact version
-========================================================= */
+  ========================================================= */
 
   const styles = {
     page: {
       minHeight: "100%",
       padding: "18px 24px 28px",
-      background: "var(--cozy-bg)",
-      color: "var(--cozy-text)",
+      background:
+        "var(--cozy-bg)",
+      color:
+        "var(--cozy-text)",
     },
 
     container: {
@@ -903,6 +1040,10 @@ export default function MoveResetSettings() {
       flexShrink: 0,
     },
 
+    /* =====================================================
+       ADAPTIVE TIME INPUT
+    ===================================================== */
+
     timeInput: {
       flex: 1,
       minHeight: "39px",
@@ -917,7 +1058,22 @@ export default function MoveResetSettings() {
       fontSize: "0.82rem",
       fontWeight: 700,
       outline: "none",
-      colorScheme: "light dark",
+
+      /*
+        IMPORTANT:
+        The native time picker follows the
+        currently selected Wellness Garden theme.
+      */
+      colorScheme:
+        theme === "dark"
+          ? "dark"
+          : "light",
+
+      caretColor:
+        "var(--cozy-text)",
+
+      transition:
+        "background 0.18s ease, border-color 0.18s ease, color 0.18s ease",
     },
 
     removeButton: {
@@ -1030,7 +1186,7 @@ export default function MoveResetSettings() {
 
   /* =========================================================
      RENDER
-========================================================= */
+  ========================================================= */
 
   return (
     <div style={styles.page}>
@@ -1060,12 +1216,16 @@ export default function MoveResetSettings() {
           </div>
 
           <div>
-            <h1 style={styles.title}>
+            <h1
+              style={styles.title}
+            >
               Move &amp; Reset
             </h1>
 
             <p
-              style={styles.subtitle}
+              style={
+                styles.subtitle
+              }
             >
               Set your daily movement
               reminders and goal.
@@ -1079,7 +1239,9 @@ export default function MoveResetSettings() {
           style={styles.card}
         >
           <div
-            style={styles.cardHeader}
+            style={
+              styles.cardHeader
+            }
           >
             <div
               style={
@@ -1172,7 +1334,9 @@ export default function MoveResetSettings() {
           style={styles.card}
         >
           <div
-            style={styles.cardHeader}
+            style={
+              styles.cardHeader
+            }
           >
             <div
               style={
@@ -1242,10 +1406,7 @@ export default function MoveResetSettings() {
                       : {}),
                   }}
                 >
-                  {value}
-                  {value === 2
-                    ? " breaks"
-                    : " breaks"}
+                  {value} breaks
                 </button>
               )
             )}
@@ -1258,7 +1419,9 @@ export default function MoveResetSettings() {
           style={styles.card}
         >
           <div
-            style={styles.cardHeader}
+            style={
+              styles.cardHeader
+            }
           >
             <div
               style={
@@ -1403,7 +1566,9 @@ export default function MoveResetSettings() {
           }
         >
           <div
-            style={styles.cardHeader}
+            style={
+              styles.cardHeader
+            }
           >
             <div
               style={
@@ -1456,6 +1621,10 @@ export default function MoveResetSettings() {
                 resetting
                   ? 0.6
                   : 1,
+              cursor:
+                resetting
+                  ? "not-allowed"
+                  : "pointer",
             }}
           >
             <RotateCcw
@@ -1521,7 +1690,7 @@ export default function MoveResetSettings() {
                   size={17}
                   strokeWidth={3}
                 />
-                Save Goal
+                Save 
               </>
             ) : (
               <>

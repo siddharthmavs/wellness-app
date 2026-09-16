@@ -13,6 +13,8 @@ import {
   Eye,
   Check,
   Clock,
+  Play,
+  Pause,
 } from "lucide-react";
 
 import "./EyeBreakCard.css";
@@ -409,19 +411,11 @@ export default function EyeBreakCard({
   onAction,
   onDailyGoalComplete,
 }) {
-  /* =======================================================
-     INITIAL DATA
-  ======================================================= */
-
   const dailyData =
     loadDailyData();
 
   const initialRewardConfig =
     loadEyeBreakRewardConfig();
-
-  /* =======================================================
-     PERSONAL SETTINGS
-  ======================================================= */
 
   const [goal, setGoal] =
     useState(getSavedGoal);
@@ -429,18 +423,10 @@ export default function EyeBreakCard({
   const [schedule, setSchedule] =
     useState(getSavedSchedule);
 
-  /* =======================================================
-     DAILY PROGRESS
-  ======================================================= */
-
   const [completed, setCompleted] =
     useState(
       dailyData.completed
     );
-
-  /* =======================================================
-     ADMIN REWARD SETTINGS
-  ======================================================= */
 
   const [rewardGoal, setRewardGoal] =
     useState(
@@ -471,10 +457,6 @@ export default function EyeBreakCard({
       initialRewardConfig
     );
 
-  /* =======================================================
-     REWARD POPUP
-  ======================================================= */
-
   const [
     currentReward,
     setCurrentReward,
@@ -484,10 +466,6 @@ export default function EyeBreakCard({
     showReward,
     setShowReward,
   ] = useState(false);
-
-  /* =======================================================
-     DAILY GOAL POPUP
-  ======================================================= */
 
   const [
     showGoalComplete,
@@ -499,21 +477,10 @@ export default function EyeBreakCard({
     setPendingReward,
   ] = useState(null);
 
-  /*
-    false:
-      progress uses personal goal
-
-    true:
-      progress uses admin reward goal
-  */
   const [
     workingTowardRewardGoal,
     setWorkingTowardRewardGoal,
   ] = useState(false);
-
-  /* =======================================================
-     UI STATE
-  ======================================================= */
 
   const [
     showExercise,
@@ -524,10 +491,6 @@ export default function EyeBreakCard({
     isBreakDue,
     setIsBreakDue,
   ] = useState(false);
-
-  /* =======================================================
-     EXERCISE STATE
-  ======================================================= */
 
   const [
     exerciseIndex,
@@ -556,12 +519,11 @@ export default function EyeBreakCard({
     setTransitionRemaining,
   ] = useState(2);
 
+  // Pause state tracking for manual clicks and tab/app visibility changes
+  const [isPaused, setIsPaused] = useState(false);
+
   const currentExercise =
     EXERCISES[exerciseIndex];
-
-  /* =========================================================
-     DERIVED GOAL STATE
-  ========================================================= */
 
   const personalGoalComplete =
     goal > 0 &&
@@ -575,22 +537,6 @@ export default function EyeBreakCard({
     personalGoalComplete &&
     rewardGoalComplete;
 
-  /*
-    THIS IS THE IMPORTANT PART.
-
-    Before CONTINUE:
-      active goal = personal goal
-
-    After CONTINUE:
-      active goal = reward goal
-
-    Example:
-      personal = 3
-      reward   = 4
-
-      before continue -> 3 timeline balls
-      after continue  -> 4 timeline balls
-  */
   const activeProgressGoal =
     workingTowardRewardGoal
       ? Number(rewardGoal)
@@ -602,10 +548,6 @@ export default function EyeBreakCard({
       1
     );
 
-  /*
-    Progress percentage is ALWAYS based
-    on the currently active goal.
-  */
   const progress =
     Math.min(
       Math.max(
@@ -617,10 +559,6 @@ export default function EyeBreakCard({
       100
     );
 
-  /*
-    Create exactly as many balls as
-    the active goal requires.
-  */
   const timelineItems =
     Array.from(
       {
@@ -629,27 +567,12 @@ export default function EyeBreakCard({
       },
       (_, index) => ({
         index,
-
-        /*
-          Existing personal schedule is used first.
-
-          If reward goal is larger than the
-          personal schedule, create an extra
-          reward slot automatically.
-        */
         time:
           schedule[index] ||
           `BREAK ${index + 1}`,
       })
     );
 
-  /*
-    Continue is offered ONLY when:
-
-      personal goal < reward goal
-      personal goal has been completed
-      reward goal has NOT been completed
-  */
   const shouldOfferContinue =
     Number(goal) <
       Number(rewardGoal) &&
@@ -657,6 +580,23 @@ export default function EyeBreakCard({
       Number(goal) &&
     completed <
       Number(rewardGoal);
+
+  /* =========================================================
+     VISIBILITY CHANGE (AUTO PAUSE ON TAB/APP SWITCH)
+  ========================================================= */
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && showExercise) {
+        setIsPaused(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [showExercise]);
 
   /* =========================================================
      ADMIN REWARD CONFIG SYNCHRONIZATION
@@ -751,12 +691,6 @@ export default function EyeBreakCard({
       rewardConfigRef.current =
         config;
 
-      /*
-        If admin changes the reward
-        configuration, today's previously
-        awarded milestones are reset so
-        the new configuration can be used.
-      */
       if (
         previousSignature !==
         newSignature
@@ -805,10 +739,6 @@ export default function EyeBreakCard({
     };
   }, []);
 
-  /* =========================================================
-     INITIAL REWARD CONFIG SIGNATURE
-  ========================================================= */
-
   useEffect(() => {
     const today =
       getToday();
@@ -853,10 +783,6 @@ export default function EyeBreakCard({
     rewardGoal,
     rewardMilestones,
   ]);
-
-  /* =========================================================
-     USER GOAL + SCHEDULE SYNCHRONIZATION
-  ========================================================= */
 
   useEffect(() => {
     const updateSettings = () => {
@@ -946,10 +872,6 @@ export default function EyeBreakCard({
     };
   }, []);
 
-  /* =========================================================
-     NEW DAY CHECK
-  ========================================================= */
-
   useEffect(() => {
     const checkDay = () => {
       const today =
@@ -1020,10 +942,6 @@ export default function EyeBreakCard({
       clearInterval(interval);
   }, []);
 
-  /* =========================================================
-     SAVE REWARDED MILESTONES
-  ========================================================= */
-
   useEffect(() => {
     const today =
       getToday();
@@ -1048,10 +966,6 @@ export default function EyeBreakCard({
     rewardedMilestones,
   ]);
 
-  /* =========================================================
-     SCHEDULE SLOT COMPLETION
-  ========================================================= */
-
   const isBreakCompletedForSlot =
     (time) => {
       try {
@@ -1070,10 +984,6 @@ export default function EyeBreakCard({
       }
     };
 
-  /* =========================================================
-     SCHEDULE CHECK
-  ========================================================= */
-
   useEffect(() => {
     const checkSchedule = () => {
       const now =
@@ -1083,10 +993,6 @@ export default function EyeBreakCard({
         now.getHours() * 60 +
         now.getMinutes();
 
-      /*
-        While working toward reward goal,
-        check reward-goal slots too.
-      */
       const scheduleGoal =
         workingTowardRewardGoal
           ? safeActiveProgressGoal
@@ -1151,10 +1057,6 @@ export default function EyeBreakCard({
     allGoalsComplete,
   ]);
 
-  /* =========================================================
-     MARK CURRENT SCHEDULE SLOT COMPLETE
-  ========================================================= */
-
   const markCurrentSlotCompleted =
     () => {
       const now =
@@ -1164,11 +1066,6 @@ export default function EyeBreakCard({
         now.getHours() * 60 +
         now.getMinutes();
 
-      /*
-        Use active goal so reward-goal
-        continuation can also use its
-        additional schedule slots.
-      */
       const scheduleGoal =
         workingTowardRewardGoal
           ? safeActiveProgressGoal
@@ -1237,10 +1134,6 @@ export default function EyeBreakCard({
       }
     };
 
-  /* =========================================================
-     GET NEWLY REACHED REWARD MILESTONES
-  ========================================================= */
-
   const getNewlyReachedMilestones =
     (
       previousCompleted,
@@ -1266,18 +1159,6 @@ export default function EyeBreakCard({
         return [];
       }
 
-      /*
-        IMPORTANT:
-
-        Reward percentage is ALWAYS
-        calculated from ADMIN REWARD GOAL.
-
-        Example:
-          reward goal = 4
-          completed = 2
-
-          2 / 4 = 50%
-      */
       const previousProgress =
         Math.min(
           (previousCompleted /
@@ -1323,10 +1204,6 @@ export default function EyeBreakCard({
         );
     };
 
-  /* =========================================================
-     START EXERCISE
-  ========================================================= */
-
   const startExercise = () => {
     if (allGoalsComplete) {
       return;
@@ -1344,12 +1221,10 @@ export default function EyeBreakCard({
 
     setTransitionRemaining(3);
 
+    setIsPaused(false);
+
     setShowExercise(true);
   };
-
-  /* =========================================================
-     CLOSE EXERCISE
-  ========================================================= */
 
   const closeExercise = () => {
     setShowExercise(false);
@@ -1365,11 +1240,9 @@ export default function EyeBreakCard({
     setIsTransitioning(false);
 
     setTransitionRemaining(2);
-  };
 
-  /* =========================================================
-     COMPLETE EYE BREAK
-  ========================================================= */
+    setIsPaused(false);
+  };
 
   const completeEyeBreak =
     () => {
@@ -1383,6 +1256,8 @@ export default function EyeBreakCard({
 
       setIsTransitioning(false);
 
+      setIsPaused(false);
+
       const previousCompleted =
         Number(
           localStorage.getItem(
@@ -1393,11 +1268,6 @@ export default function EyeBreakCard({
       const newCompleted =
         previousCompleted + 1;
 
-      /*
-        Progress is never capped.
-        Even if the reward goal is 4,
-        completed can become 5, 6, etc.
-      */
       setCompleted(
         newCompleted
       );
@@ -1415,15 +1285,6 @@ export default function EyeBreakCard({
         );
       }
 
-      /*
-        Personal goal completion is
-        detected only when we are still
-        working toward the personal goal.
-
-        This prevents the personal
-        completion popup from appearing
-        again after CONTINUE.
-      */
       const reachedPersonalGoal =
         !workingTowardRewardGoal &&
         goal > 0 &&
@@ -1431,20 +1292,11 @@ export default function EyeBreakCard({
           goal &&
         newCompleted >= goal;
 
-      /*
-        Reward milestones are calculated
-        independently using ADMIN reward
-        goal.
-      */
       const newlyReached =
         getNewlyReachedMilestones(
           previousCompleted,
           newCompleted
         );
-
-      /* =====================================================
-         PROCESS REWARDS
-      ===================================================== */
 
       if (
         newlyReached.length > 0
@@ -1483,19 +1335,11 @@ export default function EyeBreakCard({
           updatedRewarded
         );
 
-        /*
-          Show the highest newly-earned
-          milestone in the popup.
-        */
         const highestMilestone =
           newlyReached[
             newlyReached.length - 1
           ];
 
-        /*
-          Award XP for EVERY newly
-          reached milestone.
-        */
         newlyReached.forEach(
           (milestone) => {
             if (
@@ -1515,16 +1359,6 @@ export default function EyeBreakCard({
           }
         );
 
-        /*
-          If personal goal and reward
-          milestone happen together,
-          show the personal goal popup
-          FIRST.
-
-          The reward is stored as
-          pendingReward and shown after
-          CONTINUE or DONE.
-        */
         if (
           reachedPersonalGoal
         ) {
@@ -1542,11 +1376,6 @@ export default function EyeBreakCard({
             );
           }, 250);
         } else {
-          /*
-            No goal-complete popup is
-            blocking the reward, so show
-            the reward popup directly.
-          */
           setPendingReward(null);
 
           setCurrentReward(
@@ -1562,10 +1391,6 @@ export default function EyeBreakCard({
       } else if (
         reachedPersonalGoal
       ) {
-        /*
-          Personal goal reached but no
-          reward milestone was triggered.
-        */
         setTimeout(() => {
           setShowGoalComplete(
             true
@@ -1573,10 +1398,6 @@ export default function EyeBreakCard({
         }, 250);
       }
     };
-
-  /* =========================================================
-     ESCAPE KEY
-  ========================================================= */
 
   useEffect(() => {
     if (!showExercise) {
@@ -1607,18 +1428,10 @@ export default function EyeBreakCard({
     showExercise,
   ]);
 
-  /* =========================================================
-     EXERCISE TIMER
-  ========================================================= */
-
   useEffect(() => {
-    if (!showExercise) {
+    if (!showExercise || isPaused) {
       return;
     }
-
-    /* -------------------------------------------------------
-       PREPARATION
-    ------------------------------------------------------- */
 
     if (isPreparing) {
       if (
@@ -1644,10 +1457,6 @@ export default function EyeBreakCard({
 
       return;
     }
-
-    /* -------------------------------------------------------
-       TRANSITION
-    ------------------------------------------------------- */
 
     if (isTransitioning) {
       if (
@@ -1689,10 +1498,6 @@ export default function EyeBreakCard({
       return;
     }
 
-    /* -------------------------------------------------------
-       EXERCISE COUNTDOWN
-    ------------------------------------------------------- */
-
     if (remaining > 0) {
       playSound(
         remaining === 1
@@ -1713,10 +1518,6 @@ export default function EyeBreakCard({
         clearTimeout(timer);
     }
 
-    /* -------------------------------------------------------
-       NEXT EXERCISE
-    ------------------------------------------------------- */
-
     if (
       exerciseIndex <
       EXERCISES.length - 1
@@ -1733,10 +1534,6 @@ export default function EyeBreakCard({
       return;
     }
 
-    /* -------------------------------------------------------
-       COMPLETE FULL EYE BREAK
-    ------------------------------------------------------- */
-
     playSound(
       1200,
       0.35
@@ -1750,38 +1547,19 @@ export default function EyeBreakCard({
     isPreparing,
     isTransitioning,
     transitionRemaining,
+    isPaused,
   ]);
-
-  /* =========================================================
-     CONTINUE TOWARD REWARD GOAL
-  ========================================================= */
 
   const continueTowardRewardGoal =
     () => {
-      /*
-        This is the key switch.
-
-        Personal goal remains unchanged.
-
-        Only the ACTIVE DISPLAY GOAL
-        changes to the reward goal.
-      */
       setWorkingTowardRewardGoal(
         true
       );
 
-      /*
-        Close personal-goal popup.
-      */
       setShowGoalComplete(
         false
       );
 
-      /*
-        If a reward was earned at the
-        same time as the personal goal,
-        show it after the goal popup.
-      */
       if (pendingReward) {
         const reward =
           pendingReward;
@@ -1802,10 +1580,6 @@ export default function EyeBreakCard({
       }
     };
 
-  /* =========================================================
-     DONE FOR TODAY
-  ========================================================= */
-
   const finishForToday = () => {
     setShowGoalComplete(
       false
@@ -1821,10 +1595,6 @@ export default function EyeBreakCard({
 
     setShowReward(false);
   };
-
-  /* =========================================================
-     RESET TODAY
-  ========================================================= */
 
   const resetToday = () => {
     const today =
@@ -1876,10 +1646,6 @@ export default function EyeBreakCard({
     closeExercise();
   };
 
-  /* =========================================================
-     EXPOSE RESET FUNCTION
-  ========================================================= */
-
   useEffect(() => {
     window.resetEyeBreakToday =
       resetToday;
@@ -1888,10 +1654,6 @@ export default function EyeBreakCard({
       delete window.resetEyeBreakToday;
     };
   });
-
-  /* =========================================================
-     LISTEN FOR RESET EVENT
-  ========================================================= */
 
   useEffect(() => {
     const handleReset =
@@ -1912,10 +1674,6 @@ export default function EyeBreakCard({
     };
   });
 
-  /* =========================================================
-     NEXT BREAK
-  ========================================================= */
-
   const getNextBreak = () => {
     const now =
       new Date();
@@ -1924,10 +1682,6 @@ export default function EyeBreakCard({
       now.getHours() * 60 +
       now.getMinutes();
 
-    /*
-      Use the active goal when determining
-      the next break.
-    */
     const scheduleGoal =
       workingTowardRewardGoal
         ? safeActiveProgressGoal
@@ -1966,16 +1720,8 @@ export default function EyeBreakCard({
     );
   };
 
-  /* =========================================================
-     RENDER
-  ========================================================= */
-
   return (
     <>
-      {/* ==================================================
-          MAIN CARD
-      ================================================== */}
-
       <motion.div
         className="eye-break-card"
         whileHover={{
@@ -1985,10 +1731,6 @@ export default function EyeBreakCard({
           duration: 0.2,
         }}
       >
-        {/* ==================================================
-            HEADER
-        ================================================== */}
-
         <div className="eye-card-header">
           <div>
             <div className="eye-card-title">
@@ -2006,18 +1748,10 @@ export default function EyeBreakCard({
           </div>
         </div>
 
-        {/* ==================================================
-            EYES
-        ================================================== */}
-
         <div className="eye-card-eyes">
           <AnimatedEye />
           <AnimatedEye />
         </div>
-
-        {/* ==================================================
-            TIMELINE / PROGRESS
-        ================================================== */}
 
         <div className="eye-timeline-section">
 
@@ -2044,10 +1778,6 @@ export default function EyeBreakCard({
             }}
           >
 
-            {/* ----------------------------------------------
-                PROGRESS LINE
-            ---------------------------------------------- */}
-
             {safeActiveProgressGoal >
               1 && (
               <div className="eye-timeline-track">
@@ -2061,10 +1791,6 @@ export default function EyeBreakCard({
 
               </div>
             )}
-
-            {/* ----------------------------------------------
-                PROGRESS BALLS
-            ---------------------------------------------- */}
 
             {timelineItems.map(
               (item) => {
@@ -2085,13 +1811,9 @@ export default function EyeBreakCard({
                     }
                   >
 
-                    {/* TIME */}
-
                     <div className="eye-timeline-time">
                       {item.time}
                     </div>
-
-                    {/* BALL */}
 
                     <motion.div
                       className={`eye-timeline-dot ${
@@ -2138,8 +1860,6 @@ export default function EyeBreakCard({
                       )}
                     </motion.div>
 
-                    {/* STATUS */}
-
                     <div
                       className={`eye-timeline-status ${
                         done
@@ -2164,10 +1884,6 @@ export default function EyeBreakCard({
           </div>
         </div>
 
-        {/* ==================================================
-            NEXT BREAK
-        ================================================== */}
-
         <div className="eye-next-break">
 
           <Clock size={13} />
@@ -2179,10 +1895,6 @@ export default function EyeBreakCard({
           </span>
 
         </div>
-
-        {/* ==================================================
-            START BUTTON
-        ================================================== */}
 
         {!allGoalsComplete ? (
           <motion.button
@@ -2258,10 +1970,6 @@ export default function EyeBreakCard({
         )}
       </motion.div>
 
-      {/* ==================================================
-          EXERCISE MODAL
-      ================================================== */}
-
       <AnimatePresence>
         {showExercise && (
           <motion.div
@@ -2308,10 +2016,6 @@ export default function EyeBreakCard({
               >
                 ×
               </button>
-
-              {/* ------------------------------------------
-                  PREPARING
-              ------------------------------------------ */}
 
               {isPreparing ? (
                 <>
@@ -2361,11 +2065,6 @@ export default function EyeBreakCard({
                     first eye movement
                   </p>
                 </>
-
-              /* ------------------------------------------
-                 TRANSITIONING
-              ------------------------------------------ */
-
               ) : isTransitioning ? (
                 <>
                   <div className="exercise-complete-label">
@@ -2423,11 +2122,6 @@ export default function EyeBreakCard({
                     next movement
                   </p>
                 </>
-
-              /* ------------------------------------------
-                 NORMAL EXERCISE
-              ------------------------------------------ */
-
               ) : (
                 <>
                   <div className="exercise-small-title">
@@ -2493,14 +2187,35 @@ export default function EyeBreakCard({
                 </>
               )}
 
+              {/* UNIVERSAL PAUSE / RESUME BUTTON */}
+              <div style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsPaused(!isPaused)}
+                  className="eye-pause-resume-button"
+                >
+                  {isPaused ? (
+                    <>
+                      <Play size={16} /> RESUME
+                    </>
+                  ) : (
+                    <>
+                      <Pause size={16} /> PAUSE
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.7, fontWeight: 600, textAlign: "center" }}>
+                {isPaused
+                  ? "Exercise is paused. Click Resume to continue."
+                  : "Follow the steps and move at a comfortable pace."}
+              </div>
+
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* ==================================================
-          DAILY GOAL COMPLETE MODAL
-      ================================================== */}
 
       <AnimatePresence>
         {showGoalComplete && (
@@ -2612,10 +2327,6 @@ export default function EyeBreakCard({
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* ==================================================
-          REWARD MODAL
-      ================================================== */}
 
       <AnimatePresence>
         {showReward &&

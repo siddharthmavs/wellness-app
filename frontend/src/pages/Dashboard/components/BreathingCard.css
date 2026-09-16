@@ -1418,3 +1418,38 @@ html.dark .breathing-reset-button {
   color: #8f2020;
 
 }
+
+/* =========================================================
+   PAUSE / RESUME BUTTON STYLES
+========================================================= */
+
+.breathing-pause-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.breathing-pause-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  background: var(--surface-color, rgba(255, 255, 255, 0.08));
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.breathing-pause-button:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.breathing-pause-button.is-paused {
+  background: #676968;
+  color: #ffffff;
+  border-color: #585a59;
+}

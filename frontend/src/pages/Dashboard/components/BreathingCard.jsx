@@ -13,6 +13,8 @@ import {
   Wind,
   Check,
   X,
+  Play,
+  Pause,
 } from "lucide-react";
 
 import "./BreathingCard.css";
@@ -532,6 +534,12 @@ export default function BreathingCard({
     setRoundPauseRemaining,
   ] = useState(3);
 
+  /* =======================================================
+     MANUAL & AUTO PAUSE STATE
+  ======================================================= */
+
+  const [isPaused, setIsPaused] = useState(false);
+
   const currentPhase =
     PHASES[phase];
 
@@ -555,27 +563,6 @@ export default function BreathingCard({
      ACTIVE PROGRESS GOAL
   ========================================================= */
 
-  /*
-    Before the user chooses CONTINUE:
-
-      personal goal = active goal
-
-    After choosing CONTINUE:
-
-      admin reward goal = active goal
-
-    Example:
-
-      Personal goal = 3
-      Reward goal   = 4
-
-      Before continue:
-        3 / 3
-
-      After continue:
-        3 / 4
-    */
-
   const activeProgressGoal =
     workingTowardRewardGoal
       ? rewardGoal
@@ -590,6 +577,23 @@ export default function BreathingCard({
           100
         )
       : 0;
+
+  /* =========================================================
+     VISIBILITY CHANGE (AUTO PAUSE ON TAB/APP SWITCH)
+  ========================================================= */
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && showExercise) {
+        setIsPaused(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [showExercise]);
 
   /* =========================================================
      ADMIN REWARD CONFIG SYNCHRONIZATION
@@ -676,13 +680,6 @@ export default function BreathingCard({
 
       rewardConfigRef.current =
         config;
-
-      /*
-        If admin changes the reward
-        configuration, today's
-        milestone tracking starts
-        fresh for the new rules.
-      */
 
       if (
         previousSignature !==
@@ -1049,6 +1046,8 @@ export default function BreathingCard({
 
     setRoundPauseRemaining(3);
 
+    setIsPaused(false);
+
     setShowExercise(true);
 
     playSound(600);
@@ -1074,6 +1073,8 @@ export default function BreathingCard({
     setIsRoundPause(false);
 
     setRoundPauseRemaining(3);
+
+    setIsPaused(false);
   };
 
   /* =========================================================
@@ -1117,7 +1118,8 @@ export default function BreathingCard({
   useEffect(() => {
     if (
       !showExercise ||
-      !isPreviewing
+      !isPreviewing ||
+      isPaused
     ) {
       return;
     }
@@ -1154,6 +1156,7 @@ export default function BreathingCard({
     showExercise,
     isPreviewing,
     previewRemaining,
+    isPaused,
   ]);
 
   /* =========================================================
@@ -1163,7 +1166,8 @@ export default function BreathingCard({
   useEffect(() => {
     if (
       !showExercise ||
-      !isRoundPause
+      !isRoundPause ||
+      isPaused
     ) {
       return;
     }
@@ -1202,6 +1206,7 @@ export default function BreathingCard({
     showExercise,
     isRoundPause,
     roundPauseRemaining,
+    isPaused,
   ]);
 
   /* =========================================================
@@ -1232,23 +1237,6 @@ export default function BreathingCard({
       ) {
         return [];
       }
-
-      /*
-        IMPORTANT:
-
-        Reward percentage is calculated
-        against ADMIN reward goal,
-        NOT the personal goal.
-
-        Example:
-
-        Personal goal = 3
-        Reward goal   = 4
-
-        2 sessions = 50%
-        3 sessions = 75%
-        4 sessions = 100%
-      */
 
       const previousProgress =
         Math.min(
@@ -1311,6 +1299,8 @@ export default function BreathingCard({
 
       setIsRoundPause(false);
 
+      setIsPaused(false);
+
       const previousCompleted =
         Number(
           localStorage.getItem(
@@ -1321,10 +1311,6 @@ export default function BreathingCard({
       const newCompleted =
         previousCompleted + 1;
 
-      /* -----------------------------------------------------
-         SAVE PROGRESS
-      ----------------------------------------------------- */
-
       setCompleted(
         newCompleted
       );
@@ -1334,19 +1320,11 @@ export default function BreathingCard({
         String(newCompleted)
       );
 
-      /* -----------------------------------------------------
-         NORMAL WELLNESS ACTION
-      ----------------------------------------------------- */
-
       if (onAction) {
         onAction(
           "breathing"
         );
       }
-
-      /* -----------------------------------------------------
-         CHECK PERSONAL GOAL
-      ----------------------------------------------------- */
 
       const reachedPersonalGoal =
         !workingTowardRewardGoal &&
@@ -1355,19 +1333,11 @@ export default function BreathingCard({
           goal &&
         newCompleted >= goal;
 
-      /* -----------------------------------------------------
-         CHECK REWARD MILESTONES
-      ----------------------------------------------------- */
-
       const newlyReached =
         getNewlyReachedMilestones(
           previousCompleted,
           newCompleted
         );
-
-      /* -----------------------------------------------------
-         PROCESS REWARDS
-      ----------------------------------------------------- */
 
       if (
         newlyReached.length > 0
@@ -1411,10 +1381,6 @@ export default function BreathingCard({
             newlyReached.length - 1
           ];
 
-        /* ---------------------------------------------------
-           SEND XP TO PARENT
-        --------------------------------------------------- */
-
         newlyReached.forEach(
           (milestone) => {
             if (
@@ -1434,11 +1400,6 @@ export default function BreathingCard({
           }
         );
 
-        /* ---------------------------------------------------
-           PERSONAL GOAL POPUP TAKES
-           PRIORITY WHEN REACHED
-        --------------------------------------------------- */
-
         if (
           reachedPersonalGoal
         ) {
@@ -1456,12 +1417,6 @@ export default function BreathingCard({
             );
           }, 250);
         } else {
-          /*
-            No personal-goal popup.
-
-            Show reward immediately.
-          */
-
           setPendingReward(null);
 
           setCurrentReward(
@@ -1481,10 +1436,6 @@ export default function BreathingCard({
 
         return;
       }
-
-      /* -----------------------------------------------------
-         PERSONAL GOAL WITHOUT REWARD
-      ----------------------------------------------------- */
 
       if (
         reachedPersonalGoal
@@ -1507,7 +1458,8 @@ export default function BreathingCard({
     if (
       !showExercise ||
       isPreviewing ||
-      isRoundPause
+      isRoundPause ||
+      isPaused
     ) {
       return;
     }
@@ -1573,6 +1525,7 @@ export default function BreathingCard({
     isRoundPause,
     phase,
     round,
+    isPaused,
   ]);
 
   /* =========================================================
@@ -1581,14 +1534,6 @@ export default function BreathingCard({
 
   const continueTowardRewardGoal =
     () => {
-      /*
-        Switch ONLY the displayed/active
-        progress goal.
-
-        The personal goal stored in
-        settings is NOT changed.
-      */
-
       setWorkingTowardRewardGoal(
         true
       );
@@ -1596,12 +1541,6 @@ export default function BreathingCard({
       setShowGoalComplete(
         false
       );
-
-      /*
-        If the same session also unlocked
-        a reward, show that reward after
-        closing the goal popup.
-      */
 
       if (pendingReward) {
         const reward =
@@ -1735,16 +1674,6 @@ export default function BreathingCard({
   /* =========================================================
      SHOULD OFFER CONTINUE
   ========================================================= */
-
-  /*
-    Continue is shown ONLY when:
-
-    Personal goal < reward goal
-    AND
-    personal goal has been reached
-    AND
-    reward goal has NOT been reached.
-  */
 
   const shouldOfferContinue =
     goal < rewardGoal &&
@@ -1906,9 +1835,6 @@ export default function BreathingCard({
             exit={{
               opacity: 0,
             }}
-            onClick={
-              closeExercise
-            }
           >
             <motion.div
               className="breathing-modal"
@@ -2014,12 +1940,6 @@ export default function BreathingCard({
                       previewRemaining
                     }
                   </div>
-
-                  <p className="breathing-tip">
-                    Get comfortable
-                    and prepare to
-                    follow the circle.
-                  </p>
                 </>
               ) : isRoundPause ? (
                 <>
@@ -2062,11 +1982,6 @@ export default function BreathingCard({
                       roundPauseRemaining
                     }
                   </div>
-
-                  <p className="breathing-tip">
-                    Round 2 is starting
-                    soon.
-                  </p>
                 </>
               ) : (
                 <>
@@ -2088,7 +2003,7 @@ export default function BreathingCard({
 
                   <div className="breathing-modal-circle">
                     <motion.div
-                      key={`${round}-${phase}`}
+                      key={`${round}-${phase}-${isPaused}`}
                       className="breathing-main-orb"
                       initial={{
                         scale:
@@ -2099,8 +2014,7 @@ export default function BreathingCard({
                           currentPhase.to,
                       }}
                       transition={{
-                        duration:
-                          currentPhase.duration,
+                        duration: isPaused ? 0 : currentPhase.duration,
                         ease:
                           "easeInOut",
                       }}
@@ -2147,14 +2061,35 @@ export default function BreathingCard({
                       OUT
                     </span>
                   </div>
-
-                  <p className="breathing-tip">
-                    Follow the circle
-                    and breathe at a
-                    comfortable pace.
-                  </p>
                 </>
               )}
+
+              {/* PAUSE / RESUME BUTTON */}
+              {!isRoundPause && (
+                <div className="breathing-pause-container">
+                  <button
+                    type="button"
+                    className={`breathing-pause-button ${isPaused ? "is-paused" : ""}`}
+                    onClick={() => setIsPaused(!isPaused)}
+                  >
+                    {isPaused ? (
+                      <>
+                        <Play size={16} /> RESUME
+                      </>
+                    ) : (
+                      <>
+                        <Pause size={16} /> PAUSE
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              <p className="breathing-tip">
+                {isPaused
+                  ? "Exercise is paused. Click Resume to continue."
+                  : "Follow the circle and breathe at a comfortable pace."}
+              </p>
             </motion.div>
           </motion.div>
         )}

@@ -2164,3 +2164,11 @@ html.dark ::selection {
   color:
     #ffffff;
 }
+
+:root {
+  --cozy-card: #f7dce7;
+}
+
+html.dark {
+  --cozy-card: #3a3e37;
+}

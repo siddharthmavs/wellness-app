@@ -39,9 +39,9 @@ const PRIMARY = [
     icon: Home,
   },
   {
-    to: "/leaderboard",
-    label: "Journey",
-    icon: Trophy,
+  to: "/journey",
+  label: "Journey",
+  icon: Trophy,
   },
   {
     to: "/mood",

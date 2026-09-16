@@ -34,6 +34,23 @@ const GOAL_KEY = "breathingGoal";
 const SCHEDULE_KEY = "breathingSchedule";
 
 /* =========================================================
+   THEME HELPER
+========================================================= */
+
+const getCurrentTheme = () => {
+  const root = document.documentElement;
+
+  if (
+    root.classList.contains("dark") ||
+    root.getAttribute("data-theme") === "dark"
+  ) {
+    return "dark";
+  }
+
+  return "light";
+};
+
+/* =========================================================
    STORAGE HELPERS
 ========================================================= */
 
@@ -70,9 +87,8 @@ const getStoredRewardGoal = () => {
 
 const getStoredGoal = () => {
   try {
-    const stored = localStorage.getItem(
-      GOAL_KEY
-    );
+    const stored =
+      localStorage.getItem(GOAL_KEY);
 
     if (!stored) {
       return DEFAULT_GOAL;
@@ -95,9 +111,8 @@ const getStoredGoal = () => {
 
 const getStoredSchedule = () => {
   try {
-    const stored = localStorage.getItem(
-      SCHEDULE_KEY
-    );
+    const stored =
+      localStorage.getItem(SCHEDULE_KEY);
 
     if (!stored) {
       return DEFAULT_SCHEDULE.slice(
@@ -171,6 +186,18 @@ const createScheduleForGoal = (
 export default function BreathingSettings() {
   const navigate = useNavigate();
 
+  /* =========================================================
+     THEME
+  ========================================================= */
+
+  const [theme, setTheme] = useState(
+    getCurrentTheme
+  );
+
+  /* =========================================================
+     INITIAL SETTINGS
+  ========================================================= */
+
   const initialGoal = getStoredGoal();
 
   const [rewardGoal, setRewardGoal] =
@@ -206,6 +233,64 @@ export default function BreathingSettings() {
 
   const [message, setMessage] =
     useState("");
+
+  /* =========================================================
+     ADAPTIVE THEME LISTENER
+  ========================================================= */
+
+  useEffect(() => {
+    const updateTheme = () => {
+      setTheme(getCurrentTheme());
+    };
+
+    const observer =
+      new MutationObserver(updateTheme);
+
+    observer.observe(
+      document.documentElement,
+      {
+        attributes: true,
+        attributeFilter: [
+          "class",
+          "data-theme",
+        ],
+      }
+    );
+
+    window.addEventListener(
+      "wellness-appearance-updated",
+      updateTheme
+    );
+
+    window.addEventListener(
+      "appearanceSettingsUpdated",
+      updateTheme
+    );
+
+    window.addEventListener(
+      "themeChanged",
+      updateTheme
+    );
+
+    return () => {
+      observer.disconnect();
+
+      window.removeEventListener(
+        "wellness-appearance-updated",
+        updateTheme
+      );
+
+      window.removeEventListener(
+        "appearanceSettingsUpdated",
+        updateTheme
+      );
+
+      window.removeEventListener(
+        "themeChanged",
+        updateTheme
+      );
+    };
+  }, []);
 
   /* =========================================================
      UNSAVED CHANGES
@@ -257,10 +342,6 @@ export default function BreathingSettings() {
               1
             ),
             MAX_GOAL
-          );
-
-          setRewardGoal(
-            nextRewardGoal
           );
         }
 
@@ -615,10 +696,6 @@ export default function BreathingSettings() {
         safeSchedule
       );
 
-      /* =====================================================
-         GLOBAL SETTINGS EVENT
-      ===================================================== */
-
       window.dispatchEvent(
         new CustomEvent(
           "wellnessSettingsUpdated",
@@ -648,10 +725,6 @@ export default function BreathingSettings() {
           }
         )
       );
-
-      /* =====================================================
-         BREATHING-SPECIFIC EVENT
-      ===================================================== */
 
       window.dispatchEvent(
         new CustomEvent(
@@ -737,7 +810,6 @@ export default function BreathingSettings() {
 
   /* =========================================================
      STYLES
-     SAME COMPACT DESIGN AS MOVE & RESET
   ========================================================= */
 
   const styles = {
@@ -990,6 +1062,10 @@ export default function BreathingSettings() {
       flexShrink: 0,
     },
 
+    /* =====================================================
+       ADAPTIVE TIME INPUT
+    ===================================================== */
+
     timeInput: {
       flex: 1,
       minHeight: "39px",
@@ -1004,7 +1080,19 @@ export default function BreathingSettings() {
       fontSize: "0.82rem",
       fontWeight: 700,
       outline: "none",
-      colorScheme: "light dark",
+
+      /* Makes native time controls follow
+         the current light/dark theme */
+      colorScheme:
+        theme === "dark"
+          ? "dark"
+          : "light",
+
+      caretColor:
+        "var(--cozy-text)",
+
+      transition:
+        "background 0.18s ease, border-color 0.18s ease, color 0.18s ease",
     },
 
     removeButton: {
@@ -1602,7 +1690,7 @@ export default function BreathingSettings() {
                   size={17}
                   strokeWidth={3}
                 />
-                Save Goal
+                Save 
               </>
             ) : (
               <>

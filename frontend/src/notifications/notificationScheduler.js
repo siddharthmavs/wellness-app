@@ -1,4 +1,4 @@
-// src/notifications/notificationScheduler.js
+
 
 import {
   createWellnessNotification,
@@ -433,13 +433,18 @@ export const checkWellnessNotifications = (
       );
 
       /*
-        Create notification object.
+        Create notification object enriched with a unique 
+        ID and timestamp for in-app popup dismissal handling.
       */
 
-      const notification =
-        createWellnessNotification(
-          type
-        );
+      const baseNotification =
+        createWellnessNotification(type);
+
+      const notification = {
+        id: `${type}-${Date.now()}`,
+        timestamp: Date.now(),
+        ...baseNotification,
+      };
 
       /*
         In-app popup.

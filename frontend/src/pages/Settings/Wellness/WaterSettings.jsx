@@ -75,9 +75,7 @@ const parseRewardGoal = (savedData) => {
 const getStoredWaterGoal = () => {
   try {
     const saved =
-      localStorage.getItem(
-        WATER_GOAL_KEY
-      );
+      localStorage.getItem(WATER_GOAL_KEY);
 
     const value = Number(saved);
 
@@ -97,9 +95,7 @@ const getStoredWaterGoal = () => {
 const getStoredReminderTimes = () => {
   try {
     const saved =
-      localStorage.getItem(
-        WATER_SETTINGS_KEY
-      );
+      localStorage.getItem(WATER_SETTINGS_KEY);
 
     if (!saved) {
       return DEFAULT_REMINDER_TIMES;
@@ -702,7 +698,6 @@ export default function WaterSettings() {
 
   /* =========================================================
      STYLES
-     Same visual structure as Eye Care.
   ========================================================= */
 
   const styles = {
@@ -960,7 +955,7 @@ export default function WaterSettings() {
       fontWeight: 700,
       outline: "none",
       fontFamily: "inherit",
-      colorScheme: "light dark",
+      colorScheme: "light",
     },
 
     selectedGoal: {
@@ -1007,6 +1002,12 @@ export default function WaterSettings() {
       flexShrink: 0,
     },
 
+    /* =====================================================
+       FIXED TIME INPUT
+       Light mode = dark native clock icon
+       Dark mode = light native clock icon
+    ===================================================== */
+
     timeInput: {
       flex: 1,
       minHeight: "39px",
@@ -1022,7 +1023,7 @@ export default function WaterSettings() {
       fontWeight: 700,
       outline: "none",
       fontFamily: "inherit",
-      colorScheme: "light dark",
+      colorScheme: "light",
     },
 
     removeButton: {
@@ -1138,592 +1139,631 @@ export default function WaterSettings() {
   ========================================================= */
 
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
+    <>
+      {/* =====================================================
+          ADAPTIVE NATIVE TIME PICKER
+      ===================================================== */}
 
-        {/* =====================================================
-            HEADER
-        ===================================================== */}
+      <style>{`
+        .water-time-input {
+          color-scheme: light !important;
+        }
 
-        <div style={styles.header}>
-          <button
-            type="button"
-            style={styles.backButton}
-            onClick={() =>
-              navigate(-1)
-            }
-            aria-label="Go back"
-          >
-            <ArrowLeft size={19} />
-          </button>
+        .water-time-input::-webkit-calendar-picker-indicator {
+          opacity: 1 !important;
+          cursor: pointer;
+          filter: brightness(0) saturate(100%);
+        }
 
-          <div
-            style={
-              styles.headerIcon
-            }
-          >
-            <Droplets
-              size={25}
-              strokeWidth={2.5}
-            />
-          </div>
+        .water-time-input:focus {
+          border-color: var(--cozy-primary) !important;
+          box-shadow: 0 0 0 2px rgba(127, 174, 98, 0.15);
+        }
 
-          <div>
-            <h1
-              style={styles.title}
-            >
-              Drink Water
-            </h1>
+        html.dark .water-time-input {
+          color-scheme: dark !important;
+        }
 
-            <p
-              style={
-                styles.subtitle
+        html.dark .water-time-input::-webkit-calendar-picker-indicator {
+          opacity: 1 !important;
+          filter: brightness(0) invert(1);
+        }
+      `}</style>
+
+      <div style={styles.page}>
+        <div style={styles.container}>
+
+          {/* =====================================================
+              HEADER
+          ===================================================== */}
+
+          <div style={styles.header}>
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={() =>
+                navigate(-1)
               }
+              aria-label="Go back"
             >
-              Customize your
-              hydration goal and
-              reminders.
-            </p>
-          </div>
-        </div>
-
-        {/* =====================================================
-            REWARD GOAL
-        ===================================================== */}
-
-        <section
-          style={styles.card}
-        >
-          <div
-            style={
-              styles.cardHeader
-            }
-          >
-            <div
-              style={
-                styles.cardTitleWrap
-              }
-            >
-              <div
-                style={
-                  styles.cardIcon
-                }
-              >
-                <Trophy
-                  size={18}
-                  strokeWidth={2.4}
-                />
-              </div>
-
-              <div>
-                <h2
-                  style={
-                    styles.cardTitle
-                  }
-                >
-                  Reward Goal
-                </h2>
-
-                <p
-                  style={
-                    styles.cardDescription
-                  }
-                >
-                  Maximum daily
-                  hydration rewards.
-                </p>
-              </div>
-            </div>
+              <ArrowLeft size={19} />
+            </button>
 
             <div
               style={
-                styles.lockBadge
+                styles.headerIcon
               }
             >
-              <LockKeyhole
-                size={12}
+              <Droplets
+                size={25}
+                strokeWidth={2.5}
               />
-              Admin
-            </div>
-          </div>
-
-          <div
-            style={
-              styles.rewardValue
-            }
-          >
-            <div
-              style={
-                styles.rewardNumber
-              }
-            >
-              {rewardGoal}
-              <span
-                style={
-                  styles.rewardUnit
-                }
-              >
-                ml
-              </span>
             </div>
 
             <div>
-              <div
-                style={
-                  styles.rewardText
-                }
+              <h1
+                style={styles.title}
               >
-                Daily hydration
-                reward
-              </div>
+                Drink Water
+              </h1>
 
-              <div
+              <p
                 style={
-                  styles.rewardSubtext
+                  styles.subtitle
                 }
               >
-                Controlled by your
-                organization
-                administrator.
-              </div>
+                Customize your
+                hydration goal and
+                reminders.
+              </p>
             </div>
           </div>
-        </section>
 
-        {/* =====================================================
-            DAILY WATER GOAL
-        ===================================================== */}
+          {/* =====================================================
+              REWARD GOAL
+          ===================================================== */}
 
-        <section
-          style={styles.card}
-        >
-          <div
-            style={
-              styles.cardHeader
-            }
+          <section
+            style={styles.card}
           >
             <div
               style={
-                styles.cardTitleWrap
+                styles.cardHeader
               }
             >
               <div
                 style={
-                  styles.cardIcon
+                  styles.cardTitleWrap
                 }
               >
-                <Droplets
-                  size={18}
-                  strokeWidth={2.4}
-                />
-              </div>
-
-              <div>
-                <h2
-                  style={
-                    styles.cardTitle
-                  }
-                >
-                  Daily Water Goal
-                </h2>
-
-                <p
-                  style={
-                    styles.cardDescription
-                  }
-                >
-                  Choose how much
-                  water you want to
-                  drink each day.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <label
-            style={styles.label}
-          >
-            Daily hydration target
-          </label>
-
-          <div
-            style={
-              styles.goalOptions
-            }
-          >
-            {QUICK_GOALS.map(
-              (value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    handleGoalChange(
-                      value
-                    )
-                  }
-                  style={{
-                    ...styles.goalButton,
-                    ...(Number(
-                      selectedGoal
-                    ) ===
-                    Number(value)
-                      ? styles.activeGoalButton
-                      : {}),
-                  }}
-                >
-                  {value} ml
-                </button>
-              )
-            )}
-          </div>
-
-          <div
-            style={
-              styles.customGoalRow
-            }
-          >
-            <input
-              type="number"
-              min="500"
-              step="50"
-              placeholder="Custom ml"
-              value={customGoal}
-              onChange={(event) =>
-                handleCustomGoalChange(
-                  event.target.value
-                )
-              }
-              style={
-                styles.customInput
-              }
-              aria-label="Custom water goal"
-            />
-
-            <div
-              style={
-                styles.selectedGoal
-              }
-            >
-              Selected:
-
-              <strong
-                style={
-                  styles.selectedGoalStrong
-                }
-              >
-                {selectedGoal} ml
-              </strong>
-            </div>
-          </div>
-        </section>
-
-        {/* =====================================================
-            WATER REMINDER SCHEDULE
-        ===================================================== */}
-
-        <section
-          style={styles.card}
-        >
-          <div
-            style={
-              styles.cardHeader
-            }
-          >
-            <div
-              style={
-                styles.cardTitleWrap
-              }
-            >
-              <div
-                style={
-                  styles.cardIcon
-                }
-              >
-                <Clock3
-                  size={18}
-                  strokeWidth={2.4}
-                />
-              </div>
-
-              <div>
-                <h2
-                  style={
-                    styles.cardTitle
-                  }
-                >
-                  Water Reminders
-                </h2>
-
-                <p
-                  style={
-                    styles.cardDescription
-                  }
-                >
-                  Choose when you would
-                  like hydration
-                  reminders.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={
-              styles.scheduleList
-            }
-          >
-            {schedule.map(
-              (time, index) => (
                 <div
-                  key={`${index}-${time}`}
                   style={
-                    styles.scheduleRow
+                    styles.cardIcon
                   }
                 >
-                  <div
+                  <Trophy
+                    size={18}
+                    strokeWidth={2.4}
+                  />
+                </div>
+
+                <div>
+                  <h2
                     style={
-                      styles.scheduleNumber
+                      styles.cardTitle
                     }
                   >
-                    {index + 1}
-                  </div>
+                    Reward Goal
+                  </h2>
 
-                  <input
-                    type="time"
-                    value={time}
-                    onChange={(
-                      event
-                    ) =>
-                      updateScheduleTime(
-                        index,
-                        event.target
-                          .value
-                      )
-                    }
+                  <p
                     style={
-                      styles.timeInput
+                      styles.cardDescription
                     }
-                    aria-label={`Water reminder ${
-                      index + 1
-                    }`}
-                  />
+                  >
+                    Maximum daily
+                    hydration rewards.
+                  </p>
+                </div>
+              </div>
 
+              <div
+                style={
+                  styles.lockBadge
+                }
+              >
+                <LockKeyhole
+                  size={12}
+                />
+                Admin
+              </div>
+            </div>
+
+            <div
+              style={
+                styles.rewardValue
+              }
+            >
+              <div
+                style={
+                  styles.rewardNumber
+                }
+              >
+                {rewardGoal}
+
+                <span
+                  style={
+                    styles.rewardUnit
+                  }
+                >
+                  ml
+                </span>
+              </div>
+
+              <div>
+                <div
+                  style={
+                    styles.rewardText
+                  }
+                >
+                  Daily hydration
+                  reward
+                </div>
+
+                <div
+                  style={
+                    styles.rewardSubtext
+                  }
+                >
+                  Controlled by your
+                  organization
+                  administrator.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* =====================================================
+              DAILY WATER GOAL
+          ===================================================== */}
+
+          <section
+            style={styles.card}
+          >
+            <div
+              style={
+                styles.cardHeader
+              }
+            >
+              <div
+                style={
+                  styles.cardTitleWrap
+                }
+              >
+                <div
+                  style={
+                    styles.cardIcon
+                  }
+                >
+                  <Droplets
+                    size={18}
+                    strokeWidth={2.4}
+                  />
+                </div>
+
+                <div>
+                  <h2
+                    style={
+                      styles.cardTitle
+                    }
+                  >
+                    Daily Water Goal
+                  </h2>
+
+                  <p
+                    style={
+                      styles.cardDescription
+                    }
+                  >
+                    Choose how much
+                    water you want to
+                    drink each day.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <label
+              style={styles.label}
+            >
+              Daily hydration target
+            </label>
+
+            <div
+              style={
+                styles.goalOptions
+              }
+            >
+              {QUICK_GOALS.map(
+                (value) => (
                   <button
+                    key={value}
                     type="button"
                     onClick={() =>
-                      removeReminderTime(
-                        index
+                      handleGoalChange(
+                        value
                       )
                     }
-                    style={
-                      styles.removeButton
-                    }
-                    aria-label={`Remove water reminder ${
-                      index + 1
-                    }`}
+                    style={{
+                      ...styles.goalButton,
+                      ...(Number(
+                        selectedGoal
+                      ) ===
+                      Number(value)
+                        ? styles.activeGoalButton
+                        : {}),
+                    }}
                   >
-                    <Trash2
-                      size={16}
-                    />
+                    {value} ml
                   </button>
-                </div>
-              )
-            )}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "8px",
-            }}
-          >
-            <input
-              type="time"
-              value={newTime}
-              onChange={(event) =>
-                setNewTime(
-                  event.target.value
                 )
-              }
+              )}
+            </div>
+
+            <div
               style={
-                styles.timeInput
+                styles.customGoalRow
               }
-              aria-label="New water reminder time"
-            />
+            >
+              <input
+                type="number"
+                min="500"
+                step="50"
+                placeholder="Custom ml"
+                value={customGoal}
+                onChange={(event) =>
+                  handleCustomGoalChange(
+                    event.target.value
+                  )
+                }
+                style={
+                  styles.customInput
+                }
+                aria-label="Custom water goal"
+              />
+
+              <div
+                style={
+                  styles.selectedGoal
+                }
+              >
+                Selected:
+
+                <strong
+                  style={
+                    styles.selectedGoalStrong
+                  }
+                >
+                  {selectedGoal} ml
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          {/* =====================================================
+              WATER REMINDER SCHEDULE
+          ===================================================== */}
+
+          <section
+            style={styles.card}
+          >
+            <div
+              style={
+                styles.cardHeader
+              }
+            >
+              <div
+                style={
+                  styles.cardTitleWrap
+                }
+              >
+                <div
+                  style={
+                    styles.cardIcon
+                  }
+                >
+                  <Clock3
+                    size={18}
+                    strokeWidth={2.4}
+                  />
+                </div>
+
+                <div>
+                  <h2
+                    style={
+                      styles.cardTitle
+                    }
+                  >
+                    Water Reminders
+                  </h2>
+
+                  <p
+                    style={
+                      styles.cardDescription
+                    }
+                  >
+                    Choose when you would
+                    like hydration
+                    reminders.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={
+                styles.scheduleList
+              }
+            >
+              {schedule.map(
+                (time, index) => (
+                  <div
+                    key={`${index}-${time}`}
+                    style={
+                      styles.scheduleRow
+                    }
+                  >
+                    <div
+                      style={
+                        styles.scheduleNumber
+                      }
+                    >
+                      {index + 1}
+                    </div>
+
+                    <input
+                      className="water-time-input"
+                      type="time"
+                      value={time}
+                      onChange={(
+                        event
+                      ) =>
+                        updateScheduleTime(
+                          index,
+                          event.target
+                            .value
+                        )
+                      }
+                      style={
+                        styles.timeInput
+                      }
+                      aria-label={`Water reminder ${
+                        index + 1
+                      }`}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeReminderTime(
+                          index
+                        )
+                      }
+                      style={
+                        styles.removeButton
+                      }
+                      aria-label={`Remove water reminder ${
+                        index + 1
+                      }`}
+                    >
+                      <Trash2
+                        size={16}
+                      />
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* =================================================
+                ADD NEW REMINDER
+            ================================================= */}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginTop: "8px",
+              }}
+            >
+              <input
+                className="water-time-input"
+                type="time"
+                value={newTime}
+                onChange={(event) =>
+                  setNewTime(
+                    event.target.value
+                  )
+                }
+                style={
+                  styles.timeInput
+                }
+                aria-label="New water reminder time"
+              />
+
+              <button
+                type="button"
+                onClick={
+                  addReminderTime
+                }
+                style={{
+                  ...styles.addButton,
+                  width: "auto",
+                  flex: "0 0 auto",
+                  padding:
+                    "0 16px",
+                  marginTop: 0,
+                }}
+              >
+                <Plus size={16} />
+                Add reminder
+              </button>
+            </div>
+          </section>
+
+          {/* =====================================================
+              RESET TODAY
+          ===================================================== */}
+
+          <section
+            style={
+              styles.resetCard
+            }
+          >
+            <div
+              style={
+                styles.cardHeader
+              }
+            >
+              <div
+                style={
+                  styles.cardTitleWrap
+                }
+              >
+                <div
+                  style={
+                    styles.cardIcon
+                  }
+                >
+                  <RotateCcw
+                    size={18}
+                    strokeWidth={2.4}
+                  />
+                </div>
+
+                <div>
+                  <h2
+                    style={
+                      styles.cardTitle
+                    }
+                  >
+                    Reset Today&apos;s
+                    Progress
+                  </h2>
+
+                  <p
+                    style={
+                      styles.cardDescription
+                    }
+                  >
+                    Start today&apos;s
+                    water progress from
+                    zero.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <button
               type="button"
               onClick={
-                addReminderTime
+                handleResetToday
               }
+              disabled={resetting}
               style={{
-                ...styles.addButton,
-                width: "auto",
-                flex: "0 0 auto",
-                padding:
-                  "0 16px",
-                marginTop: 0,
+                ...styles.resetButton,
+                opacity:
+                  resetting
+                    ? 0.6
+                    : 1,
+                cursor:
+                  resetting
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
-              <Plus size={16} />
-              Add reminder
+              <RotateCcw
+                size={16}
+              />
+
+              {resetting
+                ? "Resetting..."
+                : "Reset Today's Progress"}
             </button>
-          </div>
-        </section>
 
-        {/* =====================================================
-            RESET TODAY
-        ===================================================== */}
-
-        <section
-          style={
-            styles.resetCard
-          }
-        >
-          <div
-            style={
-              styles.cardHeader
-            }
-          >
-            <div
-              style={
-                styles.cardTitleWrap
-              }
-            >
+            {message && (
               <div
                 style={
-                  styles.cardIcon
+                  styles.message
                 }
               >
-                <RotateCcw
-                  size={18}
-                  strokeWidth={2.4}
-                />
+                {message}
               </div>
+            )}
+          </section>
 
-              <div>
-                <h2
-                  style={
-                    styles.cardTitle
-                  }
-                >
-                  Reset Today&apos;s
-                  Progress
-                </h2>
+          {/* =====================================================
+              SAVE
+          ===================================================== */}
 
-                <p
-                  style={
-                    styles.cardDescription
-                  }
-                >
-                  Start today&apos;s
-                  water progress from
-                  zero.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={
-              handleResetToday
+          <section
+            style={
+              styles.saveCard
             }
-            disabled={resetting}
-            style={{
-              ...styles.resetButton,
-              opacity:
-                resetting
-                  ? 0.6
-                  : 1,
-              cursor:
-                resetting
-                  ? "not-allowed"
-                  : "pointer",
-            }}
           >
-            <RotateCcw
-              size={16}
-            />
-
-            {resetting
-              ? "Resetting..."
-              : "Reset Today's Progress"}
-          </button>
-
-          {message && (
-            <div
-              style={
-                styles.message
+            <button
+              type="button"
+              onClick={
+                handleSave
               }
-            >
-              {message}
-            </div>
-          )}
-        </section>
-
-        {/* =====================================================
-            SAVE
-        ===================================================== */}
-
-        <section
-          style={
-            styles.saveCard
-          }
-        >
-          <button
-            type="button"
-            onClick={
-              handleSave
-            }
-            disabled={
-              saving ||
-              !hasChanges
-            }
-            style={{
-              ...styles.saveButton,
-              opacity:
-                saving
-                  ? 0.7
-                  : 1,
-              cursor:
+              disabled={
                 saving ||
                 !hasChanges
-                  ? "default"
-                  : "pointer",
-            }}
-          >
-            {saving ? (
-              <>
-                <Check
-                  size={17}
-                  strokeWidth={3}
-                />
-                Saving...
-              </>
-            ) : hasChanges ? (
-              <>
-                <Check
-                  size={17}
-                  strokeWidth={3}
-                />
-                Save Goal
-              </>
-            ) : (
-              <>
-                <Check
-                  size={17}
-                  strokeWidth={3}
-                />
-                Saved
-              </>
-            )}
-          </button>
-        </section>
+              }
+              style={{
+                ...styles.saveButton,
+                opacity:
+                  saving
+                    ? 0.7
+                    : 1,
+                cursor:
+                  saving ||
+                  !hasChanges
+                    ? "default"
+                    : "pointer",
+              }}
+            >
+              {saving ? (
+                <>
+                  <Check
+                    size={17}
+                    strokeWidth={3}
+                  />
+                  Saving...
+                </>
+              ) : hasChanges ? (
+                <>
+                  <Check
+                    size={17}
+                    strokeWidth={3}
+                  />
+                  Save 
+                </>
+              ) : (
+                <>
+                  <Check
+                    size={17}
+                    strokeWidth={3}
+                  />
+                  Saved
+                </>
+              )}
+            </button>
+          </section>
 
+        </div>
       </div>
-    </div>
+    </>
   );
 }

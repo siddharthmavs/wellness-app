@@ -754,18 +754,17 @@
 --------------------------------------------------------- */
 
 html.dark .move-reset-card {
-  background: #29483a;
-  color: #edf6f0;
+  color: #fdfdfd;
   border-color: #111815;
   box-shadow: 8px 8px 0 #080c0b;
 }
 
 html.dark .move-card-title {
-  color: #f3faf5;
+  color: #292b2a;
 }
 
 html.dark .move-card-subtitle {
-  color: #c9d9d0;
+  color: #292b2a;
 }
 
 /* ---------------------------------------------------------
@@ -796,15 +795,15 @@ html.dark .move-exercise-image {
 --------------------------------------------------------- */
 
 html.dark .move-progress-title {
-  color: #edf6f0;
+  color: #292b2a;
 }
 
 html.dark .move-progress-title span:last-child {
-  color: #b9cbc2;
+  color: #292b2a;
 }
 
 html.dark .move-time {
-  color: #dce9e1;
+  color: #292b2a;
 }
 
 html.dark .move-progress-circle {
@@ -825,11 +824,11 @@ html.dark .move-progress-circle.current {
 }
 
 html.dark .move-status {
-  color: #b9cbc2;
+  color: #292b2a;
 }
 
 html.dark .move-status.next {
-  color: #91c8a6;
+    color: #292b2a;
 }
 
 html.dark .move-connector {
@@ -845,14 +844,14 @@ html.dark .move-connector.completed {
 --------------------------------------------------------- */
 
 html.dark .move-start-button {
-  background: #82ad68;
+  background: #9fb491;
   color: #071009;
   border-color: #111815;
   box-shadow: 0 4px 0 #080c0b;
 }
 
 html.dark .move-start-button:hover {
-  background: #94bd79;
+  color: #292b2a;
 }
 
 html.dark .move-complete-state {
@@ -1173,3 +1172,53 @@ html.dark .move-settings-modal::-webkit-scrollbar-thumb:hover {
   }
 }
 
+.move-reset-card {
+  /* ... your existing styles ... */
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.move-reset-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 11px 11px 0 #000;
+}
+
+/* For dark mode */
+html.dark .move-reset-card:hover {
+  box-shadow: 11px 11px 0 #080c0b;
+}
+
+/* =========================================================
+   PAUSE / RESUME BUTTON
+========================================================= */
+
+.move-pause-resume-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 3px solid #000;
+  background: #fff;
+  color: #111;
+  font-weight: 900;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #000;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.move-pause-resume-button:hover {
+  transform: translateY(-1px);
+  background: #f4f4f4;
+}
+
+html.dark .move-pause-resume-button {
+  background: #677770;
+  color: #edf5ef;
+  border-color: #0b100e;
+  box-shadow: 3px 3px 0 #050807;
+}
+
+html.dark .move-pause-resume-button:hover {
+  background: #5c6962;
+}
