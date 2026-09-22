@@ -33,7 +33,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LineChart, Line
 const TABS = [
  { id: "users", label: "PEOPLE & ACCESS", icon: Users, color: "yellow" },
  { id: "challenges", label: "CHALLENGES", icon: Trophy, color: "pink" },
- { id: "reminders", label: "REMINDERS", icon: Bell, color: "cyan" },
+ 
  { id: "analytics", label: "ANALYTICS", icon: BarChart3, color: "green" },
  { id: "feedback", label: "FEEDBACK", icon: MessageSquare, color: "yellow" },
  { id: "rewards", label: "REWARDS", icon: Gift, color: "pink" },
@@ -185,7 +185,6 @@ export default function AdminDashboard() {
       <div className="pt-5 sm:pt-6">
         {tab === "users" && <UsersTab />}
         {tab === "challenges" && <ChallengesTab />}
-        {tab === "reminders" && <RemindersTab />}
         {tab === "analytics" && <AnalyticsTab />}
         {tab === "feedback" && <FeedbackTab />}
         {tab === "rewards" && <RewardsTab />}
@@ -760,42 +759,7 @@ const ChallengesTab = () => {
  );
 };
 
-/* =========================================================
-   REMINDERS
-========================================================= */
 
-const RemindersTab = () => {
- const [cfg, setCfg] = useState({ water_interval_min: 60, eye_care_interval_min: 20, stand_interval_min: 90, enabled: true });
- useEffect(() => { api.get("/admin/reminders").then(({ data }) => setCfg(data)); }, []);
- const save = async () => {
- await api.put("/admin/reminders", cfg);
- toast.success(" Saved");
- };
- return (
- <BrutalCard color="cyan" hover={false} data-testid="reminders-tab">
- <h3 className="font-display font-black text-2xl uppercase mb-3">Reminder Config</h3>
- <div className="space-y-3 max-w-md">
- <div>
- <label className="font-bold uppercase text-xs"> Water (minutes)</label>
- <BrutalInput type="number" value={cfg.water_interval_min} onChange={(e) => setCfg({ ...cfg, water_interval_min: +e.target.value })} />
- </div>
- <div>
- <label className="font-bold uppercase text-xs"> Eye Care (minutes)</label>
- <BrutalInput type="number" value={cfg.eye_care_interval_min} onChange={(e) => setCfg({ ...cfg, eye_care_interval_min: +e.target.value })} />
- </div>
- <div>
- <label className="font-bold uppercase text-xs"> Move & Reset (minutes)</label>
- <BrutalInput type="number" value={cfg.stand_interval_min} onChange={(e) => setCfg({ ...cfg, stand_interval_min: +e.target.value })} />
- </div>
- <label className="flex items-center gap-2 font-bold uppercase">
- <input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} className="w-5 h-5 border-[3px] border-black" />
- Enabled
- </label>
- <BrutalButton data-testid="save-reminders" color="green" onClick={save}> SAVE</BrutalButton>
- </div>
- </BrutalCard>
- );
-};
 
 /* =========================================================
    ANALYTICS
@@ -1748,7 +1712,7 @@ const PointsTab = () => {
           </div>
         )}
       </BrutalCard>
-
+ 
       {/* REWARD EDITOR MODAL */}
       {selectedActivity && rewardDraft && (
         <div

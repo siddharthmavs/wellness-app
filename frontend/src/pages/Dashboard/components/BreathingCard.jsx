@@ -36,22 +36,21 @@ const DEFAULT_SCHEDULE = [
 const REWARD_CONFIG_KEY =
   "wellness-reward-config";
 
-const DEFAULT_REWARD_GOAL = 3;
+/*
+  IMPORTANT:
+  Breathing rewards are NOT hardcoded here.
 
-const DEFAULT_BREATHING_REWARDS = [
-  {
-    threshold: 50,
-    xp: 5,
-  },
-  {
-    threshold: 75,
-    xp: 10,
-  },
-  {
-    threshold: 100,
-    xp: 20,
-  },
-];
+  Admin -> Points is the source of truth.
+
+  If Admin has:
+    rewardGoal: 3
+    milestones:
+      1 -> 10 XP
+      2 -> 30 XP
+      3 -> 70 XP
+
+  those exact values are used by this card.
+*/
 
 /* =========================================================
    BREATHING PHASES
@@ -143,32 +142,52 @@ const loadBreathingRewardConfig = () => {
         REWARD_CONFIG_KEY
       );
 
+    /*
+      No Admin configuration means
+      no breathing rewards are available.
+    */
     if (!saved) {
       return {
-        rewardGoal:
-          DEFAULT_REWARD_GOAL,
-
-        milestones:
-          DEFAULT_BREATHING_REWARDS,
+        rewardGoal: 0,
+        milestones: [],
       };
     }
 
     const parsed =
       JSON.parse(saved);
 
+    const savedBreathing =
+      parsed?.breathing;
+
+    if (!savedBreathing) {
+      return {
+        rewardGoal: 0,
+        milestones: [],
+      };
+    }
+
     const savedRewardGoal =
       Number(
-        parsed?.breathing?.rewardGoal
+        savedBreathing.rewardGoal
       );
 
     const rewardGoal =
+      Number.isFinite(
+        savedRewardGoal
+      ) &&
       savedRewardGoal > 0
         ? savedRewardGoal
-        : DEFAULT_REWARD_GOAL;
+        : 0;
 
     const savedMilestones =
-      parsed?.breathing?.milestones;
+      savedBreathing.milestones;
 
+    /*
+      These values come directly
+      from Admin Points.
+
+      No XP values are created here.
+    */
     const milestones =
       Array.isArray(
         savedMilestones
@@ -189,7 +208,6 @@ const loadBreathingRewardConfig = () => {
                   item.xp
                 ) &&
                 item.threshold > 0 &&
-                item.threshold <= 100 &&
                 item.xp >= 0
             )
             .sort(
@@ -201,19 +219,12 @@ const loadBreathingRewardConfig = () => {
 
     return {
       rewardGoal,
-
-      milestones:
-        milestones.length > 0
-          ? milestones
-          : DEFAULT_BREATHING_REWARDS,
+      milestones,
     };
   } catch {
     return {
-      rewardGoal:
-        DEFAULT_REWARD_GOAL,
-
-      milestones:
-        DEFAULT_BREATHING_REWARDS,
+      rewardGoal: 0,
+      milestones: [],
     };
   }
 };
@@ -538,7 +549,8 @@ export default function BreathingCard({
      MANUAL & AUTO PAUSE STATE
   ======================================================= */
 
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPaused, setIsPaused] =
+    useState(false);
 
   const currentPhase =
     PHASES[phase];
@@ -579,19 +591,30 @@ export default function BreathingCard({
       : 0;
 
   /* =========================================================
-     VISIBILITY CHANGE (AUTO PAUSE ON TAB/APP SWITCH)
+     VISIBILITY CHANGE
+     AUTO PAUSE ON TAB/APP SWITCH
   ========================================================= */
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && showExercise) {
+      if (
+        document.hidden &&
+        showExercise
+      ) {
         setIsPaused(true);
       }
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
     };
   }, [showExercise]);
 
@@ -635,7 +658,6 @@ export default function BreathingCard({
                       item.xp
                     ) &&
                     item.threshold > 0 &&
-                    item.threshold <= 100 &&
                     item.xp >= 0
                 )
                 .sort(
@@ -647,14 +669,15 @@ export default function BreathingCard({
 
         config = {
           rewardGoal:
+            Number.isFinite(
+              eventRewardGoal
+            ) &&
             eventRewardGoal > 0
               ? eventRewardGoal
-              : DEFAULT_REWARD_GOAL,
+              : 0,
 
           milestones:
-            eventMilestones.length > 0
-              ? eventMilestones
-              : DEFAULT_BREATHING_REWARDS,
+            eventMilestones,
         };
       }
 
@@ -1211,77 +1234,101 @@ export default function BreathingCard({
 
   /* =========================================================
      FIND NEW REWARD MILESTONES
+
+     IMPORTANT:
+     Admin thresholds are COUNT-BASED.
+
+     Example Admin configuration:
+
+       1 -> 10 XP
+       2 -> 30 XP
+       3 -> 70 XP
+
+     Therefore:
+       session 1 reaches threshold 1
+       session 2 reaches threshold 2
+       session 3 reaches threshold 3
+
+     There is NO percentage calculation here.
   ========================================================= */
 
-  const getNewlyReachedMilestones =
-    (
-      previousCompleted,
-      newCompleted
-    ) => {
-      const latestConfig =
-        rewardConfigRef.current;
+  const getNewlyReachedMilestones = (
+    previousCompleted,
+    newCompleted
+  ) => {
+    const latestConfig =
+      rewardConfigRef.current;
 
-      const currentRewardGoal =
+    const currentRewardGoal =
+      Number(
+        latestConfig.rewardGoal
+      );
+
+    const currentMilestones =
+      latestConfig.milestones;
+
+    if (
+      currentRewardGoal <= 0 ||
+      !Array.isArray(
+        currentMilestones
+      ) ||
+      currentMilestones.length === 0
+    ) {
+      return [];
+    }
+
+    const previousCount =
+      Math.min(
         Number(
-          latestConfig.rewardGoal
-        );
+          previousCompleted
+        ) || 0,
+        currentRewardGoal
+      );
 
-      const currentMilestones =
-        latestConfig.milestones;
+    const newCount =
+      Math.min(
+        Number(
+          newCompleted
+        ) || 0,
+        currentRewardGoal
+      );
 
-      if (
-        currentRewardGoal <= 0 ||
-        !Array.isArray(
-          currentMilestones
-        )
-      ) {
-        return [];
-      }
+    const latestRewarded =
+      loadRewardedMilestones();
 
-      const previousProgress =
-        Math.min(
-          (previousCompleted /
-            currentRewardGoal) *
-            100,
-          100
-        );
+    rewardedMilestonesRef.current =
+      latestRewarded;
 
-      const newProgress =
-        Math.min(
-          (newCompleted /
-            currentRewardGoal) *
-            100,
-          100
-        );
-
-      const latestRewarded =
-        loadRewardedMilestones();
-
-      rewardedMilestonesRef.current =
-        latestRewarded;
-
-      return currentMilestones
-        .filter(
-          (milestone) =>
-            newProgress >=
-              milestone.threshold &&
-            previousProgress <
+    return currentMilestones
+      .filter(
+        (milestone) =>
+          newCount >=
+            Number(
               milestone.threshold
-        )
-        .filter(
-          (milestone) =>
-            !latestRewarded[
-              String(
-                milestone.threshold
-              )
-            ]
-        )
-        .sort(
-          (a, b) =>
-            a.threshold -
+            ) &&
+          previousCount <
+            Number(
+              milestone.threshold
+            )
+      )
+      .filter(
+        (milestone) =>
+          !latestRewarded[
+            String(
+              milestone.threshold
+            )
+          ]
+      )
+      .sort(
+        (a, b) =>
+          Number(
+            a.threshold
+          ) -
+          Number(
             b.threshold
-        );
-    };
+          )
+      );
+  };
 
   /* =========================================================
      COMPLETE SESSION
@@ -2014,7 +2061,9 @@ export default function BreathingCard({
                           currentPhase.to,
                       }}
                       transition={{
-                        duration: isPaused ? 0 : currentPhase.duration,
+                        duration: isPaused
+                          ? 0
+                          : currentPhase.duration,
                         ease:
                           "easeInOut",
                       }}
@@ -2065,20 +2114,31 @@ export default function BreathingCard({
               )}
 
               {/* PAUSE / RESUME BUTTON */}
+
               {!isRoundPause && (
                 <div className="breathing-pause-container">
                   <button
                     type="button"
-                    className={`breathing-pause-button ${isPaused ? "is-paused" : ""}`}
-                    onClick={() => setIsPaused(!isPaused)}
+                    className={`breathing-pause-button ${
+                      isPaused
+                        ? "is-paused"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      setIsPaused(
+                        !isPaused
+                      )
+                    }
                   >
                     {isPaused ? (
                       <>
-                        <Play size={16} /> RESUME
+                        <Play size={16} />{" "}
+                        RESUME
                       </>
                     ) : (
                       <>
-                        <Pause size={16} /> PAUSE
+                        <Pause size={16} />{" "}
+                        PAUSE
                       </>
                     )}
                   </button>
@@ -2151,7 +2211,8 @@ export default function BreathingCard({
                 goal of{" "}
                 <strong>
                   {goal} sessions
-                </strong>.
+                </strong>
+                .
               </p>
 
               {shouldOfferContinue ? (
@@ -2263,7 +2324,8 @@ export default function BreathingCard({
                   <strong>
                     {
                       currentReward.threshold
-                    }%
+                    }{" "}
+                    breathing sessions
                   </strong>{" "}
                   of your daily
                   breathing reward

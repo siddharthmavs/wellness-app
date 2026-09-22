@@ -1134,76 +1134,68 @@ export default function EyeBreakCard({
       }
     };
 
-  const getNewlyReachedMilestones =
-    (
-      previousCompleted,
-      newCompleted
-    ) => {
-      const latestConfig =
-        rewardConfigRef.current;
+    const getNewlyReachedMilestones = (
+    previousCompleted,
+    newCompleted
+  ) => {
+    const latestConfig =
+      rewardConfigRef.current;
 
-      const currentRewardGoal =
-        Number(
-          latestConfig.rewardGoal
-        );
+    const currentRewardGoal =
+      Number(latestConfig.rewardGoal);
 
-      const currentMilestones =
-        latestConfig.milestones;
+    const currentMilestones =
+      latestConfig.milestones;
 
-      if (
-        currentRewardGoal <= 0 ||
-        !Array.isArray(
-          currentMilestones
-        )
-      ) {
-        return [];
-      }
+    if (
+      currentRewardGoal <= 0 ||
+      !Array.isArray(currentMilestones)
+    ) {
+      return [];
+    }
 
-      const previousProgress =
-        Math.min(
-          (previousCompleted /
-            currentRewardGoal) *
-            100,
-          100
-        );
+    // Eye Break rewards are COUNT-BASED:
+    // 1 break = milestone 1
+    // 2 breaks = milestone 2
+    // 3 breaks = milestone 3
+    // 4 breaks = milestone 4
+    const previousCount = Math.min(
+      Number(previousCompleted) || 0,
+      currentRewardGoal
+    );
 
-      const newProgress =
-        Math.min(
-          (newCompleted /
-            currentRewardGoal) *
-            100,
-          100
-        );
+    const newCount = Math.min(
+      Number(newCompleted) || 0,
+      currentRewardGoal
+    );
 
-      const latestRewarded =
-        loadRewardedMilestones();
+    const latestRewarded =
+      loadRewardedMilestones();
 
-      rewardedMilestonesRef.current =
-        latestRewarded;
+    rewardedMilestonesRef.current =
+      latestRewarded;
 
-      return currentMilestones
-        .filter(
-          (milestone) =>
-            newProgress >=
-              milestone.threshold &&
-            previousProgress <
-              milestone.threshold
-        )
-        .filter(
-          (milestone) =>
-            !latestRewarded[
-              String(
-                milestone.threshold
-              )
-            ]
-        )
-        .sort(
-          (a, b) =>
-            a.threshold -
-            b.threshold
-        );
-    };
-
+    return currentMilestones
+      .filter(
+        (milestone) =>
+          newCount >=
+            Number(milestone.threshold) &&
+          previousCount <
+            Number(milestone.threshold)
+      )
+      .filter(
+        (milestone) =>
+          !latestRewarded[
+            String(milestone.threshold)
+          ]
+      )
+      .sort(
+        (a, b) =>
+          Number(a.threshold) -
+          Number(b.threshold)
+      );
+  };
+  
   const startExercise = () => {
     if (allGoalsComplete) {
       return;
