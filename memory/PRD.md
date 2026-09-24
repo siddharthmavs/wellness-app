@@ -182,6 +182,28 @@ dedicated Me page, Settings pages wired to the backend, and real Web Push.
   Push" toggle in Notification Settings, independent of the existing in-tab
   desktop `Notification` popups.
 
+### Chunk 12 (Bug Fix Requirements, QA Bug Report, Move & Reset Enhancement — Sep 2026)
+- **Tenant isolation (BUG-03)** — every tenant-owned collection carries `org_id`;
+  all reads/writes are pinned to the caller's org (`org_q`), foreign ids answer
+  404; legacy rows were backfilled into the Demo Organization. `/seed` is admin-only.
+  Per-user browser state (ritual cards, timer, music) is namespaced by user id
+  (`lib/userStorage.js`), so rituals no longer carry over between accounts (QA #9).
+- **Duplicate orgs (BUG-02)** — normalized-name unique index, 409 with
+  "An organization with this name already exists."
+- **Daily points (BUG-01, QA #6)** — `daily_points` ledger per org business day
+  (per-org timezone, default Asia/Kolkata); navbar/dashboard show points today;
+  new accounts start at 0; client-sent dates/points ignored.
+- **Profile Settings (BUG-04, QA #2–4)** — `/settings/profile`, password
+  change/forgot/reset (SMTP or logged link + admin reset link), navbar account chip.
+- **Engagement fixes** — quiz graded server-side (QA #13), reflections validated
+  (QA #14), one reaction per click (QA #10), double-submit guards (QA #11),
+  labeled Kudos counters (QA #12), Stay-on-track prompt fixed + close button
+  (QA #1, #7), 20-20-20 chime with mute (QA #5), saved facts/tips on Me (QA #8).
+- **Guided Move Break** — server-owned sessions (start/pause/resume/advance/
+  checkpoint/end/complete), SVG/CSS looping demonstrations, pause on hidden tab
+  with explicit Resume, reduced-motion fallback, keyboard accessible, single
+  idempotent award.
+
 ## Tech Notes
 - Backend pytest: /app/backend/tests/backend_test.py + test_chunk2.py
 - Frontend uses REACT_APP_BACKEND_URL; backend on /api prefix
