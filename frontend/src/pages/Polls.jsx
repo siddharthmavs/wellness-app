@@ -5,8 +5,10 @@ import { useAuthStore } from "../store";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag } from "../components/brutal";
 import { toast } from "sonner";
 import { Plus, X } from "lucide-react";
+import { useSubmitGuard } from "../lib/useSubmitGuard";
 
 export default function Polls() {
+ const [busy, guard] = useSubmitGuard();
  const { user } = useAuthStore();
  const canCreate = user?.role === "admin" || user?.role === "team_lead";
  const [polls, setPolls] = useState([]);
@@ -19,26 +21,28 @@ export default function Polls() {
  };
  useEffect(() => { load(); }, []);
 
- const vote = async (pid, idx) => {
+ const vote = (pid, idx) => guard(`vote-${pid}`, async () => {
  await api.post(`/polls/${pid}/vote`, { option_idx: idx });
- toast.success(" Voted +2 pts");
+ toast.success("Vote saved");
  load();
- };
+ });
 
  const addOpt = () => setForm({ ...form, options: [...form.options, ""] });
  const removeOpt = (i) => setForm({ ...form, options: form.options.filter((_, x) => x !== i) });
  const setOpt = (i, v) => { const o = [...form.options]; o[i] = v; setForm({ ...form, options: o }); };
 
- const create = async () => {
+ const create = () => {
  if (!form.question.trim() || form.options.filter(o => o.trim()).length < 2) {
  toast.error("Q + 2 options minimum");
  return;
  }
+ return guard("create", async () => {
  await api.post("/polls", { ...form, options: form.options.filter(o => o.trim()) });
- toast.success(" Poll up!");
+ toast.success("Poll up!");
  setForm({ question: "", options: ["", ""], expires_in_days: 7 });
  setShowForm(false);
  load();
+ });
  };
 
  return (
@@ -78,7 +82,7 @@ export default function Polls() {
  </button>
  )}
  </div>
- <BrutalButton data-testid="poll-create" color="green" onClick={create}> LAUNCH</BrutalButton>
+ <BrutalButton data-testid="poll-create" color="green" onClick={create} disabled={!!busy.create}>{busy.create ? "LAUNCHING..." : "LAUNCH"}</BrutalButton>
  </BrutalCard>
  )}
 

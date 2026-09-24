@@ -338,33 +338,68 @@ class TestNotifications:
 
 # ---------- Learning bites (current branch) ----------
 class TestLearningBites:
-    def test_quiz_payload_present(self, user_session):
+    def test_quiz_payload_hides_the_answer(self, user_session):
         bites = user_session.get(f"{API}/learning-bites?department=Engineering", timeout=20).json()
         assert bites
         for b in bites:
             assert isinstance(b["options"], list) and len(b["options"]) >= 2
-            assert 0 <= b["correct_index"] < len(b["options"])
+            assert "correct_index" not in b  # graded server-side (QA #13)
             assert b["resource_url"].startswith("http")
 
-    def test_modes_and_dedupe(self, user_session):
+    def test_wrong_quiz_answer_earns_nothing(self, user_session):
+        # lb3's correct option is index 0
+        before = user_session.get(f"{API}/auth/me", timeout=20).json()["points"]
+        wrong = user_session.post(f"{API}/learning-bites/lb3/tried",
+                                  json={"mode": "quiz", "answer_index": 2}, timeout=20)
+        assert wrong.status_code == 200
+        assert wrong.json()["correct"] is False and wrong.json()["awarded"] == 0
+        # a correct retry is acknowledged but still earns nothing
+        retry = user_session.post(f"{API}/learning-bites/lb3/tried",
+                                  json={"mode": "quiz", "answer_index": 0}, timeout=20).json()
+        assert retry["correct"] is True and retry["awarded"] == 0
+        assert user_session.get(f"{API}/auth/me", timeout=20).json()["points"] == before
+
+    def test_quiz_requires_an_answer(self, user_session):
+        assert user_session.post(f"{API}/learning-bites/lb4/tried", json={"mode": "quiz"}, timeout=20).status_code == 400
+        assert user_session.post(f"{API}/learning-bites/lb4/tried", json={"mode": "quiz", "answer_index": 9}, timeout=20).status_code == 400
+
+    def test_correct_first_answer_awards_once(self, user_session):
         first = user_session.post(f"{API}/learning-bites/lb1/tried",
-                                  json={"mode": "quiz"}, timeout=20).json()
-        assert first["awarded"] > 0 and first["mode"] == "quiz"
-
+                                  json={"mode": "quiz", "answer_index": 1}, timeout=20).json()
+        assert first["correct"] is True and first["awarded"] > 0
         again = user_session.post(f"{API}/learning-bites/lb1/tried",
-                                  json={"mode": "quiz"}, timeout=20).json()
-        assert again["already"] is True
+                                  json={"mode": "quiz", "answer_index": 1}, timeout=20).json()
+        assert again["already"] is True and again["awarded"] == 0
 
-        assert user_session.post(f"{API}/learning-bites/lb2/tried",
-                                 json={"mode": "reflect", "meta": "  "}, timeout=20).status_code == 400
-        assert user_session.post(f"{API}/learning-bites/lb2/tried",
+    @pytest.mark.parametrize("text", [
+        "  ", "useful", "good good good good good good", "asdf qwrt zxcv plkm nbvc hjkl",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "1234 5678 9012 3456 7890 1234",
+        "Use 8pt grid for spacing",
+    ])
+    def test_thin_reflections_are_rejected(self, user_session, text):
+        r = user_session.post(f"{API}/learning-bites/lb3/tried", json={"mode": "reflect", "meta": text}, timeout=20)
+        assert r.status_code == 400, text
+        assert r.json()["message"]
+
+    def test_meaningful_reflection_awards(self, user_session):
+        ok = user_session.post(f"{API}/learning-bites/lb2/tried", json={
+            "mode": "reflect",
+            "meta": "I will reorder our user query index so equality fields come before the date range.",
+        }, timeout=20)
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["awarded"] > 0
+
+    def test_other_modes_validation(self, user_session):
+        assert user_session.post(f"{API}/learning-bites/lb5/tried",
                                  json={"mode": "telepathy"}, timeout=20).status_code == 400
+        assert user_session.post(f"{API}/learning-bites/lb5/tried", json={}, timeout=20).status_code == 400
         assert user_session.post(f"{API}/learning-bites/nope/tried",
-                                 json={}, timeout=20).status_code == 404
-
-        ok = user_session.post(f"{API}/learning-bites/lb2/tried",
-                               json={"mode": "reflect", "meta": "useful"}, timeout=20)
-        assert ok.status_code == 200
+                                 json={"mode": "deepdive"}, timeout=20).status_code == 404
+        # vouch must name someone in your own organization
+        assert user_session.post(f"{API}/learning-bites/lb5/tried",
+                                 json={"mode": "vouch", "meta": "@nobody-here-xyz"}, timeout=20).status_code == 400
+        assert user_session.post(f"{API}/learning-bites/lb5/tried",
+                                 json={"mode": "vouch", "meta": "@alex"}, timeout=20).status_code == 200
 
 
 # ---------- Game teams: bounties, challenges, occasion shuffle (current branch) ----------

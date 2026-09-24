@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput, BrutalTag, BrutalBadge } from "../components/brutal";
@@ -6,9 +6,17 @@ import { useAuthStore } from "../store";
 import { toast } from "sonner";
 import { Trophy } from "lucide-react";
 import { EmptyState } from "../components/Skeleton";
+import { IconLaugh, IconHeart, IconClap, IconFire } from "../components/HandDrawn";
 
 const CATEGORIES = ["Helpfulness", "Teamwork", "Problem Solving", "Going Extra Mile", "Just Because"];
-const REACTS = ["", "", "", ""];
+// Same reaction set and icons as the Community feed, with a visible label so each
+// counter is unambiguous (QA #12 — they used to render as a bare "1 1 1 1").
+const REACTS = [
+ { key: "heart", label: "Love", Icon: IconHeart },
+ { key: "clap", label: "Applause", Icon: IconClap },
+ { key: "fire", label: "Fire", Icon: IconFire },
+ { key: "laugh", label: "Haha", Icon: IconLaugh },
+];
 
 export default function Shoutouts() {
  const { user } = useAuthStore();
@@ -18,6 +26,9 @@ export default function Shoutouts() {
  const [picked, setPicked] = useState([]);
  const [category, setCategory] = useState("Helpfulness");
  const [message, setMessage] = useState("");
+ const [sending, setSending] = useState(false);
+ const sendingRef = useRef(false);
+ const reactingRef = useRef(new Set());
 
  const load = async () => {
  const [s, u, d] = await Promise.all([api.get("/shoutouts"), api.get("/users"), api.get("/shoutouts/digest")]);
@@ -28,19 +39,37 @@ export default function Shoutouts() {
 
  const send = async () => {
  if (!picked.length || !message.trim()) { toast.error("Pick someone + write something"); return; }
+ if (sendingRef.current) return; // QA #11: one shoutout per click burst
+ sendingRef.current = true;
+ setSending(true);
+ try {
  await api.post("/shoutouts", { recipient_ids: picked, category, message });
- toast.success(" Shoutout sent");
+ toast.success("Shoutout sent");
  setPicked([]); setMessage("");
  load();
+ } catch (error) {
+ toast.error(error.response?.data?.message || "Couldn't send the shoutout.");
+ } finally {
+ sendingRef.current = false;
+ setSending(false);
+ }
  };
 
  const togglePick = (uid) => {
  setPicked(picked.includes(uid) ? picked.filter((x) => x !== uid) : [...picked, uid]);
  };
 
- const react = async (sid, emoji) => {
- await api.post(`/shoutouts/${sid}/react`, { emoji });
+ const react = async (sid, key) => {
+ if (reactingRef.current.has(sid)) return;
+ reactingRef.current.add(sid);
+ try {
+ await api.post(`/shoutouts/${sid}/react`, { emoji: key });
  load();
+ } catch (error) {
+ toast.error(error.response?.data?.message || "Couldn't save your reaction.");
+ } finally {
+ reactingRef.current.delete(sid);
+ }
  };
 
  return (
@@ -98,7 +127,9 @@ export default function Shoutouts() {
  onChange={(e) => setMessage(e.target.value)}
  />
  <div className="text-[10px] font-bold mt-1">{message.length}/280</div>
- <BrutalButton data-testid="send-shoutout" color="green" onClick={send} className="mt-3"> SEND</BrutalButton>
+ <BrutalButton data-testid="send-shoutout" color="green" onClick={send} disabled={sending} className="mt-3">
+ {sending ? "SENDING..." : "SEND"}
+ </BrutalButton>
  </BrutalCard>
 
  <h2 className="font-display font-black text-2xl uppercase mb-3"> Recent Love</h2>
@@ -120,17 +151,23 @@ export default function Shoutouts() {
  </div>
  <div className="font-semibold text-lg mb-3">"{s.message}"</div>
  <div className="flex gap-2 flex-wrap">
- {REACTS.map((e) => {
- const arr = s.reactions?.[e] || [];
+ {REACTS.map(({ key, label, Icon }) => {
+ const arr = s.reactions?.[key] || [];
  const mine = arr.includes(user?.id);
  return (
  <button
- key={e}
- data-testid={`react-${s.id}-${e}`}
- onClick={() => react(s.id, e)}
- className={`border-[3px] border-black px-3 py-1.5 shadow-brutal-sm font-black text-sm flex items-center gap-1 ${mine ? "bg-brutal-yellow" : "bg-white"}`}
+ key={key}
+ type="button"
+ data-testid={`react-${s.id}-${key}`}
+ onClick={() => react(s.id, key)}
+ title={label}
+ aria-label={`${label}: ${arr.length}`}
+ aria-pressed={mine}
+ className={`border-[3px] border-black px-3 py-1.5 shadow-brutal-sm font-black text-xs flex items-center gap-1.5 ${mine ? "bg-brutal-yellow" : "bg-white"}`}
  >
- {e} {arr.length > 0 && arr.length}
+ <Icon size={18} />
+ <span className="uppercase">{label}</span>
+ <span>{arr.length}</span>
  </button>
  );
  })}

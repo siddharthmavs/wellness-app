@@ -259,24 +259,21 @@ class TestSpotlight:
 
 # -------- Learning Bites --------
 class TestBites:
-    def test_list(self):
-        r = requests.get(f"{API}/learning-bites", timeout=15)
+    def test_list(self, alex_auth):
+        r = requests.get(f"{API}/learning-bites", headers=alex_auth["headers"], timeout=15)
         assert r.status_code == 200
         bites = r.json()
         assert isinstance(bites, list) and len(bites) >= 10
 
     def test_tried_idempotent(self, alex_auth):
-        r = requests.get(f"{API}/learning-bites", timeout=15)
+        r = requests.get(f"{API}/learning-bites", headers=alex_auth["headers"], timeout=15)
         bid = r.json()[0]["id"]
-        t1 = requests.post(f"{API}/learning-bites/{bid}/tried", headers=alex_auth["headers"], timeout=15)
+        t1 = requests.post(f"{API}/learning-bites/{bid}/tried", json={"mode": "deepdive"}, headers=alex_auth["headers"], timeout=15)
         assert t1.status_code == 200
-        d1 = t1.json()
-        # try again — should be idempotent (no additional points)
-        t2 = requests.post(f"{API}/learning-bites/{bid}/tried", headers=alex_auth["headers"], timeout=15)
+        # try again - idempotent, no additional points
+        t2 = requests.post(f"{API}/learning-bites/{bid}/tried", json={"mode": "deepdive"}, headers=alex_auth["headers"], timeout=15)
         assert t2.status_code == 200
-        d2 = t2.json()
-        if "points_awarded" in d2:
-            assert d2["points_awarded"] == 0
+        assert t2.json()["already"] is True and t2.json()["awarded"] == 0
 
 
 # -------- Plants --------

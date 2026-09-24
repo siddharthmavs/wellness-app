@@ -622,3 +622,11 @@ html.dark .brutal-skeleton {
     padding-bottom: 76px;
   }
 }
+/* Error state for answer options (QA #13). The cozy theme remaps the brutal-*
+   palette and button colours with !important, so the error colours need it too. */
+.quiz-option-incorrect,
+.dark .quiz-option-incorrect {
+  background: #fde2e2 !important;
+  border-color: #b91c1c !important;
+  color: #7f1d1d !important;
+}

@@ -8,12 +8,15 @@ import { toast } from "sonner";
 import { MentionInput, renderMentions } from "../components/MentionInput";
 import { Skeleton, EmptyState } from "../components/Skeleton";
 import { IconLaugh, IconHeart, IconClap, IconFire } from "../components/HandDrawn";
+import { useSubmitGuard } from "../lib/useSubmitGuard";
 
+// Stable keys shared with the backend (the old emoji keys were stripped to "", which
+// made every reaction share one counter — QA #10).
 const REACTS = [
- { emoji: "", Icon: IconLaugh },
- { emoji: "", Icon: IconHeart },
- { emoji: "", Icon: IconClap },
- { emoji: "", Icon: IconFire },
+ { key: "laugh", label: "Haha", Icon: IconLaugh },
+ { key: "heart", label: "Love", Icon: IconHeart },
+ { key: "clap", label: "Applause", Icon: IconClap },
+ { key: "fire", label: "Fire", Icon: IconFire },
 ];
 
 export default function FunWall() {
@@ -23,6 +26,7 @@ export default function FunWall() {
  const [content, setContent] = useState("");
  const [image, setImage] = useState("");
  const [commentText, setCommentText] = useState({});
+ const [busy, once] = useSubmitGuard();
  const fileRef = useRef();
 
  const load = async () => {
@@ -42,31 +46,35 @@ export default function FunWall() {
  r.readAsDataURL(f);
  };
 
- const post = async () => {
+ const post = () => {
  if (!content.trim()) { toast.error("Say something, anything"); return; }
+ return once("post", async () => {
  await api.post("/posts", { content, image });
- toast.success(" Posted");
+ toast.success("Posted");
  setContent(""); setImage("");
  if (fileRef.current) fileRef.current.value = "";
  load();
+ });
  };
 
- const like = async (id) => {
+ const like = (id) => once(`like-${id}`, async () => {
  await api.post(`/posts/${id}/like`);
  load();
- };
+ });
 
- const react = async (id, emoji) => {
- await api.post(`/posts/${id}/react`, { emoji });
+ const react = (id, key) => once(`react-${id}`, async () => {
+ await api.post(`/posts/${id}/react`, { emoji: key });
  load();
- };
+ });
 
- const comment = async (id) => {
+ const comment = (id) => {
  const txt = (commentText[id] || "").trim();
  if (!txt) return;
+ return once(`comment-${id}`, async () => {
  await api.post(`/posts/${id}/comment`, { content: txt });
- setCommentText({ ...commentText, [id]: "" });
+ setCommentText((c) => ({ ...c, [id]: "" }));
  load();
+ });
  };
 
  return (
@@ -101,8 +109,8 @@ export default function FunWall() {
  <ImagePlus className="w-4 h-4" /> ADD IMAGE
  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
  </label>
- <BrutalButton data-testid="post-submit" color="yellow" onClick={post}>
- YEET IT
+ <BrutalButton data-testid="post-submit" color="yellow" onClick={post} disabled={!!busy.post}>
+ {busy.post ? "POSTING..." : "YEET IT"}
  </BrutalButton>
  </div>
  </BrutalCard>
@@ -140,14 +148,19 @@ export default function FunWall() {
  <MessageCircle className="w-4 h-4" /> {p.comments?.length || 0}
  </div>
  <div className="flex gap-1.5 ml-1" data-testid={`reactions-${p.id}`}>
- {REACTS.map(({ emoji: e, Icon }) => {
+ {REACTS.map(({ key: e, label, Icon }) => {
  const arr = p.reactions?.[e] || [];
  const mine = arr.includes(user?.id);
  return (
  <button
  key={e}
+ type="button"
  data-testid={`react-${p.id}-${e}`}
  onClick={() => react(p.id, e)}
+ disabled={!!busy[`react-${p.id}`]}
+ title={label}
+ aria-label={`${label}${arr.length ? `, ${arr.length}` : ""}`}
+ aria-pressed={mine}
  className="flex items-center gap-1 px-2 py-1 rounded-full font-semibold text-xs"
  style={{
  background: mine ? "var(--cozy-secondary)" : "var(--cozy-surface)",
@@ -185,8 +198,8 @@ export default function FunWall() {
  value={commentText[p.id] || ""}
  onChange={(v) => setCommentText({ ...commentText, [p.id]: v })}
  />
- <BrutalButton data-testid={`comment-submit-${p.id}`} color="cyan" size="sm" onClick={() => comment(p.id)}>
- POST
+ <BrutalButton data-testid={`comment-submit-${p.id}`} color="cyan" size="sm" onClick={() => comment(p.id)} disabled={!!busy[`comment-${p.id}`]}>
+ {busy[`comment-${p.id}`] ? "POSTING..." : "POST"}
  </BrutalButton>
  </div>
  </motion.div>

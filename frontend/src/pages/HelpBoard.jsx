@@ -6,6 +6,7 @@ import { Heart, ImagePlus, MessageCircle } from "lucide-react";
 import { useAuthStore } from "../store";
 import { toast } from "sonner";
 import { EmptyState } from "../components/Skeleton";
+import { useSubmitGuard } from "../lib/useSubmitGuard";
 
 const CATS = ["All", "Housing", "Travel", "Buy-Sell", "Recommendations", "General"];
 const ICONS = { Housing: "", Travel: "", "Buy-Sell": "", Recommendations: "", General: "" };
@@ -17,6 +18,7 @@ export default function HelpBoard() {
  const [form, setForm] = useState({ category: "Housing", title: "", content: "", image: "" });
  const [comments, setComments] = useState({});
  const fileRef = useRef();
+ const [busy, guard] = useSubmitGuard();
 
  const load = async () => {
  const { data } = await api.get(`/help${filter !== "All" ? `?category=${filter}` : ""}`);
@@ -30,21 +32,25 @@ export default function HelpBoard() {
  const r = new FileReader(); r.onload = () => setForm({ ...form, image: r.result }); r.readAsDataURL(f);
  };
 
- const create = async () => {
+ const create = () => {
  if (!form.title || !form.content) { toast.error("title + content needed"); return; }
+ return guard("create", async () => {
  await api.post("/help", form);
- toast.success(" Posted");
+ toast.success("Posted");
  setForm({ category: "Housing", title: "", content: "", image: "" });
  if (fileRef.current) fileRef.current.value = "";
  load();
+ });
  };
 
- const like = async (id) => { await api.post(`/help/${id}/like`); load(); };
- const comment = async (id) => {
+ const like = (id) => guard(`like-${id}`, async () => { await api.post(`/help/${id}/like`); load(); });
+ const comment = (id) => {
  const t = (comments[id] || "").trim(); if (!t) return;
+ return guard(`comment-${id}`, async () => {
  await api.post(`/help/${id}/comment`, { content: t });
- setComments({ ...comments, [id]: "" });
+ setComments((c) => ({ ...c, [id]: "" }));
  load();
+ });
  };
 
  return (
@@ -89,7 +95,7 @@ export default function HelpBoard() {
  <ImagePlus className="w-4 h-4" /> IMAGE
  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
  </label>
- <BrutalButton data-testid="help-submit" color="green" onClick={create}>POST </BrutalButton>
+ <BrutalButton data-testid="help-submit" color="green" onClick={create} disabled={!!busy.create}>{busy.create ? "POSTING..." : "POST"}</BrutalButton>
  </div>
  </BrutalCard>
 
@@ -131,7 +137,7 @@ export default function HelpBoard() {
  )}
  <div className="mt-3 flex gap-2">
  <BrutalInput placeholder="Help out..." value={comments[p.id] || ""} onChange={(e) => setComments({ ...comments, [p.id]: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") comment(p.id); }} />
- <BrutalButton color="cyan" size="sm" onClick={() => comment(p.id)}>POST</BrutalButton>
+ <BrutalButton color="cyan" size="sm" onClick={() => comment(p.id)} disabled={!!busy[`comment-${p.id}`]}>{busy[`comment-${p.id}`] ? "POSTING..." : "POST"}</BrutalButton>
  </div>
  </motion.div>
  ))}

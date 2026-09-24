@@ -17,6 +17,10 @@ export default function Learn() {
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [reflections, setReflections] = useState({});
   const [taggedColleagues, setTaggedColleagues] = useState({});
+  // Server verdict per bite: { [biteId]: { correct, message } } — the answer key never reaches the browser.
+  const [quizResults, setQuizResults] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [submitting, setSubmitting] = useState(null);
 
   const load = async () => {
     const { data } = await api.get(`/learning-bites${filter !== "All" ? `?department=${filter}` : ""}`);
@@ -26,40 +30,54 @@ export default function Learn() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
 
   const handleActionComplete = async (bite, actionType) => {
-    if (actionType === 'quiz') {
-      const selectedOption = selectedAnswers[bite.id];
-      if (selectedOption === undefined) {
-        toast.error("Pick an option first!");
-        return;
-      }
-      const isCorrect = selectedOption === (bite.correct_index ?? 1);
-      if (!isCorrect) {
-        toast.error("Not quite! Try another option.");
-        return;
-      }
+    if (submitting) return; // one request at a time (QA #11)
+
+    if (actionType === 'quiz' && selectedAnswers[bite.id] === undefined) {
+      toast.error("Pick an option first!");
+      return;
     }
 
     if (actionType === 'reflect' && !reflections[bite.id]?.trim()) {
-      toast.error("Write a quick reflection first!");
+      setFieldErrors({ ...fieldErrors, [bite.id]: "Write a quick reflection first." });
       return;
     }
 
     if (actionType === 'vouch' && !taggedColleagues[bite.id]?.trim()) {
-      toast.error("Tag a teammate's handle!");
+      setFieldErrors({ ...fieldErrors, [bite.id]: "Tag a teammate by name or @handle." });
       return;
     }
 
+    setSubmitting(bite.id);
+    setFieldErrors({ ...fieldErrors, [bite.id]: null });
     try {
       const { data } = await api.post(`/learning-bites/${bite.id}/tried`, {
         mode: actionType,
-        meta: actionType === 'reflect' ? reflections[bite.id] : taggedColleagues[bite.id]
+        answer_index: actionType === 'quiz' ? selectedAnswers[bite.id] : undefined,
+        meta: actionType === 'reflect' ? reflections[bite.id] : actionType === 'vouch' ? taggedColleagues[bite.id] : undefined,
       });
-      if (data.already) toast("Already completed, legend!");
-      else toast.success(" +5 pts — Completed!");
+
+      if (actionType === 'quiz') {
+        setQuizResults({ ...quizResults, [bite.id]: { correct: data.correct, message: data.message } });
+        if (!data.correct) {
+          toast.error("Incorrect answer — no points awarded.");
+          return; // stay on the quiz so they can try again (for learning, not points)
+        }
+      }
+
+      if (data.awarded > 0) toast.success(`+${data.awarded} pts — Completed!`);
+      else if (data.already) toast("Already completed — no extra points.");
+      else if (data.message) toast(data.message);
       setActiveMode({ ...activeMode, [bite.id]: null });
       load();
-    } catch {
-      toast.error("Failed to submit result.");
+    } catch (error) {
+      const message = error.response?.data?.message || "Failed to submit. Please try again.";
+      if (actionType === 'reflect' || actionType === 'vouch') {
+        setFieldErrors({ ...fieldErrors, [bite.id]: message });
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setSubmitting(null);
     }
   };
 
@@ -82,11 +100,9 @@ export default function Learn() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5" data-testid="bites-list">
         {bites.map((b, i) => {
           const mode = activeMode[b.id];
-          const options = b.options || [
-            "It speeds up runtime workflows.",
-            "It optimizes structured data processing effectively.",
-            "It clears regional storage buffers."
-          ];
+          const options = b.options || [];
+          const quizResult = quizResults[b.id];
+          const fieldError = fieldErrors[b.id];
 
           return (
             <motion.div
@@ -98,7 +114,9 @@ export default function Learn() {
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="bg-brutal-cyan border-[2px] border-black px-2 py-0.5 font-black text-xs uppercase">{b.department}</span>
-                  <span className="text-xs font-bold ml-auto">{b.tried_count} completed</span>
+                  <span className="text-xs font-bold ml-auto">
+                    {b.completed ? "✓ You completed this · " : ""}{b.tried_count} completed
+                  </span>
                 </div>
 
                 {/* Default View */}
@@ -113,19 +131,44 @@ export default function Learn() {
                 {mode === 'quiz' && (
                   <div className="my-2">
                     <span className="bg-brutal-yellow border-[2px] border-black px-2 py-0.5 font-black text-[10px] uppercase mb-2 inline-block">Quick Knowledge Check</span>
-                    <div className="flex flex-col gap-2 mb-4">
-                      {options.map((opt, optIdx) => (
-                        <button
-                          key={optIdx}
-                          onClick={() => setSelectedAnswers({ ...selectedAnswers, [b.id]: optIdx })}
-                          className={`text-left text-xs font-bold p-2.5 border-[2px] border-black transition-all ${
-                            selectedAnswers[b.id] === optIdx ? 'bg-brutal-green shadow-sm translate-x-1' : 'bg-gray-50 hover:bg-gray-100'
-                          }`}
-                        >
-                          {opt}
-                        </button>
-                      ))}
+                    {b.quiz_attempted && !quizResult && (
+                      <p className="text-[11px] font-bold mb-2 opacity-70">
+                        You've answered this before — only a correct first answer earns points.
+                      </p>
+                    )}
+                    <div className="flex flex-col gap-2 mb-3" role="radiogroup" aria-label="Answer options">
+                      {options.map((opt, optIdx) => {
+                        const picked = selectedAnswers[b.id] === optIdx;
+                        const verdict = picked && quizResult ? (quizResult.correct ? "correct" : "incorrect") : null;
+                        return (
+                          <button
+                            key={optIdx}
+                            type="button"
+                            role="radio"
+                            aria-checked={picked}
+                            onClick={() => {
+                              setSelectedAnswers({ ...selectedAnswers, [b.id]: optIdx });
+                              setQuizResults({ ...quizResults, [b.id]: undefined });
+                            }}
+                            className={`text-left text-xs font-bold p-2.5 border-[2px] border-black transition-all ${
+                              verdict === "incorrect"
+                                ? "quiz-option-incorrect"
+                                : picked
+                                  ? "bg-brutal-green shadow-sm translate-x-1"
+                                  : "bg-gray-50 hover:bg-gray-100"
+                            }`}
+                          >
+                            {opt}
+                            {verdict === "incorrect" && <span className="ml-2 font-black">✕ Incorrect</span>}
+                          </button>
+                        );
+                      })}
                     </div>
+                    {quizResult && !quizResult.correct && (
+                      <p className="text-xs font-bold mb-3" style={{ color: "#B91C1C" }} role="alert">
+                        {quizResult.message || "Incorrect — no points awarded. Try another option."}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -134,11 +177,18 @@ export default function Learn() {
                   <div className="my-2">
                     <span className="bg-brutal-pink border-[2px] border-black px-2 py-0.5 font-black text-[10px] uppercase mb-2 inline-block">Key Takeaway</span>
                     <textarea
-                      placeholder="How will you apply this today?"
+                      placeholder="How will you apply this today? (at least 5 words)"
+                      aria-label="Your reflection"
+                      aria-invalid={Boolean(fieldError)}
                       value={reflections[b.id] || ""}
                       onChange={(e) => setReflections({ ...reflections, [b.id]: e.target.value })}
-                      className="w-full border-[2px] border-black p-2 text-xs font-medium mb-3 h-20 bg-gray-50 focus:bg-white"
+                      className="w-full border-[2px] border-black p-2 text-xs font-medium mb-1 h-20 bg-gray-50 focus:bg-white"
                     />
+                    <div className="flex justify-between text-[10px] font-bold mb-2 opacity-70">
+                      <span>{(reflections[b.id] || "").trim().split(/\s+/).filter(Boolean).length} words</span>
+                      <span>min 5 words</span>
+                    </div>
+                    {fieldError && <p className="text-xs font-bold mb-2" style={{ color: "#B91C1C" }} role="alert">{fieldError}</p>}
                   </div>
                 )}
 
@@ -169,6 +219,7 @@ export default function Learn() {
                       onChange={(e) => setTaggedColleagues({ ...taggedColleagues, [b.id]: e.target.value })}
                       className="w-full border-[2px] border-black p-2 text-xs font-medium mb-3 bg-gray-50 focus:bg-white"
                     />
+                    {fieldError && <p className="text-xs font-bold mb-2" style={{ color: "#B91C1C" }} role="alert">{fieldError}</p>}
                   </div>
                 )}
               </div>
@@ -177,9 +228,11 @@ export default function Learn() {
               <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t-[2px] border-black/10">
                 {!mode ? (
                   <>
-                    <BrutalButton color="green" onClick={() => setActiveMode({ ...activeMode, [b.id]: 'quiz' })} className="text-[10px] px-2 py-1">
-                      QUIZ (+5)
-                    </BrutalButton>
+                    {options.length > 1 && (
+                      <BrutalButton color="green" onClick={() => setActiveMode({ ...activeMode, [b.id]: 'quiz' })} className="text-[10px] px-2 py-1">
+                        QUIZ (+5)
+                      </BrutalButton>
+                    )}
                     <BrutalButton color="pink" onClick={() => setActiveMode({ ...activeMode, [b.id]: 'reflect' })} className="text-[10px] px-2 py-1">
                       REFLECT
                     </BrutalButton>
@@ -193,12 +246,12 @@ export default function Learn() {
                 ) : (
                   <>
                     {mode !== 'deepdive' ? (
-                      <BrutalButton color="green" onClick={() => handleActionComplete(b, mode)} className="text-xs">
-                        SUBMIT & CLAIM
+                      <BrutalButton color="green" onClick={() => handleActionComplete(b, mode)} disabled={submitting === b.id} className="text-xs">
+                        {submitting === b.id ? "CHECKING..." : "SUBMIT & CLAIM"}
                       </BrutalButton>
                     ) : (
-                      <BrutalButton color="green" onClick={() => handleActionComplete(b, 'deepdive')} className="text-xs">
-                        MARK READ (+5)
+                      <BrutalButton color="green" onClick={() => handleActionComplete(b, 'deepdive')} disabled={submitting === b.id} className="text-xs">
+                        {submitting === b.id ? "SAVING..." : "MARK READ (+5)"}
                       </BrutalButton>
                     )}
                     <BrutalButton color="yellow" onClick={() => setActiveMode({ ...activeMode, [b.id]: null })} className="text-xs">

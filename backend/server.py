@@ -1918,52 +1918,130 @@ LEARNING_BITES = [
 ]
 
 @api.get("/learning-bites")
-async def get_bites(department: Optional[str] = None):
+async def get_bites(department: Optional[str] = None, user=Depends(get_current_user)):
     if department and department != "All":
         bites = [b for b in LEARNING_BITES if b["department"] == department]
     else:
         bites = LEARNING_BITES
-    # attach tried counts
+    members = await org_member_ids(user.get("org_id"))
+    mine = {t["bite_id"]: t for t in await db.bite_tried.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)}
+    quiz_first = {a["bite_id"]: a for a in await db.bite_attempts.find({"user_id": user["id"], "first": True}, {"_id": 0}).to_list(500)}
     out = []
     for b in bites:
-        cnt = await db.bite_tried.count_documents({"bite_id": b["id"]})
-        out.append({**b, "tried_count": cnt})
+        cnt = await db.bite_tried.count_documents({"bite_id": b["id"], "user_id": {"$in": members}})
+        public = {k: v for k, v in b.items() if k != "correct_index"}  # graded server-side only (QA #13)
+        out.append({
+            **public,
+            "tried_count": cnt,
+            "completed": b["id"] in mine,
+            "completed_mode": (mine.get(b["id"]) or {}).get("mode"),
+            "quiz_attempted": b["id"] in quiz_first,
+        })
     return out
 
 BITE_MODES = ("quiz", "reflect", "deepdive", "vouch")
+REFLECTION_MIN_CHARS = 25
+REFLECTION_MIN_WORDS = 5
 
 class BiteTriedReq(BaseModel):
-    mode: Optional[str] = None      # quiz | reflect | deepdive | vouch
-    meta: Optional[str] = None      # reflection text or tagged colleague handle
+    mode: Optional[str] = None          # quiz | reflect | deepdive | vouch
+    meta: Optional[str] = None          # reflection text or tagged colleague handle
+    answer_index: Optional[int] = None  # quiz: the option the user picked
+
+def reflection_problem(text: str, bite: dict) -> Optional[str]:
+    """Why a reflection is too thin to earn points (QA #14), or None if it's acceptable.
+    Aims to stop 'a', 'asdfgh', 'good good good' or a pasted title — not to judge quality."""
+    t = " ".join((text or "").split())
+    words = re.findall(r"[A-Za-z']+", t)
+    if len(t) < REFLECTION_MIN_CHARS or len(words) < REFLECTION_MIN_WORDS:
+        return f"Write at least {REFLECTION_MIN_WORDS} words ({REFLECTION_MIN_CHARS}+ characters) about how you'll apply this."
+    lowered = [w.lower() for w in words]
+    if len(set(lowered)) < max(4, len(lowered) // 3):
+        return "Your reflection repeats the same words — say a little more in your own words."
+    if re.search(r"(.)\1{4,}", t):
+        return "That doesn't look like a real sentence — try describing how you'll use this."
+    letters = sum(c.isalpha() for c in t)
+    if letters < 0.6 * len(t.replace(" ", "")):
+        return "Please write your reflection in words."
+    real = [w for w in lowered if len(w) > 2]
+    vowelless = [w for w in real if not re.search(r"[aeiouy]", w)]
+    if real and len(vowelless) > len(real) / 3:
+        return "That doesn't look like a real sentence — try describing how you'll use this."
+    for source in (bite.get("title", ""), bite.get("body", "")):
+        if source and t.lower() == " ".join(source.split()).lower():
+            return "Put it in your own words rather than copying the tip."
+    return None
 
 @api.post("/learning-bites/{bite_id}/tried")
 async def tried_bite(bite_id: str, body: BiteTriedReq = None, user=Depends(get_current_user)):
-    if not any(b["id"] == bite_id for b in LEARNING_BITES):
+    bite = next((b for b in LEARNING_BITES if b["id"] == bite_id), None)
+    if not bite:
         raise HTTPException(404, "Learning bite not found")
     body = body or BiteTriedReq()
-    mode = (body.mode or "").strip().lower() or None
-    if mode and mode not in BITE_MODES:
+    mode = (body.mode or "").strip().lower()
+    if mode not in BITE_MODES:
         raise HTTPException(400, f"mode must be one of: {', '.join(BITE_MODES)}")
-    if mode in ("reflect", "vouch") and not (body.meta or "").strip():
-        raise HTTPException(400, f"'{mode}' requires meta text")
+    meta = (body.meta or "").strip()
 
     existing = await db.bite_tried.find_one({"bite_id": bite_id, "user_id": user["id"]}, {"_id": 0})
+
+    if mode == "quiz":
+        # QA #13: grade on the server. Only the first answer can earn points; retries are
+        # allowed so people can learn the answer, but they never credit anything.
+        if not isinstance(body.answer_index, int) or not 0 <= body.answer_index < len(bite.get("options") or []):
+            raise HTTPException(400, "Pick one of the answer options")
+        correct = body.answer_index == bite["correct_index"]
+        prior = await db.bite_attempts.find_one({"bite_id": bite_id, "user_id": user["id"], "first": True}, {"_id": 0})
+        await db.bite_attempts.insert_one({
+            "id": str(uuid.uuid4()), "org_id": user.get("org_id"), "bite_id": bite_id,
+            "user_id": user["id"], "answer_index": body.answer_index, "correct": correct,
+            "first": prior is None, "at": now_iso(),
+        })
+        if not correct:
+            return {"correct": False, "awarded": 0, "already": bool(existing),
+                    "message": "Not quite — no points for this one. Give it another look and try again."}
+        if prior is not None or existing:
+            return {"correct": True, "awarded": 0, "already": True,
+                    "message": "Correct! Points are only awarded for a correct first answer."}
+    elif mode == "reflect":
+        problem = reflection_problem(meta, bite)
+        if problem:
+            raise HTTPException(400, problem)
+    elif mode == "vouch":
+        handle = meta.lstrip("@").strip().lower()
+        if not handle:
+            raise HTTPException(400, "Tag a teammate from your organization")
+        teammates = await db.users.find(
+            org_q(user, id={"$ne": user["id"]}, status={"$ne": "deactivated"}),
+            {"_id": 0, "name": 1, "first_name": 1, "nickname": 1, "email": 1},
+        ).to_list(1000)
+        names = set()
+        for t in teammates:
+            names |= {(t.get("name") or "").lower(), (t.get("first_name") or "").lower(),
+                      (t.get("nickname") or "").lower(), (t.get("email") or "").split("@")[0].lower()}
+        if handle not in names - {""}:
+            raise HTTPException(400, "Tag a teammate from your organization (by name or @handle)")
+
     if existing:
-        return {"already": True, "mode": existing.get("mode")}
+        return {"already": True, "awarded": 0, "mode": existing.get("mode"), "correct": True if mode == "quiz" else None}
 
     pc = await get_points_config(user.get("org_id"))
     pts = int(pc.get("bite_tried", 5))
-    await db.bite_tried.insert_one({
-        "id": str(uuid.uuid4()),
-        "bite_id": bite_id,
-        "user_id": user["id"],
-        "mode": mode,
-        "meta": (body.meta or "").strip()[:1000],
-        "points": pts,
-        "at": now_iso(),
-    })
+    try:
+        await db.bite_tried.insert_one({
+            "id": str(uuid.uuid4()),
+            "org_id": user.get("org_id"),
+            "bite_id": bite_id,
+            "user_id": user["id"],
+            "mode": mode,
+            "meta": meta[:1000],
+            "points": pts,
+            "at": now_iso(),
+        })
+    except DuplicateKeyError:  # a concurrent double-submit already claimed it
+        return {"already": True, "awarded": 0, "mode": mode}
     await credit_points(user["id"], pts, user.get("org_id"))
-    return {"awarded": pts, "already": False, "mode": mode}
+    return {"awarded": pts, "already": False, "mode": mode, "correct": True if mode == "quiz" else None}
 
 # ---------- Desk Plant Challenge ----------
 @api.post("/plants/optin")
@@ -4479,6 +4557,11 @@ async def ensure_indexes():
     await db.game_bounties.create_index("status")
     await db.game_challenges.create_index([("status", 1), ("created_at", -1)])
     await db.daily_points.create_index([("user_id", 1), ("date", -1)], unique=True)
+    await db.bite_attempts.create_index([("user_id", 1), ("bite_id", 1), ("first", 1)])
+    try:
+        await db.bite_tried.create_index([("user_id", 1), ("bite_id", 1)], unique=True)
+    except Exception as e:  # legacy duplicate claims; the handler still dedupes by lookup
+        logger.warning("bite_tried unique index skipped: %s", e)
     await db.organizations.create_index("name")
     await db.organizations.create_index("name_normalized", unique=True)
     await db.invitations.create_index("token", unique=True)
