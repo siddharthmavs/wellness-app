@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore, useThemeStore } from "../store";
 import { NotificationBell } from "./NotificationBell";
 import { IconSeedling, IconBolt } from "./HandDrawn";
+import { useTodayPoints } from "../lib/useTodayPoints";
 
 import {
   LogOut,
@@ -118,6 +119,7 @@ const MORE = [
 
 export const Navbar = () => {
   const { user, logout } = useAuthStore();
+  const { pointsToday, totalPoints } = useTodayPoints();
   const { theme, toggle: toggleTheme } = useThemeStore();
   const navigate = useNavigate();
 
@@ -414,8 +416,12 @@ export const Navbar = () => {
 
             <IconBolt size={18} />
 
-            <span className="font-bold text-xs">
-              {user?.points || 0}
+            <span
+              className="font-bold text-xs"
+              title={`${pointsToday} points today · ${totalPoints} total`}
+              aria-label={`${pointsToday} points today, ${totalPoints} total`}
+            >
+              {pointsToday}
             </span>
           </div>
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import Any, Dict, List, Optional
 import uuid
+import time
 import asyncio
 import secrets
 from datetime import datetime, timezone, timedelta
@@ -308,7 +309,32 @@ async def login(body: LoginReq):
 
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
-    return user
+    org = await db.organizations.find_one({"id": user.get("org_id")}, {"_id": 0, "name": 1, "timezone": 1}) or {}
+    return {
+        **user,
+        "org_name": org.get("name"),
+        "org_timezone": org.get("timezone") or DEFAULT_TIMEZONE,
+        "today": await org_today(user),
+        "points_today": await points_today(user),
+    }
+
+@api.get("/points/today")
+async def get_points_today(user=Depends(get_current_user)):
+    """Daily points for the org's current business day (BUG-01): starts at 0 each day,
+    while `total_points` keeps the lifetime/cumulative figure."""
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "points": 1}) or {}
+    return {
+        "date": await org_today(user),
+        "timezone": str(await org_timezone(user.get("org_id"))),
+        "points_today": await points_today(user),
+        "total_points": fresh.get("points", 0),
+    }
+
+@api.get("/points/history")
+async def get_points_history(days: int = 30, user=Depends(get_current_user)):
+    days = max(1, min(365, days))
+    rows = await db.daily_points.find({"user_id": user["id"]}, {"_id": 0, "date": 1, "points": 1}).sort("date", -1).to_list(days)
+    return {"items": rows}
 
 # ---------- Activities / Points ----------
 POINTS_MAP = {"water": 10, "eye_care": 15, "stand": 10, "breathing": 20, "mood": 5, "post": 10}
@@ -349,26 +375,41 @@ def next_streak(user: dict, gc: dict) -> int:
 async def apply_activity_rewards(user: dict, pts: int) -> dict:
     """Persist points/level/wellness-score/streak progression for one logged activity."""
     gc = await get_game_config(user.get("org_id"))
-    new_points = user.get("points", 0) + pts
-    new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
     new_score = min(100, user.get("wellness_score", 50) + gc.get("wellness_score_increment", 2))
     streak = next_streak(user, gc)
-    await db.users.update_one(
+    # $inc (not $set from the caller's snapshot) so concurrent awards can't overwrite each other
+    updated = await db.users.find_one_and_update(
         {"id": user["id"]},
-        {"$set": {
-            "points": new_points,
-            "level": new_level,
-            "wellness_score": new_score,
-            "streak": streak,
-            "last_activity": now_iso(),
-        }},
+        {"$inc": {"points": int(pts)},
+         "$set": {"wellness_score": new_score, "streak": streak, "last_activity": now_iso()}},
+        projection={"_id": 0, "points": 1},
+        return_document=ReturnDocument.AFTER,
     )
-    return {"points": new_points, "level": new_level, "wellness_score": new_score, "streak": streak}
+    new_points = (updated or {}).get("points", 0)
+    new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
+    await db.users.update_one({"id": user["id"]}, {"$set": {"level": new_level}})
+    await record_daily_points(user["id"], pts, user.get("org_id"))
+    return {"points": new_points, "level": new_level, "wellness_score": new_score, "streak": streak,
+            "points_today": await points_today(user)}
+
+# Rituals that can be logged directly. "stand" (Move & Reset) is deliberately absent:
+# its points only come from a server-validated session (POST /move-reset/sessions/...).
+LOGGABLE_ACTIVITIES = {"water", "eye_care", "breathing", "pomodoro"}
+DAILY_AWARD_CAP_PER_TYPE = 12
 
 @api.post("/activities")
 async def log_activity(body: ActivityReq, user=Depends(get_current_user)):
+    if body.type not in LOGGABLE_ACTIVITIES:
+        raise HTTPException(400, f"type must be one of: {', '.join(sorted(LOGGABLE_ACTIVITIES))}")
     pc = await get_points_config(user.get("org_id"))
-    pts = body.points or pc.get(body.type, 5)
+    # Points always come from the org's config; a client-sent value is ignored.
+    pts = int(pc.get(body.type, 5))
+    since = await org_day_start_utc(user, await org_today(user))
+    already = await db.activities.count_documents(
+        {"user_id": user["id"], "type": body.type, "points": {"$gt": 0}, "created_at": {"$gte": since}}
+    )
+    if already >= DAILY_AWARD_CAP_PER_TYPE:
+        pts = 0  # still logged, but no more points today for this ritual
     activity = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -460,7 +501,7 @@ async def create_post(body: PostReq, user=Depends(get_current_user)):
     await db.posts.insert_one(post)
     post.pop("_id", None)
     # award points
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": POINTS_MAP["post"]}})
+    await credit_points(user["id"], POINTS_MAP["post"], user.get("org_id"))
     return post
 
 @api.get("/posts")
@@ -860,9 +901,9 @@ async def create_shoutout(body: ShoutoutReq, user=Depends(get_current_user)):
     await db.shoutouts.insert_one(shout)
     shout.pop("_id", None)
     # points + notifications for each recipient
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 5}})
+    await credit_points(user["id"], 5, user.get("org_id"))
     for rid in recipient_ids:
-        await db.users.update_one({"id": rid}, {"$inc": {"points": 10}})
+        await credit_points(rid, 10, user.get("org_id"))
         await create_notification(
             user_id=rid,
             kind="shoutout",
@@ -1199,6 +1240,7 @@ async def update_organization(body: OrganizationPatch, admin=Depends(require_adm
             raise HTTPException(400, "Unknown timezone")
     if updates:
         await db.organizations.update_one({"id": admin.get("org_id")}, {"$set": updates})
+        _ORG_TZ_CACHE.pop(admin.get("org_id"), None)
     return await db.organizations.find_one({"id": admin.get("org_id")}, {"_id": 0})
 
 def _invite_public(inv: dict) -> dict:
@@ -1475,7 +1517,7 @@ async def vote_poll(pid: str, body: dict, user=Depends(get_current_user)):
     options[option_idx].setdefault("votes", []).append(user["id"])
     await db.polls.update_one({"id": pid}, {"$set": {"options": options}})
     if not had_voted:  # changing your vote doesn't earn the participation points again
-        await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 2}})
+        await credit_points(user["id"], 2, user.get("org_id"))
     return {"options": options}
 
 # ---------- Events (birthdays/anniversaries, doc section 7) ----------
@@ -1643,7 +1685,7 @@ async def submit_score(body: GameScore, user=Depends(get_current_user)):
     # Award some points (capped)
     pts = min(20, body.score // 10)
     if pts > 0:
-        await db.users.update_one({"id": user["id"]}, {"$inc": {"points": pts}})
+        await credit_points(user["id"], pts, user.get("org_id"))
     return {"score": sc, "points_awarded": pts}
 
 @api.get("/games/leaderboard")
@@ -1767,7 +1809,7 @@ async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
     await db.quiz_results.insert_one(rec)
     rec.pop("_id", None)
     if pts:
-        await db.users.update_one({"id": user["id"]}, {"$inc": {"points": pts}})
+        await credit_points(user["id"], pts, user.get("org_id"))
     return {"correct": correct, "total": len(questions), "points": pts, "results": results}
 
 # ---------- Buddy System ----------
@@ -1821,7 +1863,7 @@ async def buddy_checkin(user=Depends(get_current_user)):
         raise HTTPException(404, "No buddy")
     checkins = pair.get("checkins", []) + [{"user_id": user["id"], "at": now_iso()}]
     await db.buddies.update_one({"id": pair["id"]}, {"$set": {"checkins": checkins}})
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 10}})
+    await credit_points(user["id"], 10, user.get("org_id"))
     return {"checkins": len(checkins)}
 
 # ---------- Employee Spotlight (weekly rotation) ----------
@@ -1920,7 +1962,7 @@ async def tried_bite(bite_id: str, body: BiteTriedReq = None, user=Depends(get_c
         "points": pts,
         "at": now_iso(),
     })
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": pts}})
+    await credit_points(user["id"], pts, user.get("org_id"))
     return {"awarded": pts, "already": False, "mode": mode}
 
 # ---------- Desk Plant Challenge ----------
@@ -1969,7 +2011,7 @@ async def plant_checkin(user=Depends(get_current_user)):
         else:
             break
     await db.plants.update_one({"user_id": user["id"]}, {"$set": {"checkins": checkins, "streak": streak}})
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 3}})
+    await credit_points(user["id"], 3, user.get("org_id"))
     return {"streak": streak, "checkins": len(checkins)}
 
 @api.get("/plants/leaderboard")
@@ -2042,7 +2084,7 @@ async def issue_reward(body: RewardReq, admin=Depends(require_admin)):
     await db.rewards.insert_one(rew)
     rew.pop("_id", None)
     if body.type == "points" and body.points:
-        await db.users.update_one({"id": body.user_id}, {"$inc": {"points": body.points}})
+        await credit_points(body.user_id, body.points, admin.get("org_id"))
     await create_notification(
         user_id=body.user_id,
         kind="reward",
@@ -2163,7 +2205,7 @@ async def admin_award_points(body: PointAward, admin=Depends(require_admin)):
         "created_at": now_iso(),
     }
     if body.user_id:
-        await db.users.update_one({"id": body.user_id}, {"$inc": {"points": body.points}})
+        await credit_points(body.user_id, body.points, admin.get("org_id"))
     if body.team_id:
         await db.game_teams.update_one({"id": body.team_id}, {"$inc": {"team_points": body.points}})
     await db.points_log.insert_one(log)
@@ -2862,8 +2904,9 @@ async def reorder_playlist(pid: str, body: PlaylistReorder, user=Depends(get_cur
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
-# Day boundaries are evaluated in UTC unless the caller passes an explicit
-# `date` (YYYY-MM-DD), which lets the browser send its own local day.
+# Parses an explicit YYYY-MM-DD (e.g. a history lookup). "Today" for anything that records
+# progress or points comes from org_today() instead — the org's business timezone is the
+# single authority for the daily boundary (BUG-01), not the browser's clock.
 def parse_day(value: Optional[str] = None) -> str:
     if not value:
         return datetime.now(timezone.utc).date().isoformat()
@@ -2871,6 +2914,63 @@ def parse_day(value: Optional[str] = None) -> str:
         return datetime.strptime(value.strip(), "%Y-%m-%d").date().isoformat()
     except (ValueError, AttributeError):
         raise HTTPException(400, "date must be in YYYY-MM-DD format")
+
+_ORG_TZ_CACHE: Dict[str, tuple] = {}
+
+async def org_timezone(org_id: Optional[str]) -> ZoneInfo:
+    name = None
+    if org_id:
+        cached = _ORG_TZ_CACHE.get(org_id)
+        if cached and cached[1] > time.monotonic():
+            name = cached[0]
+        else:
+            org = await db.organizations.find_one({"id": org_id}, {"_id": 0, "timezone": 1})
+            name = (org or {}).get("timezone")
+            _ORG_TZ_CACHE[org_id] = (name, time.monotonic() + 60)
+    try:
+        return ZoneInfo(name or DEFAULT_TIMEZONE)
+    except Exception:
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+async def org_today(user: dict) -> str:
+    return datetime.now(await org_timezone(user.get("org_id"))).date().isoformat()
+
+async def read_day(user: dict, value: Optional[str]) -> str:
+    return parse_day(value) if value else await org_today(user)
+
+async def org_day_start_utc(user: dict, day: str) -> str:
+    """UTC ISO timestamp of local midnight for `day` in the org's timezone, for
+    filtering created_at (which is stored in UTC)."""
+    tz = await org_timezone(user.get("org_id"))
+    local_midnight = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=tz)
+    return local_midnight.astimezone(timezone.utc).isoformat()
+
+async def record_daily_points(user_id: str, pts: int, org_id: Optional[str] = None) -> None:
+    """Per-user, per-business-day points ledger. The lifetime total on the user doc keeps
+    growing; today's figure is read from here so it naturally starts at 0 each day while
+    history is kept (BUG-01)."""
+    if not pts:
+        return
+    if org_id is None:
+        u = await db.users.find_one({"id": user_id}, {"_id": 0, "org_id": 1}) or {}
+        org_id = u.get("org_id")
+    day = datetime.now(await org_timezone(org_id)).date().isoformat()
+    await db.daily_points.update_one(
+        {"user_id": user_id, "date": day},
+        {"$inc": {"points": int(pts)}, "$set": {"org_id": org_id, "updated_at": now_iso()}},
+        upsert=True,
+    )
+
+async def credit_points(user_id: str, pts: int, org_id: Optional[str] = None) -> None:
+    """The one path for simple point grants: lifetime total + today's ledger together."""
+    if not pts:
+        return
+    await db.users.update_one({"id": user_id}, {"$inc": {"points": int(pts)}})
+    await record_daily_points(user_id, pts, org_id)
+
+async def points_today(user: dict) -> int:
+    row = await db.daily_points.find_one({"user_id": user["id"], "date": await org_today(user)}, {"_id": 0, "points": 1})
+    return int((row or {}).get("points", 0))
 
 def clean_schedule(times: Any, max_len: int = 24) -> List[str]:
     """Validate a list of 24h HH:MM reminder times; de-duplicated and sorted."""
@@ -3069,6 +3169,7 @@ async def award_reward(user_id: str, source: str, xp: int, coins: int = 0,
     )
     if not updated:
         raise HTTPException(404, "User not found")
+    await record_daily_points(user_id, int(xp), updated.get("org_id"))
     gc = await get_game_config(updated.get("org_id"))
 
     new_points = updated.get("points", 0)
@@ -3140,6 +3241,12 @@ async def record_wellness_event(user: dict, atype: str, action: str, value: Any 
     """Log an activity and apply the standard points/level/streak progression."""
     pc = await get_points_config(user.get("org_id"))
     pts = pc.get(atype, 5) if xp is None else int(xp)
+    since = await org_day_start_utc(user, await org_today(user))
+    awarded_today = await db.activities.count_documents(
+        {"user_id": user["id"], "type": atype, "points": {"$gt": 0}, "created_at": {"$gte": since}}
+    )
+    if awarded_today >= DAILY_AWARD_CAP_PER_TYPE:
+        pts = 0  # progress still counts; points for this ritual are capped for the day
     activity = await log_wellness_activity(user["id"], atype, action, value, pts)
     totals = await apply_activity_rewards(user, pts)
     return {"activity": activity, "xp_earned": pts, **totals}
@@ -3210,13 +3317,13 @@ async def water_log_for(user_id: str, date: str) -> dict:
 
 @api.get("/water/today")
 async def water_today(date: Optional[str] = None, user=Depends(get_current_user)):
-    return water_view(await water_log_for(user["id"], parse_day(date)))
+    return water_view(await water_log_for(user["id"], await read_day(user, date)))
 
 @api.post("/water/drink")
 async def water_drink(body: WaterDrinkReq, user=Depends(get_current_user)):
     if body.amount <= 0 or body.amount > MAX_DRINK_ML:
         raise HTTPException(400, f"amount must be between 1 and {MAX_DRINK_ML} ml")
-    date = parse_day(body.date)
+    date = await org_today(user)
     log = await water_log_for(user["id"], date)
 
     goal = max(1, int(log.get("goal") or 2000))
@@ -3244,7 +3351,7 @@ async def water_drink(body: WaterDrinkReq, user=Depends(get_current_user)):
 @api.put("/water/goal")
 async def water_goal(body: GoalReq, user=Depends(get_current_user)):
     goal = validate_goal(body.goal, 500, 10000)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await water_log_for(user["id"], date)
     await save_user_settings(user["id"], {"water": {"goal": goal}})
     log = await db.water_logs.find_one({"user_id": user["id"], "date": date}, {"_id": 0})
@@ -3270,7 +3377,7 @@ async def water_history(days: int = 30, start: Optional[str] = None, end: Option
 
 @api.post("/water/reset")
 async def water_reset(body: DayReq = None, user=Depends(get_current_user)):
-    date = parse_day((body or DayReq()).date)
+    date = await org_today(user)
     await water_log_for(user["id"], date)
     log = await touch_daily_log(db.water_logs, user["id"], date, {
         "consumed": 0, "completed": False, "rewarded": False, "entries": [],
@@ -3319,11 +3426,11 @@ async def eye_break_log_for(user_id: str, date: str) -> dict:
 
 @api.get("/eye-break/today")
 async def eye_break_today(date: Optional[str] = None, user=Depends(get_current_user)):
-    return eye_break_view(await eye_break_log_for(user["id"], parse_day(date)))
+    return eye_break_view(await eye_break_log_for(user["id"], await read_day(user, date)))
 
 @api.post("/eye-break/complete")
 async def eye_break_complete(body: EyeBreakCompleteReq, user=Depends(get_current_user)):
-    date = parse_day(body.date)
+    date = await org_today(user)
     slot = clean_slot(body.slot)
     if body.duration is not None and (body.duration < 0 or body.duration > 3600):
         raise HTTPException(400, "duration must be between 0 and 3600 seconds")
@@ -3355,7 +3462,7 @@ async def eye_break_complete(body: EyeBreakCompleteReq, user=Depends(get_current
 @api.put("/eye-break/goal")
 async def eye_break_goal(body: GoalReq, user=Depends(get_current_user)):
     goal = validate_goal(body.goal, 1, 24)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await eye_break_log_for(user["id"], date)
     await save_user_settings(user["id"], {"eye_break": {"goal": goal}})
     log = await touch_daily_log(db.eye_break_logs, user["id"], date, {"goal": goal})
@@ -3364,7 +3471,7 @@ async def eye_break_goal(body: GoalReq, user=Depends(get_current_user)):
 @api.put("/eye-break/schedule")
 async def eye_break_schedule(body: ScheduleReq, user=Depends(get_current_user)):
     schedule = clean_schedule(body.schedule)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await eye_break_log_for(user["id"], date)
     await save_user_settings(user["id"], {"eye_break": {"schedule": schedule}})
     log = await touch_daily_log(db.eye_break_logs, user["id"], date, {"schedule": schedule})
@@ -3437,7 +3544,7 @@ async def move_reset_log_for(user_id: str, date: str) -> dict:
 
 @api.get("/move-reset/today")
 async def move_reset_today(date: Optional[str] = None, user=Depends(get_current_user)):
-    return move_reset_view(await move_reset_log_for(user["id"], parse_day(date)))
+    return move_reset_view(await move_reset_log_for(user["id"], await read_day(user, date)))
 
 @api.get("/move-reset/activities")
 async def move_reset_activities():
@@ -3450,7 +3557,7 @@ async def move_reset_complete(body: MoveCompleteReq, user=Depends(get_current_us
         raise HTTPException(400, f"activity must be one of: {', '.join(sorted(MOVE_ACTIVITIES))}")
     if body.duration is not None and (body.duration < 0 or body.duration > 3600):
         raise HTTPException(400, "duration must be between 0 and 3600 seconds")
-    date = parse_day(body.date)
+    date = await org_today(user)
     slot = clean_slot(body.slot)
     log = await move_reset_log_for(user["id"], date)
 
@@ -3484,7 +3591,7 @@ async def move_reset_complete(body: MoveCompleteReq, user=Depends(get_current_us
 @api.put("/move-reset/goal")
 async def move_reset_goal(body: GoalReq, user=Depends(get_current_user)):
     goal = validate_goal(body.goal, 1, 24)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await move_reset_log_for(user["id"], date)
     await save_user_settings(user["id"], {"move_reset": {"goal": goal}})
     log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"goal": goal})
@@ -3493,7 +3600,7 @@ async def move_reset_goal(body: GoalReq, user=Depends(get_current_user)):
 @api.put("/move-reset/schedule")
 async def move_reset_schedule(body: ScheduleReq, user=Depends(get_current_user)):
     schedule = clean_schedule(body.schedule)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await move_reset_log_for(user["id"], date)
     await save_user_settings(user["id"], {"move_reset": {"schedule": schedule}})
     log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"schedule": schedule})
@@ -3557,14 +3664,14 @@ async def breathing_log_for(user_id: str, date: str) -> dict:
 
 @api.get("/breathing/today")
 async def breathing_today(date: Optional[str] = None, user=Depends(get_current_user)):
-    return breathing_view(await breathing_log_for(user["id"], parse_day(date)))
+    return breathing_view(await breathing_log_for(user["id"], await read_day(user, date)))
 
 @api.post("/breathing/session")
 async def breathing_session(body: BreathingSessionReq, user=Depends(get_current_user)):
     duration = int(body.duration or 60)
     if duration < 1 or duration > 3600:
         raise HTTPException(400, "duration must be between 1 and 3600 seconds")
-    date = parse_day(body.date)
+    date = await org_today(user)
     slot = clean_slot(body.slot)
     log = await breathing_log_for(user["id"], date)
 
@@ -3592,7 +3699,7 @@ async def breathing_session(body: BreathingSessionReq, user=Depends(get_current_
 @api.put("/breathing/goal")
 async def breathing_goal(body: GoalReq, user=Depends(get_current_user)):
     goal = validate_goal(body.goal, 1, 24)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await breathing_log_for(user["id"], date)
     await save_user_settings(user["id"], {"breathing": {"goal": goal}})
     log = await touch_daily_log(db.breathing_logs, user["id"], date, {"goal": goal})
@@ -3601,7 +3708,7 @@ async def breathing_goal(body: GoalReq, user=Depends(get_current_user)):
 @api.put("/breathing/schedule")
 async def breathing_schedule(body: ScheduleReq, user=Depends(get_current_user)):
     schedule = clean_schedule(body.schedule)
-    date = parse_day(body.date)
+    date = await org_today(user)
     await breathing_log_for(user["id"], date)
     await save_user_settings(user["id"], {"breathing": {"schedule": schedule}})
     log = await touch_daily_log(db.breathing_logs, user["id"], date, {"schedule": schedule})
@@ -3682,7 +3789,7 @@ async def rewards_claim(body: RewardClaimReq, user=Depends(get_current_user)):
     source = (body.source or "").strip()
     if source not in REWARD_RULES:
         raise HTTPException(400, f"source must be one of: {', '.join(sorted(REWARD_RULES))}")
-    date = parse_day(body.date)
+    date = await org_today(user)
 
     checks = {
         "water_goal": (db.water_logs, lambda l: int(l.get("consumed") or 0) >= max(1, int(l.get("goal") or 1)), "water"),
@@ -3806,7 +3913,7 @@ async def streaks(user=Depends(get_current_user)):
 @api.get("/dashboard")
 async def dashboard(date: Optional[str] = None, user=Depends(get_current_user)):
     """Single combined summary so the dashboard needs one request, not six."""
-    day = parse_day(date)
+    day = await read_day(user, date)
     uid = user["id"]
 
     water = water_view(await water_log_for(uid, day))
@@ -3816,7 +3923,7 @@ async def dashboard(date: Optional[str] = None, user=Depends(get_current_user)):
     totals = await current_totals(uid)
     streak_data = await compute_streaks(uid)
 
-    since = f"{day}T00:00:00+00:00"
+    since = await org_day_start_utc(user, day)
     todays = await db.activities.find(
         {"user_id": uid, "created_at": {"$gte": since}}, {"_id": 0}
     ).sort("created_at", -1).to_list(100)
@@ -3844,6 +3951,7 @@ async def dashboard(date: Optional[str] = None, user=Depends(get_current_user)):
         "modules_completed": sum(1 for m in modules if m),
         "modules_total": len(modules),
         "activities_today": len(todays),
+        "points_today": int((await db.daily_points.find_one({"user_id": uid, "date": day}, {"_id": 0, "points": 1}) or {}).get("points", 0)),
         "recent_activity": todays[:10],
     }
 
@@ -4370,6 +4478,7 @@ async def ensure_indexes():
     )
     await db.game_bounties.create_index("status")
     await db.game_challenges.create_index([("status", 1), ("created_at", -1)])
+    await db.daily_points.create_index([("user_id", 1), ("date", -1)], unique=True)
     await db.organizations.create_index("name")
     await db.organizations.create_index("name_normalized", unique=True)
     await db.invitations.create_index("token", unique=True)

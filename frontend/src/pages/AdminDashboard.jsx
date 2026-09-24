@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "../lib/api";
+import { api, resolveAvatar } from "../lib/api";
 import { BrutalButton, BrutalCard, BrutalInput } from "../components/brutal";
 import { toast } from "sonner";
 import {
@@ -27,6 +27,11 @@ import {
   PersonStanding,
   Wind,
   Plus,
+  Link2,
+  KeyRound,
+  UserX,
+  UserCheck,
+  Globe,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, LineChart, Line, Tooltip } from "recharts";
 
@@ -197,40 +202,44 @@ export default function AdminDashboard() {
   );
 }
 
-const PEOPLE_ORG_KEY = "wellness-organization-settings";
-const PEOPLE_INVITES_KEY = "wellness-organization-invitations";
-
-const DEFAULT_ORGANIZATION = {
-  name: "Wellness Garden Inc.",
-  supportEmail: "hr@wellnessgarden.com",
-  workEmailDomain: "wellnessgarden.com",
+const EMPTY_ORGANIZATION = {
+  name: "",
+  supportEmail: "",
+  workEmailDomain: "",
+  timezone: "Asia/Kolkata",
 };
 
-const DEFAULT_INVITATIONS = [
-  {
-    id: "demo-1",
-    name: "John Smith",
-    email: "john@wellnessgarden.com",
-    role: "Employee",
-    status: "Pending",
-    invitedAt: "Today",
-  },
-  {
-    id: "demo-2",
-    name: "Sarah Thomas",
-    email: "sarah@wellnessgarden.com",
-    role: "Employee",
-    status: "Accepted",
-    invitedAt: "Yesterday",
-  },
-];
+// Server shape <-> the camelCase shape this form uses.
+const orgFromApi = (data = {}) => ({
+  name: data.name || "",
+  supportEmail: data.support_email || "",
+  workEmailDomain: data.work_email_domain || "",
+  timezone: data.timezone || "Asia/Kolkata",
+});
 
-const readStoredJSON = (key, fallback) => {
+const orgToApi = (org) => ({
+  name: org.name.trim(),
+  support_email: org.supportEmail.trim(),
+  work_email_domain: org.workEmailDomain.trim().replace(/^@/, ""),
+  timezone: org.timezone,
+});
+
+const TIMEZONES = (() => {
   try {
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
+    return Intl.supportedValuesOf("timeZone");
   } catch {
-    return fallback;
+    return ["Asia/Kolkata", "UTC", "Europe/London", "America/New_York", "America/Los_Angeles", "Asia/Singapore", "Australia/Sydney"];
+  }
+})();
+
+const ROLE_LABELS = { employee: "Employee", team_lead: "Team Lead", admin: "Admin" };
+
+const copyLink = async (link, what = "Invite") => {
+  try {
+    await navigator.clipboard.writeText(link);
+    toast.success(`${what} link copied — share it with the employee.`);
+  } catch {
+    window.prompt(`Copy this ${what.toLowerCase()} link:`, link);
   }
 };
 
@@ -239,26 +248,24 @@ const readStoredJSON = (key, fallback) => {
    1. Organization & Invite
    2. Recent Invitations
    3. Users List
+   Everything here is loaded from and saved to the backend. Nothing
+   org-specific lives in localStorage, so admins of different
+   organizations sharing a browser never see each other's data.
 ========================================================= */
 
 const UsersTab = () => {
   const [users, setUsers] = useState([]);
-  const [org, setOrg] = useState(() =>
-    readStoredJSON(PEOPLE_ORG_KEY, DEFAULT_ORGANIZATION)
-  );
-  const [savedOrg, setSavedOrg] = useState(() =>
-    readStoredJSON(PEOPLE_ORG_KEY, DEFAULT_ORGANIZATION)
-  );
+  const [org, setOrg] = useState(EMPTY_ORGANIZATION);
+  const [savedOrg, setSavedOrg] = useState(EMPTY_ORGANIZATION);
   const [invite, setInvite] = useState({
     name: "",
     email: "",
-    role: "Employee",
+    role: "employee",
   });
-  const [invitations, setInvitations] = useState(() =>
-    readStoredJSON(PEOPLE_INVITES_KEY, DEFAULT_INVITATIONS)
-  );
+  const [invitations, setInvitations] = useState([]);
   const [savingOrg, setSavingOrg] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [busyInviteId, setBusyInviteId] = useState(null);
 
   const load = async () => {
     try {
@@ -270,13 +277,32 @@ const UsersTab = () => {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  const loadOrganization = async () => {
+    try {
+      const { data } = await api.get("/admin/organization");
+      setOrg(orgFromApi(data));
+      setSavedOrg(orgFromApi(data));
+    } catch (error) {
+      console.error("Failed to load organization:", error);
+      toast.error("Could not load organization settings.");
+    }
+  };
+
+  const loadInvitations = async () => {
+    try {
+      const { data } = await api.get("/admin/invitations");
+      setInvitations(data || []);
+    } catch (error) {
+      console.error("Failed to load invitations:", error);
+      toast.error("Could not load invitations.");
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem(PEOPLE_INVITES_KEY, JSON.stringify(invitations));
-  }, [invitations]);
+    load();
+    loadOrganization();
+    loadInvitations();
+  }, []);
 
   const setRole = async (user, role) => {
     try {
@@ -285,7 +311,33 @@ const UsersTab = () => {
       load();
     } catch (error) {
       console.error("Failed to update role:", error);
-      toast.error("Could not update role.");
+      toast.error(error.response?.data?.message || "Could not update role.");
+    }
+  };
+
+  const toggleStatus = async (user) => {
+    const status = user.status === "deactivated" ? "active" : "deactivated";
+    if (
+      status === "deactivated" &&
+      !window.confirm(`Deactivate ${user.name}? They will be signed out and can't sign in until reactivated.`)
+    ) {
+      return;
+    }
+    try {
+      await api.patch(`/admin/users/${user.id}`, { status });
+      toast.success(`${user.name} ${status === "active" ? "reactivated" : "deactivated"}.`);
+      load();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not update access.");
+    }
+  };
+
+  const createResetLink = async (user) => {
+    try {
+      const { data } = await api.post(`/admin/users/${user.id}/password-reset-link`);
+      await copyLink(data.reset_link, "Password reset");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not create a reset link.");
     }
   };
 
@@ -298,7 +350,7 @@ const UsersTab = () => {
       load();
     } catch (error) {
       console.error("Failed to remove user:", error);
-      toast.error("Could not remove user.");
+      toast.error(error.response?.data?.message || "Could not remove user.");
     }
   };
 
@@ -321,9 +373,13 @@ const UsersTab = () => {
     setSavingOrg(true);
 
     try {
-      localStorage.setItem(PEOPLE_ORG_KEY, JSON.stringify(org));
-      setSavedOrg({ ...org });
+      const { data } = await api.put("/admin/organization", orgToApi(org));
+      setOrg(orgFromApi(data));
+      setSavedOrg(orgFromApi(data));
       toast.success("Organization settings saved.");
+    } catch (error) {
+      // e.g. 409 "An organization with this name already exists."
+      toast.error(error.response?.data?.message || "Could not save organization settings.");
     } finally {
       setSavingOrg(false);
     }
@@ -332,7 +388,7 @@ const UsersTab = () => {
   const sendInvitation = async () => {
     const name = invite.name.trim();
     const email = invite.email.trim().toLowerCase();
-    const domain = org.workEmailDomain.trim().toLowerCase().replace(/^@/, "");
+    const domain = savedOrg.workEmailDomain.trim().toLowerCase().replace(/^@/, "");
 
     if (!name) {
       toast.error("Please enter the employee's name.");
@@ -344,64 +400,53 @@ const UsersTab = () => {
       return;
     }
 
-    if (email.split("@")[1] !== domain) {
+    if (domain && email.split("@")[1] !== domain) {
       toast.error(`Please use a ${domain} work email address.`);
       return;
     }
 
-    const existingUser = users.some(
-      (user) => String(user.email || "").toLowerCase() === email
-    );
-    const pendingInvite = invitations.some(
-      (item) => item.email.toLowerCase() === email && item.status === "Pending"
-    );
-
-    if (existingUser) {
-      toast.error("This employee is already a member.");
-      return;
-    }
-
-    if (pendingInvite) {
-      toast.error("This employee already has a pending invitation.");
-      return;
-    }
-
-    const newInvitation = {
-      id: `invite-${Date.now()}`,
-      name,
-      email,
-      role: invite.role,
-      status: "Pending",
-      invitedAt: "Just now",
-    };
-
     setSendingInvite(true);
 
     try {
-      // The current backend surface does not expose an invitation endpoint.
-      // Keep the invitation state ready for the email/invitation API integration.
-      setInvitations((prev) => [newInvitation, ...prev]);
-      toast.success(`Invitation prepared for ${email}`);
-      setInvite({ name: "", email: "", role: "Employee" });
+      const { data } = await api.post("/admin/invitations", { name, email, role: invite.role });
+      setInvite({ name: "", email: "", role: "employee" });
+      await loadInvitations();
+      toast.success(`Invitation created for ${email}`);
+      if (data.accept_link) copyLink(data.accept_link);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not create the invitation.");
     } finally {
       setSendingInvite(false);
     }
   };
 
-  const deleteInvitation = (id) => {
-    const invitation = invitations.find((item) => item.id === id);
-    if (!invitation || invitation.status !== "Pending") return;
-
-    if (!window.confirm(`Delete the pending invitation for ${invitation.name}?`)) {
+  const deleteInvitation = async (invitation) => {
+    if (!window.confirm(`Cancel the invitation for ${invitation.name || invitation.email}?`)) {
       return;
     }
-
-    setInvitations((prev) => prev.filter((item) => item.id !== id));
-    toast.success("Invitation deleted.");
+    setBusyInviteId(invitation.id);
+    try {
+      await api.delete(`/admin/invitations/${invitation.id}`);
+      toast.success("Invitation cancelled.");
+      loadInvitations();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not cancel the invitation.");
+    } finally {
+      setBusyInviteId(null);
+    }
   };
 
-  const resendInvitation = (invitation) => {
-    toast.success(`Invitation resent to ${invitation.email}`);
+  const resendInvitation = async (invitation) => {
+    setBusyInviteId(invitation.id);
+    try {
+      const { data } = await api.post(`/admin/invitations/${invitation.id}/resend`);
+      loadInvitations();
+      if (data.accept_link) copyLink(data.accept_link);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not refresh the invitation.");
+    } finally {
+      setBusyInviteId(null);
+    }
   };
 
   const hasOrgChanges = JSON.stringify(org) !== JSON.stringify(savedOrg);
@@ -470,6 +515,30 @@ const UsersTab = () => {
               </p>
             </div>
 
+            <div>
+              <label className="font-black uppercase text-[10px] block mb-1" htmlFor="org-timezone">
+                Business Timezone
+              </label>
+              <div className="flex items-center gap-2">
+                <Globe className="w-5 h-5 shrink-0" />
+                <select
+                  id="org-timezone"
+                  data-testid="org-timezone"
+                  value={org.timezone}
+                  onChange={(e) => setOrg({ ...org, timezone: e.target.value })}
+                  className="w-full border-[3px] border-black px-3 py-3 font-bold bg-white"
+                >
+                  {!TIMEZONES.includes(org.timezone) && <option value={org.timezone}>{org.timezone}</option>}
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[10px] font-bold uppercase opacity-60 mt-1">
+                Daily points and rituals reset at midnight in this timezone.
+              </p>
+            </div>
+
             <BrutalButton
               color="black"
               onClick={saveOrganization}
@@ -530,9 +599,9 @@ const UsersTab = () => {
                 onChange={(e) => setInvite({ ...invite, role: e.target.value })}
                 className="w-full border-[3px] border-black px-3 py-3 font-bold uppercase bg-white"
               >
-                <option value="Employee">Employee</option>
-                <option value="HR">HR</option>
-                <option value="Manager">Manager</option>
+                <option value="employee">Employee</option>
+                <option value="team_lead">Team Lead</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
 
@@ -543,8 +612,11 @@ const UsersTab = () => {
               className="w-full"
             >
               <UserPlus className="inline w-4 h-4 mr-2" />
-              {sendingInvite ? "PREPARING..." : "SEND INVITATION"}
+              {sendingInvite ? "CREATING..." : "CREATE INVITATION"}
             </BrutalButton>
+            <p className="text-[10px] font-bold uppercase opacity-60">
+              The invite link is copied for you to share with the employee.
+            </p>
           </div>
         </BrutalCard>
       </div>
@@ -577,40 +649,64 @@ const UsersTab = () => {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 border-[3px] border-black bg-brutal-green flex items-center justify-center font-display font-black shrink-0">
-                  {invitation.name.charAt(0).toUpperCase()}
+                  {(invitation.name || invitation.email).charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-black uppercase truncate">{invitation.name}</div>
+                  <div className="font-black uppercase truncate">{invitation.name || invitation.email}</div>
                   <div className="text-xs font-bold truncate">{invitation.email}</div>
                   <div className="text-[10px] font-bold uppercase opacity-60">
-                    {invitation.role} · {invitation.invitedAt}
+                    {ROLE_LABELS[invitation.role] || invitation.role} ·{" "}
+                    {invitation.invited_at ? new Date(invitation.invited_at).toLocaleDateString() : ""}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {invitation.status === "Accepted" ? (
+                {invitation.status === "accepted" ? (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black bg-brutal-green text-xs font-black uppercase">
                     <Check className="w-3 h-3" /> Accepted
                   </span>
+                ) : invitation.status === "cancelled" ? (
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black bg-white text-xs font-black uppercase opacity-60">
+                    <X className="w-3 h-3" /> Cancelled
+                  </span>
                 ) : (
                   <>
-                    <span className="inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black bg-brutal-yellow text-xs font-black uppercase">
-                      <Clock className="w-3 h-3" /> Pending
+                    <span
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 border-[2px] border-black text-xs font-black uppercase ${
+                        invitation.status === "expired" ? "bg-brutal-pink" : "bg-brutal-yellow"
+                      }`}
+                    >
+                      <Clock className="w-3 h-3" /> {invitation.status === "expired" ? "Expired" : "Pending"}
                     </span>
+                    {invitation.accept_link && invitation.status === "pending" && (
+                      <button
+                        type="button"
+                        onClick={() => copyLink(invitation.accept_link)}
+                        title="Copy invite link"
+                        aria-label={`Copy invite link for ${invitation.email}`}
+                        className="border-[3px] border-black bg-white p-2 shadow-brutal-sm"
+                      >
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => resendInvitation(invitation)}
-                      title="Resend invitation"
-                      className="border-[3px] border-black bg-white p-2 shadow-brutal-sm"
+                      disabled={busyInviteId === invitation.id}
+                      title="Refresh invite link"
+                      aria-label={`Refresh invite link for ${invitation.email}`}
+                      className="border-[3px] border-black bg-white p-2 shadow-brutal-sm disabled:opacity-50"
                     >
                       <RotateCcw className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteInvitation(invitation.id)}
-                      title="Delete invitation"
-                      className="border-[3px] border-black bg-brutal-pink p-2 shadow-brutal-sm"
+                      onClick={() => deleteInvitation(invitation)}
+                      disabled={busyInviteId === invitation.id}
+                      title="Cancel invitation"
+                      aria-label={`Cancel invitation for ${invitation.email}`}
+                      className="border-[3px] border-black bg-brutal-pink p-2 shadow-brutal-sm disabled:opacity-50"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -652,15 +748,21 @@ const UsersTab = () => {
               className="flex flex-col md:flex-row md:items-center gap-3 border-[3px] border-black p-3 bg-white shadow-brutal-sm"
             >
               <img
-                src={user.avatar}
+                src={resolveAvatar(user.avatar)}
                 className="w-10 h-10 border-[2px] border-black object-cover"
                 alt=""
               />
 
               <div className="flex-1 min-w-0">
-                <div className="font-black uppercase truncate">{user.name}</div>
+                <div className="font-black uppercase truncate flex items-center gap-2">
+                  {user.name}
+                  {user.status === "deactivated" && (
+                    <span className="text-[9px] px-1.5 py-0.5 border-[2px] border-black bg-brutal-pink">DEACTIVATED</span>
+                  )}
+                </div>
                 <div className="text-xs font-bold truncate">
                   {user.email} · {user.department || "General"} · {user.points ?? 0} pts
+                  {user.created_at ? ` · joined ${new Date(user.created_at).toLocaleDateString()}` : ""}
                 </div>
               </div>
 
@@ -676,10 +778,33 @@ const UsersTab = () => {
               </select>
 
               <button
+                data-testid={`reset-${user.id}`}
+                type="button"
+                onClick={() => createResetLink(user)}
+                title="Copy a password reset link"
+                aria-label={`Copy a password reset link for ${user.name}`}
+                className="bg-white border-[3px] border-black p-2 shadow-brutal-sm"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
+
+              <button
+                data-testid={`status-${user.id}`}
+                type="button"
+                onClick={() => toggleStatus(user)}
+                title={user.status === "deactivated" ? "Reactivate user" : "Deactivate user"}
+                aria-label={`${user.status === "deactivated" ? "Reactivate" : "Deactivate"} ${user.name}`}
+                className="bg-white border-[3px] border-black p-2 shadow-brutal-sm"
+              >
+                {user.status === "deactivated" ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
+              </button>
+
+              <button
                 data-testid={`delete-${user.id}`}
                 type="button"
                 onClick={() => removeUser(user)}
                 title="Remove user"
+                aria-label={`Remove ${user.name}`}
                 className="bg-brutal-pink border-[3px] border-black p-2 shadow-brutal-sm"
               >
                 <Trash2 className="w-4 h-4" />

@@ -1,14 +1,31 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+// Per-user persisted stores (their storage keys are namespaced by user id in
+// lib/userStorage). When the signed-in account changes, drop the previous
+// account's in-memory state and load the new account's own copy.
+const switchUserScopedStores = () => {
+ useTimerStore.setState(freshTimerState());
+ useMusicStore.getState().clear();
+ useTimerStore.persist.rehydrate();
+ useMusicStore.persist.rehydrate();
+};
+
 export const useAuthStore = create(
  persist(
  (set, get) => ({
  token: null,
  user: null,
- setAuth: (token, user) => set({ token, user }),
+ setAuth: (token, user) => {
+ const changed = get().user?.id !== user?.id;
+ set({ token, user });
+ if (changed) switchUserScopedStores();
+ },
  setUser: (user) => set({ user }),
- logout: () => set({ token: null, user: null }),
+ logout: () => {
+ set({ token: null, user: null });
+ switchUserScopedStores();
+ },
  }),
  { name: "brutal-auth" }
  )
@@ -78,13 +95,17 @@ export const useThemeStore = create(
 
 
 
+const freshTimerState = () => ({
+  secs: 3,
+  phase: "ready", // 'ready' | 'work' | 'break'
+  running: true,
+  endTime: Date.now() + 3 * 1000,
+});
+
 export const useTimerStore = create(
   persist(
     (set) => ({
-      secs: 3,
-      phase: "ready", // 'ready' | 'work' | 'break'
-      running: true,
-      endTime: Date.now() + 3 * 1000,
+      ...freshTimerState(),
       setTimerState: (newState) => set((state) => ({ ...state, ...newState })),
     }),
     { name: "brutal-timer" }

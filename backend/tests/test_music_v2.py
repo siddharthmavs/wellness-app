@@ -110,7 +110,7 @@ class TestTrending:
         for tok in [alex["token"], alex["token"], jamie["token"]]:
             r = requests.post(f"{BASE_URL}/api/music/history/{sid}", headers=_hdr(tok), timeout=15)
             assert r.status_code == 200
-        r = requests.get(f"{BASE_URL}/api/music/trending", headers=_hdr(alex["token"]), timeout=15)
+        r = requests.get(f"{BASE_URL}/api/music/trending?limit=50", headers=_hdr(alex["token"]), timeout=15)
         assert r.status_code == 200
         arr = r.json()
         assert isinstance(arr, list)

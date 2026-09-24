@@ -18,6 +18,9 @@ import {
 } from "lucide-react";
 
 import "./WaterCard.css";
+import { toast } from "sonner";
+import { api } from "../../../lib/api";
+import { businessNow } from "../../../lib/userStorage";
 
 const DRINK_AMOUNTS = [100, 250, 500];
 
@@ -36,7 +39,7 @@ const DEFAULT_WATER_REWARDS = [
 export default function WaterCard({
   onWaterReward,
 }) {
-  const getToday = () => new Date().toDateString();
+  const getToday = () => businessNow().toDateString();
   const todayRef = useRef(getToday());
 
   /* =========================================
@@ -107,6 +110,21 @@ export default function WaterCard({
 
     return Number(localStorage.getItem("waterConsumed") || 0);
   });
+
+  // The server's per-user daily log is the source of truth (same value on every
+  // device and after re-login); the local copy only covers the first paint.
+  useEffect(() => {
+    let alive = true;
+    api
+      .get("/water/today")
+      .then(({ data }) => {
+        if (alive && typeof data?.consumed === "number") setWaterConsumed(data.consumed);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /* =========================================
      ADMIN REWARD MILESTONES
@@ -397,6 +415,13 @@ export default function WaterCard({
 
     const previousAmount = waterConsumed;
     const newAmount = waterConsumed + numericAmount;
+
+    // Record the drink on the server (per user, per business day). The server
+    // awards the drink points and the daily-goal bonus; on failure, roll back.
+    api.post("/water/drink", { amount: numericAmount }).catch((error) => {
+      setWaterConsumed((current) => Math.max(0, current - numericAmount));
+      toast.error(error.response?.data?.message || "Couldn't save that drink. Please try again.");
+    });
 
     const newlyReached = getNewlyReachedMilestones(
       previousAmount,

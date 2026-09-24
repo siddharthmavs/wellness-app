@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import "./EyeBreakCard.css";
+import { businessNow } from "../../../lib/userStorage";
 
 /* =========================================================
    CONSTANTS
@@ -94,7 +95,7 @@ const EXERCISES = [
 ========================================================= */
 
 const getToday = () =>
-  new Date().toDateString();
+  businessNow().toDateString();
 
 /* =========================================================
    PERSONAL GOAL

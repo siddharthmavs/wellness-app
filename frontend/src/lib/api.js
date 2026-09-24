@@ -18,8 +18,19 @@ api.interceptors.request.use((config) => {
  return config;
 });
 
+// Any successful write may have earned points; let point displays refresh
+// (coalesced so a burst of requests triggers one refetch).
+let pointsChangedTimer = null;
+const announcePointsChanged = () => {
+ clearTimeout(pointsChangedTimer);
+ pointsChangedTimer = setTimeout(() => window.dispatchEvent(new Event("points-changed")), 300);
+};
+
 api.interceptors.response.use(
- (r) => r,
+ (r) => {
+ if (r.config?.method && r.config.method !== "get") announcePointsChanged();
+ return r;
+ },
  (e) => {
  if (e.response?.status === 401) {
  useAuthStore.getState().logout();

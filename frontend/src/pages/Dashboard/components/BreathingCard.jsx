@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import "./BreathingCard.css";
+import { businessNow } from "../../../lib/userStorage";
 
 /* =========================================================
    CONSTANTS
@@ -87,7 +88,7 @@ const PHASES = {
 ========================================================= */
 
 const getToday = () => {
-  return new Date().toDateString();
+  return businessNow().toDateString();
 };
 
 /* ---------------------------------------------------------

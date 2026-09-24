@@ -1,6 +1,7 @@
 """Chunk 5 - Admin platform control: points config, game config, manual award/audit,
 custom quizzes CRUD, announcements (push), game teams (CRUD + members + shuffle)."""
 import os
+import uuid
 import pytest
 import requests
 from dotenv import load_dotenv
@@ -56,8 +57,11 @@ class TestConfigs:
         r = admin_session.put(f"{API}/admin/points-config", json={"water": 50})
         assert r.status_code == 200
         assert r.json()["water"] == 50
-        # Employee logs water activity
-        r2 = emp_session.post(f"{API}/activities", json={"type": "water"})
+        # A fresh employee (the shared demo one may already be at today's per-ritual cap)
+        inv = admin_session.post(f"{API}/admin/invitations",
+                                 json={"email": f"cfg_{uuid.uuid4().hex[:8]}@example.com", "name": "Cfg Tester"}).json()
+        tok = requests.post(f"{API}/auth/accept-invite", json={"token": inv["token"], "password": "demo1234"}).json()["token"]
+        r2 = requests.post(f"{API}/activities", json={"type": "water"}, headers={"Authorization": f"Bearer {tok}"})
         assert r2.status_code == 200, r2.text
         assert r2.json()["activity"]["points"] == 50, r2.json()
         # Reset to 10

@@ -23,6 +23,7 @@ import fingerExercise from "./assets/finger-exercise.png";
 import neckStretch from "./assets/neck-stretch.png";
 import walking from "./assets/walking.png";
 import shoulderRolling from "./assets/shoulder-rolling.png";
+import { businessNow, unscopedKey } from "../../../lib/userStorage";
 
 /* =========================================================
    CONSTANTS
@@ -163,7 +164,7 @@ const playSound = (type = "tick") => {
 ========================================================= */
 
 const getToday = () => {
-  const date = new Date();
+  const date = businessNow();
 
   return [
     date.getFullYear(),
@@ -580,8 +581,8 @@ export default function MoveResetCard({
 
     const handleStorage = (event) => {
       if (
-        event.key === "moveResetGoal" ||
-        event.key === "moveResetSchedule" ||
+        unscopedKey(event.key) === "moveResetGoal" ||
+        unscopedKey(event.key) === "moveResetSchedule" ||
         event.key === REWARD_CONFIG_KEY
       ) {
         loadSettings();

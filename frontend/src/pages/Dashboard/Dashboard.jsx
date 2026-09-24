@@ -18,6 +18,7 @@ import {
 import { CompanionMascot } from "../../components/CompanionMascot";
 
 import { useAuthStore } from "../../store";
+import { useTodayPoints } from "../../lib/useTodayPoints";
 import { api } from "../../lib/api";
 import { toast } from "sonner";
 
@@ -29,6 +30,7 @@ import ActionCards from "./components/ActionCards";
 
 export default function Dashboard() {
   const { user, setUser } = useAuthStore();
+  const { pointsToday } = useTodayPoints();
 
   const [challenges, setChallenges] = useState([]);
 
@@ -111,24 +113,10 @@ export default function Dashboard() {
      WATER REWARD
   ========================================================= */
 
-  const handleWaterReward = (xp) => {
-    const numericXP =
-      Number(xp) || 0;
-
-    if (numericXP <= 0) {
-      return;
-    }
-
-    setUser({
-      ...user,
-      points:
-        (user?.points || 0) +
-        numericXP,
-    });
-
-    toast.success(
-      `+${numericXP} XP earned!`
-    );
+  const handleWaterReward = () => {
+    // Points are awarded and stored by the server (POST /water/drink); only
+    // refresh the displays here instead of inventing a local-only total.
+    window.dispatchEvent(new Event("points-changed"));
   };
 
   /* =========================================================
@@ -308,7 +296,7 @@ export default function Dashboard() {
                       font-semibold
                     "
                   >
-                    {user?.points || 0} pts
+                    {pointsToday} pts today
                   </span>
 
                   <span

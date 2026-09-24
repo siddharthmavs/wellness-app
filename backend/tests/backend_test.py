@@ -82,16 +82,26 @@ class TestActivities:
         r = session.post(f"{API}/activities", json={"type": "water"}, headers=auth_headers)
         assert r.status_code == 200, r.text
         d = r.json()
-        assert d["points"] == before + 10
         assert d["activity"]["type"] == "water"
-        assert d["activity"]["points"] == 10
+        assert d["activity"]["points"] in (10, 0)  # 0 once today's per-ritual cap is reached
+        assert d["points"] == before + d["activity"]["points"]
 
-    @pytest.mark.parametrize("typ,pts", [("eye_care", 15), ("stand", 10), ("breathing", 20)])
+    @pytest.mark.parametrize("typ,pts", [("eye_care", 15), ("breathing", 20)])
     def test_log_other(self, session, auth_headers, typ, pts):
         before = session.get(f"{API}/auth/me", headers=auth_headers).json()["points"]
         r = session.post(f"{API}/activities", json={"type": typ}, headers=auth_headers)
         assert r.status_code == 200
-        assert r.json()["points"] == before + pts
+        # the demo account may already be at today's per-ritual cap from earlier runs
+        assert r.json()["points"] in (before + pts, before)
+
+    def test_client_points_and_unknown_types_rejected(self, session, auth_headers):
+        before = session.get(f"{API}/auth/me", headers=auth_headers).json()["points"]
+        r = session.post(f"{API}/activities", json={"type": "water", "points": 100000}, headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json()["points"] <= before + 10
+        # Move & Reset points only come from a validated session, not a bare log
+        assert session.post(f"{API}/activities", json={"type": "stand"}, headers=auth_headers).status_code == 400
+        assert session.post(f"{API}/activities", json={"type": "made_up"}, headers=auth_headers).status_code == 400
 
     def test_my_activities(self, session, auth_headers):
         r = session.get(f"{API}/activities/me", headers=auth_headers)
