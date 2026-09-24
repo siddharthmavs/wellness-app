@@ -28,7 +28,7 @@ const SCOPED_KEYS = new Set([
   "breathingCompleted", "breathingDate", "breathingGoal", "breathingRewarded", "breathingSchedule",
   // Personal preferences & reminder bookkeeping
   "notificationSettings", "wellness-appearance-settings", "wellnessNotificationTriggered",
-  "wg-stay-on-track-dismissed",
+  "wg-stay-on-track-dismissed", "wg-eye-timer-muted",
   // Persisted zustand stores holding per-user state
   "brutal-timer", "wg-music",
 ]);

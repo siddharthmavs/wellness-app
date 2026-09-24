@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api, resolveAvatar } from "../lib/api";
 import { toast } from "sonner";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 import { IconMindBlown, IconKnewIt, IconHmm, IconLightbulb, IconBook, IconSparkle } from "./HandDrawn";
 
 const REACTS = [
@@ -9,6 +10,41 @@ const REACTS = [
  { id: "knew_it", label: "Knew it", Icon: IconKnewIt },
  { id: "hmm", label: "Hmm", Icon: IconHmm },
 ];
+
+// Bookmark a fact or tip (QA #8). Saved items are listed on the Me page.
+export const SaveToggle = ({ kind, itemId, saved, onChange }) => {
+ const [busy, setBusy] = useState(false);
+ const toggle = async () => {
+ if (busy) return;
+ setBusy(true);
+ try {
+ if (saved) await api.delete(`/saved-items/${kind}/${encodeURIComponent(itemId)}`);
+ else await api.put("/saved-items", { kind, item_id: itemId });
+ onChange(!saved);
+ toast.success(saved ? "Removed from saved" : "Saved — find it on your Me page");
+ } catch (err) {
+ toast.error(err.response?.data?.message || "Couldn't update your saved items");
+ } finally {
+ setBusy(false);
+ }
+ };
+ const Icon = saved ? BookmarkCheck : Bookmark;
+ return (
+ <button
+ type="button"
+ onClick={toggle}
+ disabled={busy}
+ aria-pressed={saved}
+ aria-label={saved ? "Remove from saved" : "Save for later"}
+ title={saved ? "Saved — click to remove" : "Save for later"}
+ data-testid={`save-${kind}`}
+ className="absolute top-3 right-3 z-20 w-9 h-9 rounded-full flex items-center justify-center transition hover:scale-105"
+ style={{ background: "var(--cozy-surface)", color: "var(--cozy-text)", border: "1px solid var(--cozy-border)", boxShadow: "var(--shadow-cozy)" }}
+ >
+ <Icon className="w-4 h-4" fill={saved ? "currentColor" : "none"} aria-hidden="true" />
+ </button>
+ );
+};
 
 export const DidYouKnowCard = () => {
  const [fact, setFact] = useState(null);
@@ -27,6 +63,7 @@ export const DidYouKnowCard = () => {
  data-testid="did-you-know"
  >
  <div className="absolute -top-2 -right-2 opacity-70 pointer-events-none"><IconLightbulb size={64} /></div>
+ <SaveToggle kind="fact" itemId={fact.id} saved={!!fact.saved} onChange={(saved) => setFact((f) => ({ ...f, saved }))} />
  <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--cozy-muted)" }}>Daily Wellness Fact</div>
  <div className="inline-block px-2 py-0.5 font-semibold text-xs rounded-full mb-2" style={{ background: "var(--cozy-surface)", color: "var(--cozy-text)" }}>{fact.category}</div>
  <p className="font-display text-xl leading-snug mt-1 relative z-10">{fact.fact}</p>
@@ -60,6 +97,7 @@ export const WordOfDayCard = () => {
  data-testid="word-of-day"
  >
  <div className="absolute -bottom-4 -right-4 opacity-30 pointer-events-none"><IconBook size={80} /></div>
+ <SaveToggle kind="tip" itemId={word.id} saved={!!word.saved} onChange={(saved) => setWord((w) => ({ ...w, saved }))} />
  <div className="text-xs font-semibold uppercase tracking-wider mb-1">Wellness Tip · Reflection</div>
  <div className="font-display text-4xl leading-none mt-2">{word.word}</div>
  <div className="text-xs italic mt-1 opacity-80">/{word.pron}/</div>

@@ -6,6 +6,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 import { BrutalButton } from "./brutal";
 
@@ -16,6 +17,9 @@ import {
   RotateCcw,
   Sparkles,
   Bell,
+  X,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 import { useTimerStore } from "../store";
@@ -23,6 +27,84 @@ import { useTimerStore } from "../store";
 const WORK = 20 * 60;
 const BREAK = 20;
 const GET_READY = 3;
+
+// "Later" hides the reminder prompt for the rest of this browser session (QA #1).
+const PROMPT_DISMISSED_KEY = "wg-stay-on-track-dismissed";
+// Timer-only mute (QA #5). The global "sound" notification setting also silences it.
+const MUTE_KEY = "wg-eye-timer-muted";
+
+const readSession = (key) => {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const writeSession = (key, value) => {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable: the prompt simply closes for now */
+  }
+};
+
+const soundsDisabledGlobally = () => {
+  try {
+    return JSON.parse(localStorage.getItem("notificationSettings") || "{}").sound === false;
+  } catch {
+    return false;
+  }
+};
+
+/*
+ * One shared AudioContext, unlocked on the first user gesture so the chime can
+ * still play when the countdown ends while the user is in another tab/app.
+ */
+let chimeContext = null;
+
+const getChimeContext = () => {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!chimeContext) chimeContext = new Ctx();
+  if (chimeContext.state === "suspended") chimeContext.resume().catch(() => {});
+  return chimeContext;
+};
+
+if (typeof window !== "undefined") {
+  const unlock = () => {
+    getChimeContext();
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+  };
+  window.addEventListener("pointerdown", unlock);
+  window.addEventListener("keydown", unlock);
+}
+
+// kind "break": rising two-note chime (look away now); "done": falling (back to work)
+const playChime = (kind) => {
+  try {
+    const ctx = getChimeContext();
+    if (!ctx) return;
+    const notes = kind === "break" ? [660, 880] : [880, 587];
+    notes.forEach((freq, i) => {
+      const start = ctx.currentTime + i * 0.22;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.5);
+    });
+  } catch {
+    /* audio unavailable */
+  }
+};
 
 export const EyeCareTimer = ({ onBreakComplete }) => {
   const {
@@ -35,6 +117,32 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
 
   const [showBreakPopup, setShowBreakPopup] = useState(false);
   const [showPermission, setShowPermission] = useState(false);
+  const [muted, setMuted] = useState(() => {
+    try {
+      return localStorage.getItem(MUTE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+
+  const chime = useCallback((kind) => {
+    if (mutedRef.current || soundsDisabledGlobally()) return;
+    playChime(kind);
+  }, []);
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    try {
+      localStorage.setItem(MUTE_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    if (!next) playChime("done"); // audible confirmation (and unlocks audio)
+  };
 
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
@@ -73,24 +181,44 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
    * =========================================================
    */
 
+  const dismissPermission = useCallback(() => {
+    writeSession(PROMPT_DISMISSED_KEY, "1");
+    setShowPermission(false);
+  }, []);
+
   const requestNotificationPermission = async () => {
+    // Close right away: the browser shows its own prompt, and whatever the
+    // answer is, this card has done its job (QA #1).
+    setShowPermission(false);
+
     if (!("Notification" in window)) {
-      setShowPermission(false);
       return;
     }
 
-    try {
-      const permission =
-        await Notification.requestPermission();
+    let permission = Notification.permission;
 
-      if (permission === "granted") {
-        setShowPermission(false);
-      }
+    try {
+      permission = await Notification.requestPermission();
     } catch (error) {
       console.error(
         "Notification permission failed:",
         error
       );
+    }
+
+    if (permission === "granted") {
+      toast.success("Reminders are on", {
+        description: "We'll nudge you every 20 minutes, even in another app.",
+      });
+    } else if (permission === "denied") {
+      toast("Notifications are blocked", {
+        description: "You can allow them later in your browser's site settings.",
+      });
+    } else {
+      writeSession(PROMPT_DISMISSED_KEY, "1");
+      toast("No problem", {
+        description: "We'll ask again next time you visit.",
+      });
     }
   };
 
@@ -105,10 +233,22 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
       return;
     }
 
-    if (Notification.permission === "default") {
+    if (
+      Notification.permission === "default" &&
+      readSession(PROMPT_DISMISSED_KEY) !== "1"
+    ) {
       setShowPermission(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!showPermission) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") dismissPermission();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showPermission, dismissPermission]);
 
   /*
    * =========================================================
@@ -165,6 +305,8 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
         if (phaseRef.current === "work") {
           setShowBreakPopup(true);
 
+          chime("break");
+
           sendEyeBreakNotification();
 
           setTimerState({
@@ -184,6 +326,8 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
 
         if (phaseRef.current === "break") {
           setShowBreakPopup(false);
+
+          chime("done");
 
           if (onBreakComplete) {
             onBreakComplete();
@@ -220,6 +364,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
     setTimerState,
     sendEyeBreakNotification,
     onBreakComplete,
+    chime,
   ]);
 
   /*
@@ -339,6 +484,10 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
               y: 30,
               scale: 0.95,
             }}
+            role="dialog"
+            aria-labelledby="stay-on-track-title"
+            aria-describedby="stay-on-track-desc"
+            data-testid="stay-on-track"
             className="
               fixed
               bottom-6
@@ -354,7 +503,18 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
               shadow-[8px_8px_0px_#000]
             "
           >
-            <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={dismissPermission}
+              aria-label="Close"
+              title="Close"
+              data-testid="stay-on-track-close"
+              className="absolute top-3 right-3 p-1 rounded-md opacity-60 hover:opacity-100 focus-visible:outline focus-visible:outline-2"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-start gap-3 pr-6">
               <div
                 className="
                   flex
@@ -373,11 +533,11 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
               </div>
 
               <div>
-                <h4 className="font-black uppercase text-sm">
+                <h4 id="stay-on-track-title" className="font-black uppercase text-sm">
                   Stay on track
                 </h4>
 
-                <p className="text-xs font-medium leading-relaxed mt-1 opacity-70">
+                <p id="stay-on-track-desc" className="text-xs font-medium leading-relaxed mt-1 opacity-70">
                   Get a reminder every 20 minutes,
                   even while you're working in
                   another application.
@@ -392,6 +552,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
                   requestNotificationPermission
                 }
                 className="flex-1"
+                data-testid="stay-on-track-allow"
               >
                 <span className="flex items-center justify-center gap-1.5">
                   <Bell className="w-4 h-4" />
@@ -401,9 +562,8 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
 
               <BrutalButton
                 color="white"
-                onClick={() =>
-                  setShowPermission(false)
-                }
+                onClick={dismissPermission}
+                data-testid="stay-on-track-later"
               >
                 Later
               </BrutalButton>
@@ -704,6 +864,29 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleMute}
+            aria-pressed={muted}
+            aria-label={muted ? "Unmute timer sound" : "Mute timer sound"}
+            title={muted ? "Sound off - click to unmute" : "Sound on - click to mute"}
+            data-testid="eye-timer-mute"
+            className="
+              flex
+              items-center
+              justify-center
+              w-8
+              h-8
+              border-[2px]
+              border-black
+              bg-white
+              rounded-full
+              shadow-[2px_2px_0px_#000]
+            "
+          >
+            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
           <span
             className="
               text-[10px]
@@ -724,6 +907,7 @@ export const EyeCareTimer = ({ onBreakComplete }) => {
               ? "Focus"
               : "Rest"}
           </span>
+          </div>
         </div>
 
         {/* ===================================================

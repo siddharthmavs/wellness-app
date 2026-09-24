@@ -5,6 +5,8 @@ import { api } from "../lib/api";
 import { useAuthStore } from "../store";
 import { BrutalCard, BrutalBadge } from "../components/brutal";
 import { RewardsSection } from "../components/RewardsSection";
+import { BookmarkX } from "lucide-react";
+import { toast } from "sonner";
 
 const MODULES = [
  { key: "water", label: "Water", unit: "ml" },
@@ -26,6 +28,7 @@ export default function Me() {
  const [rewards, setRewards] = useState(null);
  const [history, setHistory] = useState([]);
  const [loading, setLoading] = useState(true);
+ const [saved, setSaved] = useState([]);
 
  useEffect(() => {
  let cancelled = false;
@@ -39,8 +42,19 @@ export default function Me() {
  setRewards(r.data);
  setHistory(h.data.items || []);
  }).finally(() => !cancelled && setLoading(false));
+ api.get("/saved-items").then(({ data }) => !cancelled && setSaved(data)).catch(() => {});
  return () => { cancelled = true; };
  }, []);
+
+ const unsave = async (item) => {
+ try {
+ await api.delete(`/saved-items/${item.kind}/${encodeURIComponent(item.item_id)}`);
+ setSaved((list) => list.filter((i) => !(i.kind === item.kind && i.item_id === item.item_id)));
+ toast.success("Removed from saved");
+ } catch (err) {
+ toast.error(err.response?.data?.message || "Couldn't remove that item");
+ }
+ };
 
  if (!user) return null;
 
@@ -55,7 +69,7 @@ export default function Me() {
  <h1 className="font-display font-black text-4xl uppercase leading-none">Me</h1>
  <p className="text-xs font-bold uppercase mt-1 opacity-70">Your personal progress &amp; earned rewards</p>
  </div>
- <Link to="/profile" className="border-[3px] border-black bg-white px-4 py-2 font-black uppercase text-xs shadow-brutal-sm">
+ <Link to="/settings/profile" className="border-[3px] border-black bg-white px-4 py-2 font-black uppercase text-xs shadow-brutal-sm">
  Edit Profile
  </Link>
  </div>
@@ -106,6 +120,31 @@ export default function Me() {
  <div className="font-display font-black text-3xl">{dashboard?.activities_today ?? 0}</div>
  <div className="text-[10px] font-bold uppercase">Activities Today</div>
  </div>
+ </div>
+
+ {/* Saved facts & tips (QA #8) */}
+ <h2 className="font-display font-black text-2xl uppercase mb-3">Saved Facts &amp; Tips</h2>
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8" data-testid="me-saved-items">
+ {saved.map((item) => (
+ <div key={`${item.kind}-${item.item_id}`} className="relative bg-white border-[3px] border-black shadow-brutal-sm p-4 pr-12 rounded-[2px]">
+ <div className="text-[10px] font-black uppercase opacity-60">{item.kind === "fact" ? `Fact · ${item.title}` : "Wellness tip"}</div>
+ {item.kind === "tip" && <div className="font-display font-black text-xl mt-1">{item.title}</div>}
+ <p className="text-sm font-medium mt-1">{item.text}</p>
+ {item.example && <p className="text-xs italic mt-1 opacity-70">"{item.example}"</p>}
+ <button
+ type="button"
+ onClick={() => unsave(item)}
+ aria-label={`Remove "${item.kind === "tip" ? item.title : item.text.slice(0, 40)}" from saved`}
+ title="Remove from saved"
+ className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-black/5"
+ >
+ <BookmarkX className="w-4 h-4" aria-hidden="true" />
+ </button>
+ </div>
+ ))}
+ {saved.length === 0 && (
+ <div className="text-sm font-bold uppercase md:col-span-2">Nothing saved yet — tap the bookmark on a daily fact or tip to keep it here.</div>
+ )}
  </div>
 
  <RewardsSection />

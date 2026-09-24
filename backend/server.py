@@ -81,6 +81,16 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         raise HTTPException(401, "Session expired — please sign in again")
     return user
 
+async def get_optional_user(authorization: Optional[str] = Header(None)):
+    """The caller when a valid token is sent, else None (for public endpoints that
+    personalise their answer when signed in)."""
+    if not authorization:
+        return None
+    try:
+        return await get_current_user(authorization)
+    except HTTPException:
+        return None
+
 async def require_admin(user=Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(403, "Admin only")
@@ -1856,7 +1866,7 @@ async def fact_today(user=Depends(get_current_user)):
     idx = datetime.now(timezone.utc).timetuple().tm_yday % len(FACTS_BANK)
     f = FACTS_BANK[idx]
     reactions = await db.fact_reactions.find_one(org_q(user, fact_id=f["id"]), {"_id": 0}) or {"reactions": {}}
-    return {**f, "reactions": reactions.get("reactions", {})}
+    return {**f, "reactions": reactions.get("reactions", {}), "saved": await is_saved(user, "fact", f["id"])}
 
 class FactReact(BaseModel):
     fact_id: str
@@ -1902,10 +1912,58 @@ WORDS_BANK = [
     {"word": "Yak Shaving", "pron": "yak-shay-ving", "def": "Doing seemingly pointless tasks that lead up to the actual task.", "example": "Half my day was yak shaving build configs.", "tags": ["General"]},
 ]
 
+def word_id(w: dict) -> str:
+    # Derived from the word itself so saved tips survive reordering the bank.
+    return "word-" + re.sub(r"[^a-z0-9]+", "-", w["word"].lower()).strip("-")
+
 @api.get("/words/today")
-async def word_today():
+async def word_today(user=Depends(get_optional_user)):
     idx = datetime.now(timezone.utc).timetuple().tm_yday % len(WORDS_BANK)
-    return {"id": f"w{idx}", **WORDS_BANK[idx]}
+    w = WORDS_BANK[idx]
+    return {"id": word_id(w), **w, "saved": bool(user) and await is_saved(user, "tip", word_id(w))}
+
+# ---------- Saved facts & tips (QA #8) ----------
+SAVEABLE = {
+    **{("fact", f["id"]): {"title": f["category"], "text": f["fact"], "color": f.get("color")} for f in FACTS_BANK},
+    **{("tip", word_id(w)): {"title": w["word"], "text": w["def"], "example": w.get("example"), "tags": w.get("tags", [])}
+       for w in WORDS_BANK},
+}
+
+class SaveItemReq(BaseModel):
+    kind: str      # fact | tip
+    item_id: str
+
+async def is_saved(user: dict, kind: str, item_id: str) -> bool:
+    return bool(await db.saved_items.find_one({"user_id": user["id"], "kind": kind, "item_id": item_id}, {"_id": 1}))
+
+@api.get("/saved-items")
+async def list_saved_items(user=Depends(get_current_user)):
+    rows = await db.saved_items.find({"user_id": user["id"]}, {"_id": 0}).sort("saved_at", -1).to_list(500)
+    items = []
+    for r in rows:
+        content = SAVEABLE.get((r["kind"], r["item_id"]))
+        if content:  # items retired from the banks simply drop out of the list
+            items.append({"kind": r["kind"], "item_id": r["item_id"], "saved_at": r["saved_at"], **content})
+    return items
+
+@api.put("/saved-items")
+async def save_item(body: SaveItemReq, user=Depends(get_current_user)):
+    if (body.kind, body.item_id) not in SAVEABLE:
+        raise HTTPException(404, "Item not found")
+    try:
+        await db.saved_items.update_one(
+            {"user_id": user["id"], "kind": body.kind, "item_id": body.item_id},
+            {"$setOnInsert": {"id": str(uuid.uuid4()), "org_id": user.get("org_id"), "saved_at": now_iso()}},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        pass  # a concurrent save already created it
+    return {"saved": True}
+
+@api.delete("/saved-items/{kind}/{item_id}")
+async def unsave_item(kind: str, item_id: str, user=Depends(get_current_user)):
+    await db.saved_items.delete_one({"user_id": user["id"], "kind": kind, "item_id": item_id})
+    return {"saved": False}
 
 # ---------- Mini Game scores ----------
 class GameScore(BaseModel):
@@ -5069,6 +5127,7 @@ async def ensure_indexes():
         await coll.create_index([("user_id", 1), ("date", -1)], unique=True)
     await db.user_settings.create_index("user_id", unique=True)
     await db.password_resets.create_index("token_hash", unique=True)
+    await db.saved_items.create_index([("user_id", 1), ("kind", 1), ("item_id", 1)], unique=True)
     await db.password_resets.create_index([("user_id", 1), ("created_at", -1)])
     await db.audit_log.create_index([("user_id", 1), ("action", 1), ("created_at", -1)])
     await db.reward_transactions.create_index(
