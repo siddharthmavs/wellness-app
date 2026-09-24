@@ -3630,41 +3630,246 @@ async def move_reset_activities():
 
 @api.post("/move-reset/complete")
 async def move_reset_complete(body: MoveCompleteReq, user=Depends(get_current_user)):
-    activity = (body.activity or "").strip().lower()
-    if activity not in MOVE_ACTIVITIES:
-        raise HTTPException(400, f"activity must be one of: {', '.join(sorted(MOVE_ACTIVITIES))}")
-    if body.duration is not None and (body.duration < 0 or body.duration > 3600):
-        raise HTTPException(400, "duration must be between 0 and 3600 seconds")
+    # This endpoint used to trust a client-sent duration and award points per call, so a
+    # break could be "completed" without doing it. Completion now only happens through a
+    # server-owned session (see /move-reset/sessions below).
+    raise HTTPException(410, "Use a guided Move Break session: POST /api/move-reset/sessions")
+
+
+# ---------- Guided Move Break sessions (Move & Reset enhancement) ----------
+# The server owns the session: it records when each exercise is actively running using
+# server time, requires every interval to be completed (hidden-tab time is excluded
+# because the client pauses on visibilitychange), requires the user to press "Start Next
+# Stretch" at checkpoint transitions, and awards points exactly once on completion.
+# This is reasonable participation validation, not proof of movement.
+
+MOVE_LIBRARY = [
+    {"id": "hand_stretch", "name": "Hand & Finger Stretch",
+     "instruction": "Spread your fingers wide, hold, then relax into a soft fist."},
+    {"id": "wrist_rotation", "name": "Wrist Rotation",
+     "instruction": "Circle both wrists slowly, then switch direction."},
+    {"id": "shoulder_roll", "name": "Shoulder Roll",
+     "instruction": "Lift your shoulders toward your ears, then roll them back and down."},
+    {"id": "neck_stretch", "name": "Neck Stretch",
+     "instruction": "Tilt one ear gently toward your shoulder, hold, then switch sides."},
+    {"id": "side_stretch", "name": "Standing Side Stretch",
+     "instruction": "Stand tall, reach one arm overhead and lean gently to the side."},
+    {"id": "upper_body_stretch", "name": "Upper-Body Stretch",
+     "instruction": "Clasp your hands in front, round your upper back and press away gently."},
+]
+MOVE_SESSION_LENGTH = 5
+MOVE_EXERCISE_SECONDS = int(os.environ.get("MOVE_EXERCISE_SECONDS", "20"))
+MOVE_CHECKPOINT_BEFORE = {2, 4}      # "Start Next Stretch" before exercises 3 and 5
+MOVE_SESSION_TTL = timedelta(minutes=30)
+MOVE_TIME_TOLERANCE = 1.0            # seconds of slack for network/timer jitter
+MOVE_OPEN_STATES = ("RUNNING", "PAUSED")
+
+class MoveEventReq(BaseModel):
+    type: str                        # pause | resume | advance | checkpoint | end
+    index: Optional[int] = None      # the exercise the client believes is current
+
+def _move_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+def _accumulate(s: dict, now: datetime) -> dict:
+    """Fold time since `running_since` into the current exercise (capped at its length)."""
+    if s.get("status") == "RUNNING" and s.get("running_since"):
+        since = datetime.fromisoformat(s["running_since"])
+        i = s["current_index"]
+        secs = list(s["active_seconds"])
+        cap = s["exercises"][i]["seconds"]
+        secs[i] = min(cap, secs[i] + max(0.0, (now - since).total_seconds()))
+        s["active_seconds"] = secs
+        s["running_since"] = now.isoformat()
+    return s
+
+def _move_view(s: dict, now: Optional[datetime] = None) -> dict:
+    now = now or _move_now()
+    s = _accumulate(dict(s), now) if s.get("status") == "RUNNING" else s
+    i = s.get("current_index", 0)
+    ex = s["exercises"][i]
+    return {
+        "id": s["id"],
+        "status": s["status"],
+        "exercises": s["exercises"],
+        "current_index": i,
+        "active_seconds": [round(x, 2) for x in s["active_seconds"]],
+        "remaining_seconds": round(max(0.0, ex["seconds"] - s["active_seconds"][i]), 2),
+        "checkpoints_done": s.get("checkpoints_done", []),
+        "expires_at": s["expires_at"],
+        "server_time": now.isoformat(),
+        "result": s.get("result"),
+    }
+
+async def _load_move_session(sid: str, user: dict) -> dict:
+    s = await db.move_reset_sessions.find_one({"id": sid, "user_id": user["id"]}, {"_id": 0})
+    if not s:
+        raise HTTPException(404, "Move break session not found")
+    if s["status"] in MOVE_OPEN_STATES and _move_now() > datetime.fromisoformat(s["expires_at"]):
+        await db.move_reset_sessions.update_one({"id": sid}, {"$set": {"status": "EXPIRED", "running_since": None}})
+        s["status"] = "EXPIRED"
+    return s
+
+async def _save_move_session(s: dict, event: dict) -> None:
+    await db.move_reset_sessions.update_one(
+        {"id": s["id"], "status": {"$in": list(MOVE_OPEN_STATES)}},
+        {"$set": {k: s[k] for k in ("status", "current_index", "active_seconds", "running_since", "checkpoints_done")}
+                 | {"updated_at": now_iso()},
+         "$push": {"events": event}},
+    )
+
+@api.post("/move-reset/sessions")
+async def start_move_session(user=Depends(get_current_user)):
+    """Start a guided Move Break. Any older open session is ended (only one at a time)."""
+    now = _move_now()
+    await db.move_reset_sessions.update_many(
+        {"user_id": user["id"], "status": {"$in": list(MOVE_OPEN_STATES)}},
+        {"$set": {"status": "ABANDONED", "running_since": None, "updated_at": now_iso()}},
+    )
     date = await org_today(user)
-    slot = clean_slot(body.slot)
-    log = await move_reset_log_for(user["id"], date)
+    done_today = await db.move_reset_sessions.count_documents({"user_id": user["id"], "date": date, "status": "COMPLETED"})
+    offset = done_today % len(MOVE_LIBRARY)  # vary the routine through the day
+    exercises = []
+    for n in range(MOVE_SESSION_LENGTH):
+        base = MOVE_LIBRARY[(offset + n) % len(MOVE_LIBRARY)]
+        exercises.append({**base, "seconds": MOVE_EXERCISE_SECONDS, "checkpoint_before": n in MOVE_CHECKPOINT_BEFORE})
+    s = {
+        "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
+        "user_id": user["id"],
+        "date": date,
+        "status": "RUNNING",               # the first interval begins immediately
+        "exercises": exercises,
+        "current_index": 0,
+        "active_seconds": [0.0] * len(exercises),
+        "running_since": now.isoformat(),
+        "checkpoints_done": [],
+        "events": [{"type": "start", "at": now.isoformat(), "index": 0}],
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "expires_at": (now + MOVE_SESSION_TTL).isoformat(),
+        "result": None,
+    }
+    await db.move_reset_sessions.insert_one(dict(s))
+    return _move_view(s, now)
 
-    if slot and slot in (log.get("completed_slots") or []):
-        return {**move_reset_view(log), "already_completed": True}
+@api.get("/move-reset/sessions/active")
+async def active_move_session(user=Depends(get_current_user)):
+    """Recover after a refresh. A running session comes back paused so the user must
+    press Resume — time while the page was reloading or closed never counts."""
+    s = await db.move_reset_sessions.find_one(
+        {"user_id": user["id"], "status": {"$in": list(MOVE_OPEN_STATES)}}, {"_id": 0}, sort=[("created_at", -1)]
+    )
+    if not s:
+        return None
+    s = await _load_move_session(s["id"], user)
+    if s["status"] == "RUNNING":
+        now = _move_now()
+        s = _accumulate(s, now)
+        s["status"], s["running_since"] = "PAUSED", None
+        await _save_move_session(s, {"type": "pause", "at": now.isoformat(), "index": s["current_index"], "reason": "recovered"})
+    return _move_view(s) if s["status"] in MOVE_OPEN_STATES else None
 
-    completed = int(log.get("completed") or 0) + 1
-    push = {"completed_activities": {
-        "activity": activity,
-        "name": MOVE_ACTIVITIES[activity],
-        "slot": slot,
-        "duration": body.duration or 0,
-        "completed_at": now_iso(),
-    }}
-    if slot:
-        push["completed_slots"] = slot
-    log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"completed": completed}, push=push)
+@api.get("/move-reset/sessions/{sid}")
+async def get_move_session(sid: str, user=Depends(get_current_user)):
+    """Read-only view (unlike /active, it never pauses a running session)."""
+    return _move_view(await _load_move_session(sid, user))
 
-    event = await record_wellness_event(user, "stand", "ACTIVITY_COMPLETED", activity)
+@api.post("/move-reset/sessions/{sid}/events")
+async def move_session_event(sid: str, body: MoveEventReq, user=Depends(get_current_user)):
+    s = await _load_move_session(sid, user)
+    if s["status"] not in MOVE_OPEN_STATES:
+        raise HTTPException(409, f"This move break is {s['status'].lower()}")
+    kind = (body.type or "").strip().lower()
+    now = _move_now()
+    i = s["current_index"]
+    if body.index is not None and body.index != i:
+        raise HTTPException(409, "Out of step with the session — please reload")
+    s = _accumulate(s, now)
+
+    if kind == "pause":
+        s["status"], s["running_since"] = "PAUSED", None
+    elif kind == "resume":
+        s["status"], s["running_since"] = "RUNNING", now.isoformat()
+    elif kind in ("advance", "checkpoint"):
+        if s["status"] != "RUNNING":
+            raise HTTPException(409, "Resume the break before moving on")
+        ex = s["exercises"][i]
+        remaining = ex["seconds"] - s["active_seconds"][i]
+        if remaining > MOVE_TIME_TOLERANCE:
+            raise HTTPException(409, f"This stretch isn't finished yet ({int(remaining + 0.99)}s left)")
+        if i + 1 >= len(s["exercises"]):
+            raise HTTPException(400, "That was the last stretch — finish the break instead")
+        if s["exercises"][i + 1]["checkpoint_before"]:
+            if kind != "checkpoint":
+                raise HTTPException(409, "Press 'Start Next Stretch' to continue")
+            s["checkpoints_done"] = sorted(set(s["checkpoints_done"]) | {i + 1})
+        s["current_index"] = i + 1
+        s["running_since"] = now.isoformat()  # the transition pause itself is not counted
+    elif kind == "end":
+        s["status"], s["running_since"] = "ABANDONED", None
+    else:
+        raise HTTPException(400, "type must be one of: pause, resume, advance, checkpoint, end")
+
+    await _save_move_session(s, {"type": kind, "at": now.isoformat(), "index": i})
+    return _move_view(s, now)
+
+@api.post("/move-reset/sessions/{sid}/complete")
+async def complete_move_session(sid: str, user=Depends(get_current_user)):
+    """Idempotent: the first valid call completes the session and awards points; replays
+    return the same result without awarding again."""
+    s = await _load_move_session(sid, user)
+    if s["status"] == "COMPLETED":
+        return {**(s.get("result") or {}), "session": _move_view(s), "already_completed": True, "xp_earned": 0}
+    if s["status"] not in MOVE_OPEN_STATES:
+        raise HTTPException(409, f"This move break is {s['status'].lower()} and can't be completed")
+
+    now = _move_now()
+    s = _accumulate(s, now)
+    last = len(s["exercises"]) - 1
+    short = [n + 1 for n, ex in enumerate(s["exercises"]) if ex["seconds"] - s["active_seconds"][n] > MOVE_TIME_TOLERANCE]
+    missing_checkpoints = [n for n, ex in enumerate(s["exercises"]) if ex["checkpoint_before"] and n not in s["checkpoints_done"]]
+    if s["current_index"] != last or short or missing_checkpoints:
+        await _save_move_session(s, {"type": "complete_rejected", "at": now.isoformat(), "index": s["current_index"]})
+        detail = f"Not all stretches are finished yet (exercise {', '.join(map(str, short))})" if short else \
+                 "Not all stretches are finished yet"
+        raise HTTPException(409, detail)
+
+    # Atomic state change: only one concurrent/replayed request can win the award.
+    won = await db.move_reset_sessions.find_one_and_update(
+        {"id": sid, "status": {"$in": list(MOVE_OPEN_STATES)}},
+        {"$set": {"status": "COMPLETED", "running_since": None, "active_seconds": s["active_seconds"],
+                  "completed_at": now.isoformat(), "updated_at": now_iso()},
+         "$push": {"events": {"type": "complete", "at": now.isoformat(), "index": last}}},
+        return_document=ReturnDocument.AFTER, projection={"_id": 0},
+    )
+    if not won:
+        fresh = await _load_move_session(sid, user)
+        return {**(fresh.get("result") or {}), "session": _move_view(fresh), "already_completed": True, "xp_earned": 0}
+
+    date = s["date"]
+    await move_reset_log_for(user["id"], date)
+    await db.move_reset_logs.update_one(
+        {"user_id": user["id"], "date": date},
+        {"$inc": {"completed": 1},
+         "$push": {"completed_activities": {
+             "activity": "guided_session", "name": "Guided Move Break", "session_id": sid,
+             "duration": int(sum(s["active_seconds"])), "completed_at": now_iso()}},
+         "$set": {"updated_at": now_iso()}},
+    )
+    log = await db.move_reset_logs.find_one({"user_id": user["id"], "date": date}, {"_id": 0})
+    event = await record_wellness_event(user, "stand", "SESSION_COMPLETED", sid)
     bonus = None
-    if completed >= int(log.get("goal") or 3) and not log.get("rewarded"):
-        fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
-        bonus = await maybe_award_goal_bonus(fresh or user, "move_reset_goal", "stand", date, completed)
+    if int(log.get("completed") or 0) >= int(log.get("goal") or 3) and not log.get("rewarded"):
+        fresh_user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
+        bonus = await maybe_award_goal_bonus(fresh_user or user, "move_reset_goal", "stand", date, log.get("completed"))
         if bonus:
             log = await touch_daily_log(db.move_reset_logs, user["id"], date, {"rewarded": True})
-
-    totals = await current_totals(user["id"])
-    return {**move_reset_view(log), "already_completed": False, "activity": event["activity"],
-            "xp_earned": event["xp_earned"], "goal_bonus": bonus, **totals}
+    result = {**move_reset_view(log), "xp_earned": event["xp_earned"], "goal_bonus": bonus,
+              "points_today": event.get("points_today")}
+    await db.move_reset_sessions.update_one({"id": sid}, {"$set": {"result": result}})
+    won["result"] = result
+    return {**result, "session": _move_view(won, now), "already_completed": False}
 
 @api.put("/move-reset/goal")
 async def move_reset_goal(body: GoalReq, user=Depends(get_current_user)):
@@ -4558,6 +4763,8 @@ async def ensure_indexes():
     await db.game_challenges.create_index([("status", 1), ("created_at", -1)])
     await db.daily_points.create_index([("user_id", 1), ("date", -1)], unique=True)
     await db.bite_attempts.create_index([("user_id", 1), ("bite_id", 1), ("first", 1)])
+    await db.move_reset_sessions.create_index("id", unique=True)
+    await db.move_reset_sessions.create_index([("user_id", 1), ("status", 1), ("created_at", -1)])
     try:
         await db.bite_tried.create_index([("user_id", 1), ("bite_id", 1)], unique=True)
     except Exception as e:  # legacy duplicate claims; the handler still dedupes by lookup

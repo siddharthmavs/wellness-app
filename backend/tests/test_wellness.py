@@ -162,22 +162,35 @@ class TestMoveReset:
         ids = {i["id"] for i in items}
         assert {"neck", "shoulder", "hands", "walking"} <= ids
 
-    def test_complete_flow(self, user_session):
+    def test_goal_and_legacy_completion_retired(self, user_session):
+        # Completion now requires a server-validated guided session
+        # (see test_move_reset_sessions.py); the old trust-the-client path is gone.
         assert user_session.put(f"{API}/move-reset/goal", json={"goal": 2}, timeout=20).status_code == 200
-        assert user_session.post(f"{API}/move-reset/complete",
-                                 json={"activity": "yoga"}, timeout=20).status_code == 400
+        r = user_session.post(f"{API}/move-reset/complete",
+                              json={"activity": "neck", "slot": "10:30", "duration": 60}, timeout=20)
+        assert r.status_code == 410
+        assert user_session.get(f"{API}/move-reset/today", timeout=20).json()["completed"] == 0
 
-        first = user_session.post(f"{API}/move-reset/complete",
-                                  json={"activity": "neck", "slot": "10:30", "duration": 60}, timeout=20).json()
-        assert first["completed"] == 1
-        assert first["completed_activities"][0]["activity"] == "neck"
+    def test_guided_sessions_reach_goal(self, user_session):
+        from pymongo import MongoClient
+        from datetime import datetime, timedelta, timezone
+        load_dotenv(Path(__file__).resolve().parents[2] / 'backend' / '.env')
+        db = MongoClient(os.environ["MONGO_URL"])[os.environ["DB_NAME"]]
 
-        dup = user_session.post(f"{API}/move-reset/complete",
-                                json={"activity": "neck", "slot": "10:30"}, timeout=20).json()
-        assert dup["already_completed"] is True
+        def finish_one():
+            sess = user_session.post(f"{API}/move-reset/sessions", timeout=20).json()
+            for i, ex in enumerate(sess["exercises"]):
+                back = datetime.now(timezone.utc) - timedelta(seconds=ex["seconds"] + 1)
+                db.move_reset_sessions.update_one({"id": sess["id"]}, {"$set": {"running_since": back.isoformat()}})
+                if i < len(sess["exercises"]) - 1:
+                    kind = "checkpoint" if sess["exercises"][i + 1]["checkpoint_before"] else "advance"
+                    assert user_session.post(f"{API}/move-reset/sessions/{sess['id']}/events",
+                                             json={"type": kind, "index": i}, timeout=20).status_code == 200
+            return user_session.post(f"{API}/move-reset/sessions/{sess['id']}/complete", timeout=20).json()
 
-        second = user_session.post(f"{API}/move-reset/complete",
-                                   json={"activity": "walking"}, timeout=20).json()
+        first = finish_one()
+        assert first["completed"] == 1 and first["goal_bonus"] is None
+        second = finish_one()
         assert second["completed"] == 2 and second["goal_bonus"]["awarded"] is True
 
 

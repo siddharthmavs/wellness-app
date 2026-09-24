@@ -18,12 +18,9 @@ import {
 
 import "./MoveResetCard.css";
 
-import handStretch from "./assets/hand-stretch.png";
-import fingerExercise from "./assets/finger-exercise.png";
-import neckStretch from "./assets/neck-stretch.png";
-import walking from "./assets/walking.png";
-import shoulderRolling from "./assets/shoulder-rolling.png";
 import { businessNow, unscopedKey } from "../../../lib/userStorage";
+import { api } from "../../../lib/api";
+import MoveBreakSession from "./MoveBreakSession";
 
 /* =========================================================
    CONSTANTS
@@ -61,43 +58,6 @@ const DEFAULT_REWARD_GOAL = 3;
 */
 const DEFAULT_REWARDS = [];
 
-const ACTIVITIES = [
-  {
-    name: "Hand Stretching",
-    preview: "Get ready to stretch your fingers and palms gently.",
-    description: "Stretch your fingers and palms gently.",
-    duration: 5,
-    image: handStretch,
-  },
-  {
-    name: "Finger Stretch",
-    preview: "Prepare to relax and stretch each finger slowly.",
-    description: "Relax and stretch each finger slowly.",
-    duration: 5,
-    image: fingerExercise,
-  },
-  {
-    name: "Neck Relax",
-    preview: "Get ready to release tension from your neck and shoulders.",
-    description: "Release tension from your neck and shoulders.",
-    duration: 5,
-    image: neckStretch,
-  },
-  {
-    name: "Shoulder Rolling",
-    preview: "Prepare to roll your shoulders slowly and relax.",
-    description: "Roll your shoulders slowly and relax.",
-    duration: 5,
-    image: shoulderRolling,
-  },
-  {
-    name: "Walking",
-    preview: "Get ready to stand up and walk around.",
-    description: "Stand up and walk around for a moment.",
-    duration: 5,
-    image: walking,
-  },
-];
 
 /* =========================================================
    SOUND UTILITY
@@ -366,7 +326,6 @@ const createProgressItems = (
 ========================================================= */
 
 export default function MoveResetCard({
-  onAction,
   onDailyGoalComplete,
 }) {
   const [goal, setGoal] = useState(getSavedGoal);
@@ -421,24 +380,6 @@ export default function MoveResetCard({
     useState(null);
 
   const [showExercise, setShowExercise] =
-    useState(false);
-
-  const [activityIndex, setActivityIndex] =
-    useState(0);
-
-  const [remaining, setRemaining] =
-    useState(0);
-
-  const [isPreparing, setIsPreparing] =
-    useState(false);
-
-  const [isPreviewing, setIsPreviewing] =
-    useState(false);
-
-  const [isTransitioning, setIsTransitioning] =
-    useState(false);
-
-  const [isPaused, setIsPaused] =
     useState(false);
 
   /* =========================================================
@@ -506,9 +447,6 @@ export default function MoveResetCard({
     !rewardGoalComplete &&
     personalGoal < adminRewardGoal;
 
-  const currentActivity =
-    ACTIVITIES[activityIndex];
-
   /* =========================================================
      LOAD PERSONAL SETTINGS
   ========================================================= */
@@ -538,30 +476,6 @@ export default function MoveResetCard({
       setRewardGoal(config.rewardGoal);
       setMoveRewards(config.milestones);
     }, []);
-
-  /* =========================================================
-     TAB VISIBILITY PAUSE PROTECTION
-  ========================================================= */
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && showExercise) {
-        setIsPaused(true);
-      }
-    };
-
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange
-    );
-
-    return () => {
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange
-      );
-    };
-  }, [showExercise]);
 
   /* =========================================================
      SETTINGS / ADMIN REWARD SYNC
@@ -916,47 +830,52 @@ export default function MoveResetCard({
 
   const startExercise = () => {
     if (allGoalsComplete) return;
-
-    setActivityIndex(0);
-    setIsPreparing(true);
-    setIsPreviewing(false);
-    setIsTransitioning(false);
-    setIsPaused(false);
     setShowExercise(true);
   };
 
+  const closeExercise = useCallback(() => {
+    setShowExercise(false);
+  }, []);
+
   /* =========================================================
-     CLOSE EXERCISE
+     SERVER TRUTH FOR TODAY'S COUNT
+     Completions are recorded by the server session, so the
+     server's per-user daily log is authoritative across devices.
   ========================================================= */
 
-  const closeExercise =
-    useCallback(() => {
-      setShowExercise(false);
-      setIsPreparing(false);
-      setIsPreviewing(false);
-      setIsTransitioning(false);
-      setIsPaused(false);
-      setRemaining(0);
-      setActivityIndex(0);
-    }, []);
+  useEffect(() => {
+    let alive = true;
+    api
+      .get("/move-reset/today")
+      .then(({ data }) => {
+        if (!alive || typeof data?.completed !== "number") return;
+        localStorage.setItem("moveResetCompleted", String(data.completed));
+        localStorage.setItem("moveResetDate", getToday());
+        setCompleted(data.completed);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /* =========================================================
      COMPLETE FULL MOVEMENT BREAK
   ========================================================= */
 
   const completeSession =
-    useCallback(() => {
+    useCallback((result) => {
       playSound("complete");
 
-      const previousCompleted =
-        Number(
-          localStorage.getItem(
-            "moveResetCompleted"
-          )
-        ) || 0;
-
+      // `result` comes from POST /move-reset/sessions/{id}/complete: the server has
+      // validated the session and already awarded the points exactly once.
       const newCompleted =
-        previousCompleted + 1;
+        Number(result?.completed) || 0;
+
+      const previousCompleted =
+        Math.max(0, newCompleted - 1);
+
+      window.dispatchEvent(new Event("points-changed"));
 
       localStorage.setItem(
         "moveResetCompleted",
@@ -969,8 +888,6 @@ export default function MoveResetCard({
       );
 
       setCompleted(newCompleted);
-
-      onAction?.("stand");
 
       /* =====================================================
          PERSONAL GOAL
@@ -1103,149 +1020,10 @@ export default function MoveResetCard({
     }, [
       adminRewardGoal,
       getReachedMilestones,
-      onAction,
       onDailyGoalComplete,
       openRewardPopup,
       personalGoal,
     ]);
-
-  /* =========================================================
-     EXERCISE TIMER
-  ========================================================= */
-
-  useEffect(() => {
-    if (
-      !showExercise ||
-      isPaused
-    ) {
-      return;
-    }
-
-    /* =======================================================
-       PREPARING
-    ======================================================= */
-
-    if (isPreparing) {
-      const timer = setTimeout(() => {
-        setIsPreparing(false);
-        setIsPreviewing(true);
-      }, 1000);
-
-      return () =>
-        clearTimeout(timer);
-    }
-
-    /* =======================================================
-       PREVIEW
-    ======================================================= */
-
-    if (isPreviewing) {
-      const timer = setTimeout(() => {
-        setIsPreviewing(false);
-
-        setRemaining(
-          ACTIVITIES[
-            activityIndex
-          ].duration
-        );
-      }, 2000);
-
-      return () =>
-        clearTimeout(timer);
-    }
-
-    /* =======================================================
-       FINAL TRANSITION
-    ======================================================= */
-
-    if (isTransitioning) {
-      const timer = setTimeout(() => {
-        completeSession();
-        closeExercise();
-      }, 1000);
-
-      return () =>
-        clearTimeout(timer);
-    }
-
-    /* =======================================================
-       COUNTDOWN
-    ======================================================= */
-
-    if (remaining > 0) {
-      if (remaining === 1) {
-        playSound("beep");
-      } else {
-        playSound("tick");
-      }
-
-      const timer = setTimeout(() => {
-        setRemaining(
-          (value) => value - 1
-        );
-      }, 1000);
-
-      return () =>
-        clearTimeout(timer);
-    }
-
-    /* =======================================================
-       NEXT EXERCISE
-    ======================================================= */
-
-    const isLastExercise =
-      activityIndex ===
-      ACTIVITIES.length - 1;
-
-    if (isLastExercise) {
-      setIsTransitioning(true);
-      return;
-    }
-
-    const nextIndex =
-      activityIndex + 1;
-
-    setActivityIndex(nextIndex);
-    setIsPreviewing(true);
-  }, [
-    showExercise,
-    isPreparing,
-    isPreviewing,
-    isTransitioning,
-    remaining,
-    activityIndex,
-    completeSession,
-    closeExercise,
-    isPaused,
-  ]);
-
-  /* =========================================================
-     ESCAPE KEY
-  ========================================================= */
-
-  useEffect(() => {
-    if (!showExercise) return;
-
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        closeExercise();
-      }
-    };
-
-    window.addEventListener(
-      "keydown",
-      handleKeyDown
-    );
-
-    return () =>
-      window.removeEventListener(
-        "keydown",
-        handleKeyDown
-      );
-  }, [
-    showExercise,
-    closeExercise,
-  ]);
 
   /* =========================================================
      CONTINUE TOWARD ADMIN REWARD GOAL
@@ -1506,308 +1284,14 @@ export default function MoveResetCard({
       </div>
 
       {/* =====================================================
-          EXERCISE MODAL
+          GUIDED MOVE BREAK (server-validated session)
       ===================================================== */}
 
-      <AnimatePresence>
-        {showExercise && (
-          <motion.div
-            className="move-exercise-overlay"
-            initial={{
-              opacity: 0,
-            }}
-            animate={{
-              opacity: 1,
-            }}
-            exit={{
-              opacity: 0,
-            }}
-          >
-            <motion.div
-              className="move-exercise-modal"
-              initial={{
-                scale: 0.9,
-                opacity: 0,
-              }}
-              animate={{
-                scale: 1,
-                opacity: 1,
-              }}
-              exit={{
-                scale: 0.9,
-                opacity: 0,
-              }}
-            >
-              <button
-                type="button"
-                className="move-exercise-close"
-                onClick={
-                  closeExercise
-                }
-                aria-label="Close movement break"
-              >
-                <X size={20} />
-              </button>
-
-              {isPreparing ? (
-                <>
-                  <div className="move-small-label">
-                    MOVE & RESET
-                  </div>
-
-                  <div className="move-exercise-progress">
-                    Get Ready
-                  </div>
-
-                  <h2>
-                    Prepare to move!
-                  </h2>
-
-                  <div className="move-countdown">
-                    1
-                  </div>
-
-                  <p>
-                    You will complete
-                    all{" "}
-                    <strong>
-                      {
-                        ACTIVITIES.length
-                      }
-                    </strong>{" "}
-                    exercises in this
-                    break.
-                  </p>
-                </>
-              ) : isPreviewing ? (
-                <>
-                  <div className="move-small-label">
-                    EXERCISE{" "}
-                    {activityIndex +
-                      1}{" "}
-                    OF{" "}
-                    {
-                      ACTIVITIES.length
-                    }
-                  </div>
-
-                  <h2>
-                    {
-                      currentActivity.name
-                    }
-                  </h2>
-
-                  <motion.img
-                    key={
-                      currentActivity.name +
-                      "-preview"
-                    }
-                    src={
-                      currentActivity.image
-                    }
-                    alt={
-                      currentActivity.name
-                    }
-                    className="move-exercise-image"
-                    initial={{
-                      opacity: 0,
-                      scale: 0.95,
-                    }}
-                    animate={{
-                      opacity: 1,
-                      scale: 1,
-                    }}
-                    transition={{
-                      duration: 0.3,
-                    }}
-                  />
-
-                  <div
-                    className="move-exercise-description"
-                    style={{
-                      fontSize:
-                        "1.1rem",
-                      fontWeight: 500,
-                      margin: "1rem 0",
-                    }}
-                  >
-                    {
-                      currentActivity.preview
-                    }
-                  </div>
-                </>
-              ) : isTransitioning ? (
-                <>
-                  <div className="move-small-label">
-                    GREAT JOB!
-                  </div>
-
-                  <div className="move-exercise-progress">
-                    {
-                      ACTIVITIES.length
-                    }{" "}
-                    of{" "}
-                    {
-                      ACTIVITIES.length
-                    }{" "}
-                    exercises
-                  </div>
-
-                  <h2>
-                    Break Complete!
-                  </h2>
-
-                  <div className="move-countdown transition-countdown">
-                    <Check
-                      size={42}
-                      strokeWidth={3}
-                    />
-                  </div>
-
-                  <p>
-                    You completed the
-                    full movement break.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="move-small-label">
-                    MOVE & RESET
-                  </div>
-
-                  <div className="move-exercise-progress">
-                    Exercise{" "}
-                    {activityIndex +
-                      1}{" "}
-                    of{" "}
-                    {
-                      ACTIVITIES.length
-                    }
-                  </div>
-
-                  <h2>
-                    {
-                      currentActivity.name
-                    }
-                  </h2>
-
-                  <motion.img
-                    key={
-                      currentActivity.name
-                    }
-                    src={
-                      currentActivity.image
-                    }
-                    alt={
-                      currentActivity.name
-                    }
-                    className="move-exercise-image"
-                    initial={{
-                      opacity: 0,
-                      scale: 0.95,
-                    }}
-                    animate={{
-                      opacity: 1,
-                      scale: 1,
-                    }}
-                    transition={{
-                      duration: 0.3,
-                    }}
-                  />
-
-                  <div className="move-countdown">
-                    {remaining}
-                  </div>
-
-                  <div className="move-exercise-description">
-                    {
-                      currentActivity.preview
-                    }
-                  </div>
-
-                  <div className="move-exercise-dots">
-                    {ACTIVITIES.map(
-                      (_, index) => (
-                        <span
-                          key={index}
-                          className={
-                            index <=
-                            activityIndex
-                              ? "active"
-                              : ""
-                          }
-                        />
-                      )
-                    )}
-                  </div>
-
-                  <div className="move-exercise-step-label">
-                    {activityIndex ===
-                    ACTIVITIES.length -
-                      1
-                      ? "Final exercise"
-                      : "Next exercise follows automatically"}
-                  </div>
-                </>
-              )}
-
-              {/* =================================================
-                  PAUSE / RESUME
-              ================================================= */}
-
-              {!isTransitioning && (
-                <div
-                  style={{
-                    marginTop:
-                      "16px",
-                    display: "flex",
-                    justifyContent:
-                      "center",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setIsPaused(
-                        !isPaused
-                      )
-                    }
-                    className="move-pause-resume-button"
-                  >
-                    {isPaused ? (
-                      <>
-                        <Play size={16} />
-                        RESUME
-                      </>
-                    ) : (
-                      <>
-                        <Pause size={16} />
-                        PAUSE
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              <div
-                className="move-exercise-tip"
-                style={{
-                  marginTop:
-                    "10px",
-                  fontSize:
-                    "11px",
-                  opacity: 0.7,
-                  fontWeight: 600,
-                }}
-              >
-                {isPaused
-                  ? "Exercise is paused. Click Resume to continue."
-                  : "Follow the steps and move at a comfortable pace."}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <MoveBreakSession
+        open={showExercise}
+        onClose={closeExercise}
+        onCompleted={completeSession}
+      />
 
       {/* =====================================================
           PERSONAL GOAL COMPLETE POPUP

@@ -1,0 +1,393 @@
+/* ============================================================
+   Guided Move Break dialog
+   ============================================================ */
+
+.mbs-overlay {
+  --mbs-ink: #3f4a3e;
+  --mbs-skin: #f6dcc4;
+  --mbs-sleeve: #bfd7ad;
+  --mbs-shadow: rgba(63, 74, 62, 0.12);
+  --mbs-accent: #6f9f55;
+  --mbs-surface: #fffdf7;
+
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(30, 36, 27, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.dark .mbs-overlay {
+  --mbs-ink: #e8efe2;
+  --mbs-skin: #d9b89b;
+  --mbs-sleeve: #5d7a4c;
+  --mbs-shadow: rgba(0, 0, 0, 0.35);
+  --mbs-surface: #262e22;
+}
+
+.mbs-dialog {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--mbs-surface);
+  color: var(--mbs-ink);
+  border: 3px solid var(--mbs-ink);
+  border-radius: 24px;
+  box-shadow: 6px 6px 0 var(--mbs-accent);
+  padding: 22px 24px;
+}
+
+.mbs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mbs-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.mbs-title {
+  margin: 2px 0 0;
+  font-size: clamp(24px, 4vw, 32px);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.mbs-count {
+  margin: 4px 0 0;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.mbs-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 2px solid var(--mbs-ink);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--mbs-ink);
+  cursor: pointer;
+}
+
+.mbs-progress {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+
+.mbs-dot {
+  flex: 1;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--mbs-shadow);
+}
+
+.mbs-dot.is-done { background: var(--mbs-accent); }
+.mbs-dot.is-current { background: var(--mbs-ink); }
+
+.mbs-body { margin-top: 10px; }
+
+.mbs-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+@media (max-width: 620px) {
+  .mbs-stage { grid-template-columns: 1fr; }
+}
+
+.mbs-figure {
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+  width: 100%;
+  max-height: 360px;
+  margin: 0 auto;
+  border: 2px dashed var(--mbs-shadow);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.mbs-figure.is-paused { opacity: 0.55; }
+
+.mbs-rm-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.mbs-side { text-align: center; }
+
+.mbs-timer {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  margin: 0 auto;
+}
+
+.mbs-ring-bg,
+.mbs-ring {
+  fill: none;
+  stroke-width: 10;
+}
+
+.mbs-ring-bg { stroke: var(--mbs-shadow); }
+
+.mbs-ring {
+  stroke: var(--mbs-accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 60px 60px;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.mbs-seconds {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.mbs-seconds strong { font-size: 40px; font-weight: 800; }
+.mbs-seconds span { font-size: 13px; font-weight: 700; opacity: 0.7; }
+
+.mbs-phase {
+  margin: 12px 0 4px;
+  font-size: 22px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mbs-instruction {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.mbs-status {
+  margin: 16px 0 0;
+  min-height: 1.5em;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.mbs-status.is-error { color: #b91c1c; }
+
+.dark .mbs-status.is-error { color: #fca5a5; }
+
+.mbs-done {
+  width: min(260px, 70vw);
+  margin: 0 auto;
+  text-align: center;
+}
+
+.mbs-xp {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--mbs-accent);
+}
+
+.mbs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.mbs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 20px;
+  border: 2px solid var(--mbs-ink);
+  border-radius: 14px;
+  background: var(--mbs-surface);
+  color: var(--mbs-ink);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mbs-btn:disabled { opacity: 0.55; cursor: default; }
+
+.mbs-btn-primary {
+  background: var(--mbs-accent);
+  border-color: var(--mbs-accent);
+  color: #fff;
+  box-shadow: 3px 3px 0 var(--mbs-ink);
+}
+
+.mbs-btn-ghost { background: transparent; }
+
+.mbs-btn-danger {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+/* Visible keyboard focus on every control */
+.mbs-btn:focus-visible,
+.mbs-icon-btn:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 3px;
+}
+
+.mbs-confirm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: color-mix(in srgb, var(--mbs-surface) 94%, transparent);
+  border-radius: 21px;
+  text-align: center;
+}
+
+.mbs-confirm p {
+  margin: 0;
+  max-width: 420px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* ============================================================
+   Movement figures (MovementFigure.jsx)
+   Transform origins are in SVG view-box coordinates.
+   ============================================================ */
+
+.mf-still * { animation: none !important; }
+
+/* hand stretch: fingers fan out (group rotate) and uncurl (path scaleY), then relax */
+.mf-animate .mf-finger { transform-origin: 0 40px; animation: mf-spread 3s ease-in-out infinite; }
+.mf-animate .mf-finger path { transform-origin: 0 4px; animation: mf-curl 3s ease-in-out infinite; }
+.mf-still .mf-finger { transform: rotate(var(--a)); }
+
+@keyframes mf-spread {
+  0%, 100% { transform: rotate(0deg); }
+  45%, 65% { transform: rotate(var(--a)); }
+}
+
+@keyframes mf-curl {
+  0%, 100% { transform: scaleY(0.45); }
+  45%, 65% { transform: scaleY(1); }
+}
+
+.mf-animate .mf-wrist {
+  transform-origin: 112px 120px;
+  animation: mf-rotate 3.2s linear infinite;
+}
+
+@keyframes mf-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.mf-animate .mf-orbit { animation: mf-fade 3.2s ease-in-out infinite; }
+
+.mf-animate .mf-shoulders {
+  transform-origin: 100px 72px;
+  animation: mf-roll 3s ease-in-out infinite;
+}
+
+@keyframes mf-roll {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(0, -12px); }
+  55% { transform: translate(0, -8px) scaleX(1.04); }
+  80% { transform: translate(0, 4px); }
+}
+
+.mf-animate .mf-neck {
+  transform-origin: 100px 72px;
+  animation: mf-tilt 5s ease-in-out infinite;
+}
+
+@keyframes mf-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  20%, 38% { transform: rotate(-20deg); }
+  62%, 80% { transform: rotate(20deg); }
+}
+
+.mf-animate .mf-lean {
+  transform-origin: 100px 122px;
+  animation: mf-lean 4.4s ease-in-out infinite;
+}
+
+@keyframes mf-lean {
+  0%, 100% { transform: rotate(0deg); }
+  40%, 65% { transform: rotate(-16deg); }
+}
+
+.mf-animate .mf-round {
+  transform-origin: 100px 122px;
+  animation: mf-round 4s ease-in-out infinite;
+}
+
+.mf-animate .mf-press {
+  transform-origin: 100px 78px;
+  animation: mf-press 4s ease-in-out infinite;
+}
+
+@keyframes mf-round {
+  0%, 100% { transform: rotate(0deg); }
+  40%, 65% { transform: rotate(8deg); }
+}
+
+@keyframes mf-press {
+  0%, 100% { transform: translate(0, 0); }
+  40%, 65% { transform: translate(8px, 2px); }
+}
+
+.mf-animate .mf-cheer {
+  transform-origin: 100px 72px;
+  animation: mf-cheer 1.2s ease-in-out infinite;
+}
+
+@keyframes mf-cheer {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(0, -6px); }
+}
+
+.mf-animate .mf-sparkles,
+.mf-animate .mf-arc { animation: mf-fade 1.6s ease-in-out infinite; }
+
+@keyframes mf-fade {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf *, .mbs-ring { animation: none !important; transition: none !important; }
+}
