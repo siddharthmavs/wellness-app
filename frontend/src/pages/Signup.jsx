@@ -6,6 +6,7 @@ import { IconLeaf, IconSparkle } from "../components/HandDrawn";
 import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { toast } from "sonner";
+import { PasswordField, PasswordChecklist } from "../components/PasswordField";
 
 export default function Signup() {
  const [form, setForm] = useState({ org_name: "", name: "", email: "", password: "" });
@@ -53,9 +54,9 @@ export default function Signup() {
  <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Work email</label>
  <BrutalInput data-testid="signup-email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" />
  </div>
- <div>
- <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Password</label>
- <BrutalInput data-testid="signup-password" type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 6 characters" />
+ <div className="space-y-2">
+ <PasswordField id="signup-password" data-testid="signup-password" label="Password" required autoComplete="new-password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="At least 8 characters" />
+ <PasswordChecklist value={form.password} />
  </div>
  <BrutalButton data-testid="signup-submit" type="submit" color="primary" size="lg" className="w-full" disabled={loading}>
  {loading ? "One sec..." : "Plant your garden "}

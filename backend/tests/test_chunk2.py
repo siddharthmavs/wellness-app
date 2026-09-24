@@ -103,7 +103,7 @@ class TestAdminUsers:
                           headers=admin_headers)
         assert ri.status_code == 200, ri.text
         r = session.post(f"{API}/auth/accept-invite",
-                         json={"token": ri.json()["token"], "password": "p1234"})
+                         json={"token": ri.json()["token"], "password": "pass1234"})
         assert r.status_code == 200
         uid = r.json()["user"]["id"]
         rd = session.delete(f"{API}/admin/users/{uid}", headers=admin_headers)

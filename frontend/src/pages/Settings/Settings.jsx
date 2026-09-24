@@ -10,6 +10,7 @@ import {
   PersonStanding,
   Wind,
   ChevronRight,
+  UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store";
@@ -19,6 +20,12 @@ import { useAuthStore } from "../../store";
 ========================================================= */
 
 const GENERAL_SETTINGS = [
+  {
+    label: "Profile & Account",
+    description: "Your name, photo, password and preferences",
+    icon: UserRound,
+    path: "/settings/profile",
+  },
   {
     label: "Notifications",
     description: "Manage wellness notifications and reminders",

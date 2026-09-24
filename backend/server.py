@@ -21,6 +21,8 @@ import bcrypt
 import jwt as pyjwt
 import random
 import unicodedata
+import hashlib
+from urllib.parse import quote
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -233,6 +235,7 @@ async def register(body: OrgRegisterReq):
     existing = await db.users.find_one({"email": body.email.lower()})
     if existing:
         raise HTTPException(400, "Email already registered")
+    require_valid_password(body.password)
     org_name = " ".join(body.org_name.split())
     if not org_name:
         raise HTTPException(400, "Organization name is required")
@@ -284,6 +287,7 @@ async def accept_invite(body: AcceptInviteReq):
         raise HTTPException(400, f"This invitation is {status}")
     if await db.users.find_one({"email": inv["email"]}):
         raise HTTPException(400, "Email already registered")
+    require_valid_password(body.password)
     name = (body.name or inv.get("name") or inv["email"].split("@")[0]).strip()
     user = _new_user_doc(inv["org_id"], name, inv["email"], body.password,
                           role=inv.get("role") or "employee", department=inv.get("department"))
@@ -306,6 +310,162 @@ async def login(body: LoginReq):
     user.pop("password", None)
     user.pop("_id", None)
     return {"token": create_token(user["id"]), "user": user}
+
+# ---------- Passwords, audit log, email, password reset (BUG-04, QA #4) ----------
+PASSWORD_POLICY = "At least 8 characters, including a letter and a number."
+RESET_TOKEN_MINUTES = int(os.environ.get("PASSWORD_RESET_MINUTES", "60"))
+FORGOT_PASSWORD_MSG = "If an account exists for that email, we've sent a link to reset the password."
+INVALID_RESET_MSG = "This reset link is invalid or has expired. Please request a new one."
+
+def password_problem(pw: str) -> Optional[str]:
+    pw = pw or ""
+    if len(pw) < 8:
+        return "Password must be at least 8 characters."
+    if len(pw) > 128:
+        return "Password must be at most 128 characters."
+    if not re.search(r"[A-Za-z]", pw) or not re.search(r"\d", pw):
+        return "Password must include at least one letter and one number."
+    return None
+
+def require_valid_password(pw: str):
+    problem = password_problem(pw)
+    if problem:
+        raise HTTPException(400, problem)
+
+async def set_password(user_id: str, pw: str):
+    # password_changed_at makes get_current_user reject every token issued before now.
+    await db.users.update_one({"id": user_id}, {"$set": {"password": hash_password(pw), "password_changed_at": now_iso()}})
+
+async def audit(action: str, user: dict, actor: Optional[dict] = None, **data):
+    """Append-only log of security-relevant account changes. Never stores secrets."""
+    await db.audit_log.insert_one({
+        "id": str(uuid.uuid4()),
+        "action": action,
+        "org_id": user.get("org_id"),
+        "user_id": user.get("id"),
+        "actor_id": (actor or user).get("id"),
+        "data": data,
+        "created_at": now_iso(),
+    })
+
+def frontend_url() -> str:
+    return os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+def _send_smtp(to: str, subject: str, text: str):
+    import smtplib
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg["From"] = os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or "no-reply@wellness-garden.local"
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(text)
+    host, port = os.environ["SMTP_HOST"], int(os.environ.get("SMTP_PORT", "587"))
+    if os.environ.get("SMTP_SSL", "").lower() in ("1", "true", "yes"):
+        server = smtplib.SMTP_SSL(host, port, timeout=20)
+    else:
+        server = smtplib.SMTP(host, port, timeout=20)
+        if os.environ.get("SMTP_STARTTLS", "true").lower() in ("1", "true", "yes"):
+            server.starttls()
+    with server:
+        if os.environ.get("SMTP_USER"):
+            server.login(os.environ["SMTP_USER"], os.environ.get("SMTP_PASSWORD", ""))
+        server.send_message(msg)
+
+async def send_email(to: str, subject: str, text: str) -> bool:
+    """Pluggable delivery: SMTP when SMTP_HOST is configured. Without it the message is
+    written to the server log, and admins can hand out reset links from People & Access."""
+    if not os.environ.get("SMTP_HOST"):
+        logger.warning("Email not sent (SMTP_HOST is not configured). To: %s | %s\n%s", to, subject, text)
+        return False
+    try:
+        await asyncio.to_thread(_send_smtp, to, subject, text)
+        return True
+    except Exception as e:
+        logger.error("Email to %s failed: %s", to, e)
+        return False
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+async def create_reset_link(user: dict, created_by: str) -> dict:
+    """Single-use reset token; only its hash is stored. Issuing one retires older links."""
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=RESET_TOKEN_MINUTES)
+    await db.password_resets.update_many(
+        {"user_id": user["id"], "used_at": None},
+        {"$set": {"used_at": now.isoformat(), "superseded": True}},
+    )
+    await db.password_resets.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "org_id": user.get("org_id"),
+        "token_hash": _token_hash(token),
+        "created_by": created_by,
+        "created_at": now.isoformat(),
+        "expires_at": expires.isoformat(),
+        "used_at": None,
+    })
+    return {"reset_link": f"{frontend_url()}/reset-password/{token}", "expires_at": expires.isoformat()}
+
+async def _load_reset(token: str):
+    row = await db.password_resets.find_one({"token_hash": _token_hash(token or "")}, {"_id": 0})
+    if (not row or row.get("used_at")
+            or datetime.now(timezone.utc) > datetime.fromisoformat(row["expires_at"])):
+        raise HTTPException(400, INVALID_RESET_MSG)
+    user = await db.users.find_one({"id": row["user_id"]}, {"_id": 0, "password": 0})
+    if not user or user.get("status") == "deactivated":
+        raise HTTPException(400, INVALID_RESET_MSG)
+    return row, user
+
+class ForgotPasswordReq(BaseModel):
+    email: EmailStr
+
+class ResetPasswordReq(BaseModel):
+    token: str
+    new_password: str
+    confirm_password: str
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordReq):
+    """Always the same answer, so the endpoint can't be used to discover accounts."""
+    user = await db.users.find_one({"email": body.email.lower()}, {"_id": 0, "password": 0})
+    if not user or user.get("status") == "deactivated":
+        return {"message": FORGOT_PASSWORD_MSG}
+    recent = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    if await db.password_resets.find_one({"user_id": user["id"], "created_by": "self", "created_at": {"$gte": recent}}):
+        return {"message": FORGOT_PASSWORD_MSG}  # throttle: one self-service email per minute
+    link = await create_reset_link(user, "self")
+    await send_email(
+        user["email"],
+        "Reset your Wellness Garden password",
+        f"Hi {user.get('first_name') or user.get('name') or ''},\n\n"
+        f"We received a request to reset your Wellness Garden password. This link works once "
+        f"and expires in {RESET_TOKEN_MINUTES} minutes:\n\n{link['reset_link']}\n\n"
+        "If you didn't ask for this, you can ignore this email and your password won't change.",
+    )
+    await audit("password_reset_requested", user)
+    return {"message": FORGOT_PASSWORD_MSG}
+
+@api.get("/auth/reset-password/{token}")
+async def check_reset_link(token: str):
+    row, user = await _load_reset(token)
+    return {"valid": True, "email": user["email"], "expires_at": row["expires_at"]}
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordReq):
+    row, user = await _load_reset(body.token)
+    if body.new_password != body.confirm_password:
+        raise HTTPException(400, "The passwords don't match.")
+    require_valid_password(body.new_password)
+    # Claim the token atomically so two concurrent submits can't both use it.
+    claimed = await db.password_resets.find_one_and_update(
+        {"id": row["id"], "used_at": None}, {"$set": {"used_at": now_iso()}})
+    if not claimed:
+        raise HTTPException(400, INVALID_RESET_MSG)
+    await set_password(user["id"], body.new_password)
+    await audit("password_reset_completed", user, via="admin_link" if row.get("created_by") != "self" else "email")
+    return {"message": "Your password has been reset. Sign in with your new password."}
 
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
@@ -843,29 +1003,103 @@ async def react_post(post_id: str, body: ReactReq, user=Depends(get_current_user
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 class UserPatch(BaseModel):
+    # Only self-service fields. email, role, org_id, points, status... are not in this
+    # model, so a body that includes them is ignored rather than applied.
     dnd: Optional[bool] = None
     bio: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    nickname: Optional[str] = None
     job_title: Optional[str] = None
     department: Optional[str] = None
-    birthday: Optional[str] = None            # YYYY-MM-DD
-    work_anniversary: Optional[str] = None    # YYYY-MM-DD
+    birthday: Optional[str] = None            # YYYY-MM-DD, "" clears
+    work_anniversary: Optional[str] = None    # YYYY-MM-DD, "" clears
+    language: Optional[str] = None
+    timezone: Optional[str] = None            # personal IANA zone (display); points use the org's
+
+LANGUAGES = {"en": "English"}
+PROFILE_TEXT_LIMITS = {
+    "first_name": ("First name", 50), "last_name": ("Last name", 50), "nickname": ("Nickname", 30),
+    "job_title": ("Job title", 80), "department": ("Department", 60), "bio": ("Bio", 280),
+}
+
+def _clean_text(value: str, multiline: bool = False) -> str:
+    value = unicodedata.normalize("NFKC", value or "")
+    value = "".join(ch for ch in value if ch == "\n" or unicodedata.category(ch)[0] != "C")
+    if multiline:
+        return "\n".join(" ".join(line.split()) for line in value.strip().splitlines())
+    return " ".join(value.split())
 
 @api.patch("/users/me")
 async def update_me(body: UserPatch, user=Depends(get_current_user)):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    for field, (label, limit) in PROFILE_TEXT_LIMITS.items():
+        if field in updates:
+            updates[field] = _clean_text(updates[field], multiline=field == "bio")
+            if len(updates[field]) > limit:
+                raise HTTPException(400, f"{label} must be at most {limit} characters.")
+    if "first_name" in updates and not updates["first_name"]:
+        raise HTTPException(400, "First name is required.")
     for field in ("birthday", "work_anniversary"):
-        if field in updates and not DATE_RE.match(updates[field]):
-            raise HTTPException(400, f"{field} must be YYYY-MM-DD")
+        if field not in updates:
+            continue
+        if updates[field] == "":
+            updates[field] = None
+            continue
+        try:
+            day = datetime.strptime(updates[field], "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(400, f"{field} must be a valid YYYY-MM-DD date")
+        if field == "birthday" and day > datetime.now(timezone.utc).date():
+            raise HTTPException(400, "Birthday can't be in the future.")
+    if "language" in updates and updates["language"] not in LANGUAGES:
+        raise HTTPException(400, "Unsupported language")
+    if "timezone" in updates:
+        try:
+            ZoneInfo(updates["timezone"])
+        except Exception:
+            raise HTTPException(400, "Unknown timezone")
     if "first_name" in updates or "last_name" in updates:
         first = updates.get("first_name", user.get("first_name", ""))
         last = updates.get("last_name", user.get("last_name", ""))
         updates["name"] = f"{first} {last}".strip() or user.get("name")
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        changed = sorted(k for k in updates if k != "name" and updates[k] != user.get(k))
+        if changed and changed != ["dnd"]:
+            await audit("profile_updated", user, fields=changed)
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 0})
     return updated
+
+class PasswordChangeReq(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+PASSWORD_CHANGE_MAX_FAILS = 5
+
+@api.post("/users/me/password")
+async def change_password(body: PasswordChangeReq, user=Depends(get_current_user)):
+    """Re-authenticates with the current password. Wrong-password answers are 400 (not 401)
+    so the client doesn't treat them as an expired session."""
+    window = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+    fails = await db.audit_log.count_documents(
+        {"user_id": user["id"], "action": "password_change_failed", "created_at": {"$gte": window}})
+    if fails >= PASSWORD_CHANGE_MAX_FAILS:
+        raise HTTPException(429, "Too many incorrect attempts. Please try again in 15 minutes.")
+    stored = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password": 1}) or {}
+    if not verify_password(body.current_password, stored.get("password", "")):
+        await audit("password_change_failed", user)
+        raise HTTPException(400, "Your current password is incorrect.")
+    if body.new_password != body.confirm_password:
+        raise HTTPException(400, "The new password and confirmation don't match.")
+    require_valid_password(body.new_password)
+    if body.new_password == body.current_password:
+        raise HTTPException(400, "Choose a password that's different from your current one.")
+    await set_password(user["id"], body.new_password)
+    await audit("password_changed", user)
+    # Every other session is now signed out; hand this one a fresh token.
+    return {"message": "Password updated.", "token": create_token(user["id"])}
 
 # ---------- Shoutouts ----------
 SHOUTOUT_CATEGORIES = ["Helpfulness", "Teamwork", "Problem Solving", "Going Extra Mile", "Just Because"]
@@ -1211,6 +1445,16 @@ async def admin_delete_user(uid: str, admin=Depends(require_admin)):
     await _get_org_user(uid, admin)
     await db.users.delete_one({"id": uid})
     return {"deleted": True}
+
+@api.post("/admin/users/{uid}/password-reset-link")
+async def admin_password_reset_link(uid: str, admin=Depends(require_admin)):
+    """Fallback when email isn't configured: the admin copies a single-use link to the person."""
+    target = await _get_org_user(uid, admin)
+    if target.get("status") == "deactivated":
+        raise HTTPException(400, "Reactivate this account before resetting its password.")
+    link = await create_reset_link(target, admin["id"])
+    await audit("password_reset_link_created", target, actor=admin)
+    return link
 
 # ---------- Organization & Invitations (doc sections 1, 3.1, 3.2) ----------
 @api.get("/admin/organization")
@@ -2558,33 +2802,111 @@ def _get_object(path: str):
 from fastapi import UploadFile, File, Form, Query
 from fastapi.responses import Response
 
-# ---------- Profile picture upload (doc section 2) ----------
+# ---------- Profile picture: upload / remove / preset (doc section 2, BUG-04) ----------
+AVATAR_MAX_BYTES = 5 * 1024 * 1024
+AVATAR_DIR = ROOT_DIR / "uploads" / "avatars"
+AVATAR_ID_RE = re.compile(r"^[0-9a-f-]{36}$")
+AVATAR_FILE_RE = re.compile(r"^[0-9a-f-]{36}\.(png|jpg|webp|gif)$")
+AVATAR_MEDIA = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
+AVATAR_STYLES = ["bottts-neutral", "adventurer", "avataaars", "fun-emoji", "lorelei", "notionists", "big-smile", "thumbs"]
+AVATAR_BACKGROUNDS = AVATAR_COLORS + ["c0aede", "d1d4f9", "ffd5dc", "ffdfbf", "b6e3f4"]
+AVATAR_SEED_RE = re.compile(r"^[A-Za-z0-9 _.-]{1,40}$")
+
+def sniff_image(data: bytes) -> Optional[str]:
+    """File extension from the bytes themselves. The declared content type and file name
+    are client-controlled, so SVG/HTML renamed to .png is rejected here."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+def dicebear_avatar(style: str, seed: str, background: Optional[str] = None) -> str:
+    return (f"https://api.dicebear.com/7.x/{style}/svg?seed={quote(seed)}"
+            f"&backgroundColor={background or AVATAR_BACKGROUNDS[0]}")
+
+def _drop_local_avatar(user_id: str, url: Optional[str]):
+    prefix = f"/api/avatars/{user_id}/"
+    if url and url.startswith(prefix) and AVATAR_FILE_RE.match(url[len(prefix):]):
+        try:
+            (AVATAR_DIR / user_id / url[len(prefix):]).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+async def _set_avatar(user: dict, url: str, source: str) -> dict:
+    await db.users.update_one({"id": user["id"]}, {"$set": {"avatar": url, "avatar_source": source}})
+    if user.get("avatar") != url:
+        _drop_local_avatar(user["id"], user.get("avatar"))
+    await audit("avatar_changed", user, source=source)
+    return {"avatar": url, "avatar_source": source}
+
+@api.get("/avatar-presets")
+async def avatar_presets(user=Depends(get_current_user)):
+    return {"styles": AVATAR_STYLES, "backgrounds": AVATAR_BACKGROUNDS}
+
 @api.post("/users/me/avatar")
 async def upload_avatar(file: UploadFile = File(...), user=Depends(get_current_user)):
-    data = await file.read()
-    if len(data) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Max 5MB")
-    ct = file.content_type or ""
-    if not ct.startswith("image/"):
-        raise HTTPException(400, "Image files only")
-    ext = (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png").lower()
+    data = await file.read(AVATAR_MAX_BYTES + 1)
+    if not data:
+        raise HTTPException(400, "That file is empty.")
+    if len(data) > AVATAR_MAX_BYTES:
+        raise HTTPException(400, "Images must be 5 MB or smaller.")
+    ext = sniff_image(data)
+    if not ext:
+        raise HTTPException(400, "Please use a PNG, JPG, WebP or GIF image.")
     fname = f"{uuid.uuid4()}.{ext}"
-    path = f"{APP_NAME}/avatars/{user['id']}/{fname}"
-    try:
-        _put_object(path, data, ct)
-    except Exception as e:
-        raise HTTPException(500, f"Upload failed: {e}")
-    avatar_url = f"/api/avatars/{user['id']}/{fname}"
-    await db.users.update_one({"id": user["id"]}, {"$set": {"avatar": avatar_url}})
-    return {"avatar": avatar_url}
+    stored = False
+    if os.environ.get("AVATAR_STORAGE", "object") == "object" and os.environ.get("EMERGENT_LLM_KEY"):
+        try:
+            await asyncio.to_thread(_put_object, f"{APP_NAME}/avatars/{user['id']}/{fname}", data, AVATAR_MEDIA[ext])
+            stored = True
+        except Exception as e:
+            logger.warning("Avatar object storage unavailable, using local disk: %s", e)
+    if not stored:
+        folder = AVATAR_DIR / user["id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / fname).write_bytes(data)
+    return await _set_avatar(user, f"/api/avatars/{user['id']}/{fname}", "upload")
+
+class AvatarPresetReq(BaseModel):
+    style: str
+    seed: str
+    background: Optional[str] = None
+
+@api.put("/users/me/avatar/preset")
+async def choose_avatar_preset(body: AvatarPresetReq, user=Depends(get_current_user)):
+    seed = body.seed.strip()
+    if body.style not in AVATAR_STYLES or not AVATAR_SEED_RE.match(seed):
+        raise HTTPException(400, "Unknown avatar option")
+    if body.background and body.background not in AVATAR_BACKGROUNDS:
+        raise HTTPException(400, "Unknown avatar background")
+    return await _set_avatar(user, dicebear_avatar(body.style, seed, body.background), "preset")
+
+@api.delete("/users/me/avatar")
+async def remove_avatar(user=Depends(get_current_user)):
+    """Back to the generated default avatar."""
+    return await _set_avatar(user, dicebear_avatar(AVATAR_STYLES[0], user.get("name") or user["id"]), "default")
 
 @api.get("/avatars/{uid}/{fname}")
 async def get_avatar(uid: str, fname: str):
+    # Public so <img> tags work; names are random UUIDs and the path is strictly validated.
+    if not AVATAR_ID_RE.match(uid) or not AVATAR_FILE_RE.match(fname):
+        raise HTTPException(404, "Avatar not found")
+    headers = {"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=86400"}
+    local = AVATAR_DIR / uid / fname
+    if local.is_file():
+        return Response(content=local.read_bytes(), media_type=AVATAR_MEDIA[fname.rsplit(".", 1)[1]], headers=headers)
     try:
-        data, ct = _get_object(f"{APP_NAME}/avatars/{uid}/{fname}")
+        data, ct = await asyncio.to_thread(_get_object, f"{APP_NAME}/avatars/{uid}/{fname}")
     except Exception:
         raise HTTPException(404, "Avatar not found")
-    return Response(content=data, media_type=ct)
+    if not (ct or "").startswith("image/") or ct == "image/svg+xml":
+        ct = AVATAR_MEDIA.get(fname.rsplit(".", 1)[1], "application/octet-stream")
+    return Response(content=data, media_type=ct, headers=headers)
 
 @api.post("/music/upload")
 async def music_upload(file: UploadFile = File(...), title: str = Form(None), artist: str = Form("Unknown"), user=Depends(get_current_user)):
@@ -4746,6 +5068,9 @@ async def ensure_indexes():
     for coll in (db.water_logs, db.eye_break_logs, db.move_reset_logs, db.breathing_logs):
         await coll.create_index([("user_id", 1), ("date", -1)], unique=True)
     await db.user_settings.create_index("user_id", unique=True)
+    await db.password_resets.create_index("token_hash", unique=True)
+    await db.password_resets.create_index([("user_id", 1), ("created_at", -1)])
+    await db.audit_log.create_index([("user_id", 1), ("action", 1), ("created_at", -1)])
     await db.reward_transactions.create_index(
         [("user_id", 1), ("dedupe_key", 1)], unique=True,
         partialFilterExpression={"dedupe_key": {"$type": "string"}},

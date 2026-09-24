@@ -115,3 +115,6 @@ frontend/node_modules/.cache/default-development/1.pack
 frontend/node_modules/.cache/default-development/3.pack
 frontend/node_modules/.cache/default-development/12.pack
 frontend/node_modules/.cache/default-development/1.pack_
+
+# user-uploaded avatars (local storage fallback)
+backend/uploads/

@@ -630,3 +630,24 @@ html.dark .brutal-skeleton {
   border-color: #b91c1c !important;
   color: #7f1d1d !important;
 }
+
+/* Profile Settings buttons (pages/Settings/General/ProfileSettings.jsx) */
+.profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--cozy-border);
+  background: var(--cozy-surface);
+  color: var(--cozy-text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.profile-btn:disabled { opacity: 0.5; cursor: default; }
+.profile-btn-primary { background: var(--cozy-primary); border-color: var(--cozy-primary); color: #fff; }
+.profile-btn-ghost { background: transparent; }
+.profile-btn:focus-visible,
+.account-chip:focus-visible { outline: 3px solid var(--cozy-primary-dark); outline-offset: 2px; }

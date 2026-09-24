@@ -1,34 +1,23 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuthStore } from "../store";
 import { api, resolveAvatar } from "../lib/api";
-import { BrutalCard, BrutalBadge, BrutalButton, BrutalInput, BrutalTag } from "../components/brutal";
+import { BrutalCard, BrutalBadge, BrutalButton, BrutalTag } from "../components/brutal";
 import { BuddyCard, PlantCard } from "../components/BuddyAndPlant";
 import { RewardsSection } from "../components/RewardsSection";
 import { toast } from "sonner";
 
 const FB_CATEGORIES = ["Wellness", "Social", "Technical", "General"];
 
-const emptyEditForm = (user) => ({
- first_name: user.first_name || "",
- last_name: user.last_name || "",
- job_title: user.job_title || "",
- department: user.department || "",
- birthday: user.birthday || "",
- work_anniversary: user.work_anniversary || "",
- bio: user.bio || "",
-});
-
 export default function Profile() {
  const { user, setUser } = useAuthStore();
  const [badges, setBadges] = useState([]);
  const [activities, setActivities] = useState([]);
  const [fb, setFb] = useState({ category: "Wellness", message: "", anonymous: false });
- const [editing, setEditing] = useState(false);
- const [editForm, setEditForm] = useState(null);
- const [saving, setSaving] = useState(false);
- const [uploadingAvatar, setUploadingAvatar] = useState(false);
- const avatarInputRef = useRef(null);
+ // Editing lives in Profile Settings (/settings/profile): one place, one Save/Cancel.
+ const navigate = useNavigate();
+ const openProfileSettings = () => navigate("/settings/profile");
 
  useEffect(() => {
  api.get("/badges").then(({ data }) => setBadges(data));
@@ -40,51 +29,8 @@ export default function Profile() {
 
  const toggleDnd = async () => {
  const { data } = await api.patch("/users/me", { dnd: !user.dnd });
- setUser(data);
+ setUser({ ...user, ...data });
  toast.success(data.dnd ? " DND ON — silence, fool" : " DND OFF — back in chaos");
- };
-
- const startEditing = () => {
- setEditForm(emptyEditForm(user));
- setEditing(true);
- };
-
- const saveProfile = async () => {
- setSaving(true);
- try {
- const payload = { ...editForm };
- if (!payload.birthday) delete payload.birthday;
- if (!payload.work_anniversary) delete payload.work_anniversary;
- const { data } = await api.patch("/users/me", payload);
- setUser(data);
- setEditing(false);
- toast.success("Profile updated");
- } catch (err) {
- toast.error(err.response?.data?.detail || "Could not save profile");
- } finally {
- setSaving(false);
- }
- };
-
- const onAvatarChosen = async (e) => {
- const file = e.target.files?.[0];
- e.target.value = "";
- if (!file) return;
- if (!file.type.startsWith("image/")) { toast.error("Please choose an image file"); return; }
- setUploadingAvatar(true);
- try {
- const fd = new FormData();
- fd.append("file", file);
- const { data } = await api.post("/users/me/avatar", fd, {
- headers: { "Content-Type": "multipart/form-data" },
- });
- setUser({ ...user, avatar: data.avatar });
- toast.success("Profile picture updated");
- } catch (err) {
- toast.error(err.response?.data?.detail || "Upload failed");
- } finally {
- setUploadingAvatar(false);
- }
  };
 
  const sendFeedback = async () => {
@@ -107,17 +53,15 @@ export default function Profile() {
  <button
  type="button"
  data-testid="avatar-upload-trigger"
- onClick={() => avatarInputRef.current?.click()}
- disabled={uploadingAvatar}
+ onClick={openProfileSettings}
  className="relative mx-auto block w-28 h-28 mb-3"
  title="Change profile picture"
  >
  <img src={resolveAvatar(user.avatar)} alt={user.name} className="w-28 h-28 border-[4px] border-black bg-white" />
  <span className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/40 text-white text-[10px] font-black uppercase opacity-0 hover:opacity-100 transition">
- {uploadingAvatar ? "..." : "Change"}
+ Change
  </span>
  </button>
- <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={onAvatarChosen} data-testid="avatar-file-input" />
  <h2 className="font-display font-black text-3xl uppercase leading-none">{user.name}</h2>
  <p className="text-xs uppercase font-bold mt-1">{user.job_title ? `${user.job_title} · ` : ""}{user.department}</p>
  <div className="mt-2">
@@ -138,7 +82,7 @@ export default function Profile() {
  </button>
  <button
  data-testid="edit-profile-toggle"
- onClick={startEditing}
+ onClick={openProfileSettings}
  className="mt-2 w-full border-[3px] border-black bg-white px-3 py-2 font-black uppercase text-xs shadow-brutal-sm"
  >
  Edit Profile
@@ -168,52 +112,6 @@ export default function Profile() {
  </div>
  </div>
  </div>
-
- {editing && editForm && (
- <BrutalCard color="white" hover={false} className="mb-8" data-testid="edit-profile-card">
- <h2 className="font-display font-black text-2xl uppercase mb-4"> Edit Profile</h2>
- <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
- <div>
- <label className="font-black uppercase text-[10px] block mb-1">First Name</label>
- <BrutalInput value={editForm.first_name} onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })} />
- </div>
- <div>
- <label className="font-black uppercase text-[10px] block mb-1">Last Name</label>
- <BrutalInput value={editForm.last_name} onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })} />
- </div>
- <div>
- <label className="font-black uppercase text-[10px] block mb-1">Job Title</label>
- <BrutalInput value={editForm.job_title} onChange={(e) => setEditForm({ ...editForm, job_title: e.target.value })} placeholder="e.g. Software Engineer" />
- </div>
- <div>
- <label className="font-black uppercase text-[10px] block mb-1">Department</label>
- <BrutalInput value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} />
- </div>
- <div>
- <label className="font-black uppercase text-[10px] block mb-1">Birthday</label>
- <BrutalInput type="date" value={editForm.birthday} onChange={(e) => setEditForm({ ...editForm, birthday: e.target.value })} />
- </div>
- <div>
- <label className="font-black uppercase text-[10px] block mb-1">Work Anniversary</label>
- <BrutalInput type="date" value={editForm.work_anniversary} onChange={(e) => setEditForm({ ...editForm, work_anniversary: e.target.value })} />
- </div>
- </div>
- <div className="mb-4">
- <label className="font-black uppercase text-[10px] block mb-1">Bio</label>
- <textarea
- value={editForm.bio}
- onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
- rows={3}
- className="w-full border-[3px] border-black px-4 py-3 font-medium resize-none"
- placeholder="A little about you..."
- />
- </div>
- <div className="flex gap-3">
- <BrutalButton data-testid="save-profile" color="green" onClick={saveProfile} disabled={saving}>{saving ? "SAVING..." : "SAVE"}</BrutalButton>
- <button onClick={() => setEditing(false)} className="border-[3px] border-black bg-white px-4 py-2 font-black uppercase text-xs shadow-brutal-sm">Cancel</button>
- </div>
- </BrutalCard>
- )}
 
  <RewardsSection />
 

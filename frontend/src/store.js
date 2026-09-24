@@ -83,6 +83,13 @@ export const useThemeStore = create(
  document.documentElement.classList.toggle("dark", next === "dark");
  }
  },
+ setTheme: (theme) => {
+ if (theme !== "light" && theme !== "dark") return;
+ set({ theme });
+ if (typeof document !== "undefined") {
+ document.documentElement.classList.toggle("dark", theme === "dark");
+ }
+ },
  apply: () => {
  if (typeof document !== "undefined") {
  document.documentElement.classList.toggle("dark", get().theme === "dark");

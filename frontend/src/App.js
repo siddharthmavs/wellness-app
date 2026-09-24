@@ -32,6 +32,8 @@ import { startNotificationScheduler } from "./notifications/notificationSchedule
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import AcceptInvite from "./pages/AcceptInvite";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 /* =========================================================
    MAIN PAGES
@@ -62,6 +64,7 @@ import Settings from "./pages/Settings/Settings";
 
 import NotificationsSettings from "./pages/Settings/General/NotificationsSettings";
 import AppearanceSettings from "./pages/Settings/General/AppearanceSettings";
+import ProfileSettings from "./pages/Settings/General/ProfileSettings";
 
 import WaterSettings from "./pages/Settings/Wellness/WaterSettings";
 import EyeCareSettings from "./pages/Settings/Wellness/EyeCareSettings";
@@ -498,6 +501,10 @@ function App() {
     (state) => state.apply
   );
 
+  const setTheme = useThemeStore(
+    (state) => state.setTheme
+  );
+
   /* =======================================================
      APPLY THEME
   ======================================================= */
@@ -551,6 +558,8 @@ function App() {
     api
       .get("/settings")
       .then(({ data }) => {
+        // The theme chosen in Profile Settings follows the account across devices.
+        if (data?.theme) setTheme(data.theme);
         const a = data?.appearance;
         if (!a) return;
         const current = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || "{}");
@@ -567,7 +576,7 @@ function App() {
         applySavedAppearance();
       })
       .catch(() => {});
-  }, [token, setUser]);
+  }, [token, setUser, setTheme]);
 
   /* =======================================================
      WELLNESS NOTIFICATION SCHEDULER
@@ -643,6 +652,10 @@ function App() {
               )
             }
           />
+
+          {/* Reachable signed in or out: a reset link may be opened on any device. */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* =================================================
               DASHBOARD
@@ -798,6 +811,15 @@ function App() {
             element={
               <PrivateLayout>
                 <Settings />
+              </PrivateLayout>
+            }
+          />
+
+          <Route
+            path="/settings/profile"
+            element={
+              <PrivateLayout>
+                <ProfileSettings />
               </PrivateLayout>
             }
           />

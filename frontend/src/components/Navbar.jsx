@@ -5,6 +5,7 @@ import { useAuthStore, useThemeStore } from "../store";
 import { NotificationBell } from "./NotificationBell";
 import { IconSeedling, IconBolt } from "./HandDrawn";
 import { useTodayPoints } from "../lib/useTodayPoints";
+import { api, resolveAvatar } from "../lib/api";
 
 import {
   LogOut,
@@ -120,8 +121,16 @@ const MORE = [
 export const Navbar = () => {
   const { user, logout } = useAuthStore();
   const { pointsToday, totalPoints } = useTodayPoints();
-  const { theme, toggle: toggleTheme } = useThemeStore();
+  const { theme, toggle } = useThemeStore();
   const navigate = useNavigate();
+
+  const toggleTheme = () => {
+    toggle();
+    // Persist so the choice follows the account (also editable in Profile Settings).
+    api.put("/settings", { theme: useThemeStore.getState().theme }).catch(() => {});
+  };
+
+  const displayName = user?.nickname || user?.first_name || user?.name || "";
 
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -484,6 +493,38 @@ export const Navbar = () => {
           >
             <Settings className="w-4 h-4" />
           </motion.button>
+
+          {/* ===============================================
+              SIGNED-IN ACCOUNT
+          =============================================== */}
+
+          {user && (
+            <NavLink
+              to="/settings/profile"
+              data-testid="account-chip"
+              className="account-chip flex items-center gap-2 pl-1 pr-1 md:pr-3 py-1 rounded-full shadow-cozy"
+              style={{
+                background: "var(--cozy-surface)",
+                border: "1px solid var(--cozy-border)",
+                color: "var(--cozy-text)",
+              }}
+              title={`Signed in as ${user.name}${user.email ? ` (${user.email})` : ""}`}
+              aria-label={`Signed in as ${user.name}. Open profile settings`}
+            >
+              <img
+                src={resolveAvatar(user.avatar)}
+                alt=""
+                className="w-8 h-8 rounded-full object-cover shrink-0"
+                style={{ background: "var(--cozy-bg)" }}
+              />
+              <span
+                data-testid="account-name"
+                className="hidden md:inline font-semibold text-xs max-w-[120px] truncate"
+              >
+                {displayName}
+              </span>
+            </NavLink>
+          )}
 
           {/* ===============================================
               LOGOUT

@@ -6,6 +6,7 @@ import { IconLeaf, IconSparkle } from "../components/HandDrawn";
 import { useAuthStore } from "../store";
 import { api } from "../lib/api";
 import { toast } from "sonner";
+import { PasswordField, PasswordChecklist } from "../components/PasswordField";
 
 export default function AcceptInvite() {
  const { token } = useParams();
@@ -84,9 +85,9 @@ export default function AcceptInvite() {
  <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Your name</label>
  <BrutalInput data-testid="invite-name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="What can we call you?" />
  </div>
- <div>
- <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color: "var(--cozy-muted)" }}>Create a password</label>
- <BrutalInput data-testid="invite-password" type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 6 characters" />
+ <div className="space-y-2">
+ <PasswordField id="invite-password" data-testid="invite-password" label="Create a password" required autoComplete="new-password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="At least 8 characters" />
+ <PasswordChecklist value={form.password} />
  </div>
  <BrutalButton data-testid="invite-submit" type="submit" color="primary" size="lg" className="w-full" disabled={submitting}>
  {submitting ? "One sec..." : "Join the garden "}
