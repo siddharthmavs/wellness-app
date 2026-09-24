@@ -15,10 +15,13 @@ import uuid
 import asyncio
 import secrets
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import bcrypt
 import jwt as pyjwt
 import random
+import unicodedata
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -48,9 +51,11 @@ def verify_password(pw: str, hashed: str) -> bool:
         return False
 
 def create_token(user_id: str) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
-        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS),
+        "iat": int(now.timestamp()),
+        "exp": now + timedelta(days=JWT_EXPIRE_DAYS),
     }
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
@@ -65,12 +70,35 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
     user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password": 0})
     if not user:
         raise HTTPException(401, "User not found")
+    if user.get("status") == "deactivated":
+        raise HTTPException(401, "This account has been deactivated")
+    # Tokens issued before a password change/reset are no longer valid.
+    changed = user.get("password_changed_at")
+    if changed and payload.get("iat") and payload["iat"] < int(datetime.fromisoformat(changed).timestamp()):
+        raise HTTPException(401, "Session expired — please sign in again")
     return user
 
 async def require_admin(user=Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(403, "Admin only")
     return user
+
+def org_q(user: dict, **extra) -> dict:
+    """Mongo filter pinned to the caller's organization. The org always comes from the
+    authenticated user record, never from request input, so a changed id/URL/body can
+    only ever match rows in the caller's own tenant."""
+    return {"org_id": user.get("org_id"), **extra}
+
+async def org_member_ids(org_id: Optional[str]) -> List[str]:
+    return await db.users.distinct("id", {"org_id": org_id})
+
+async def require_org_users(user: dict, user_ids) -> List[dict]:
+    """Every id must be a member of the caller's org, otherwise 404 (no existence leak)."""
+    ids = list(dict.fromkeys(user_ids or []))
+    found = await db.users.find(org_q(user, id={"$in": ids}), {"_id": 0, "password": 0}).to_list(len(ids) or 1)
+    if len(found) != len(ids):
+        raise HTTPException(404, "User not found in your organization")
+    return found
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -116,6 +144,7 @@ class OrganizationPatch(BaseModel):
     name: Optional[str] = None
     support_email: Optional[EmailStr] = None
     work_email_domain: Optional[str] = None
+    timezone: Optional[str] = None  # IANA name; defines the org's daily reset boundary
 
 class ActivityReq(BaseModel):
     type: str  # water, eye_care, stand, breathing
@@ -140,6 +169,13 @@ class AIInsightReq(BaseModel):
 # ---------- Auth ----------
 AVATAR_COLORS = ["FFE600", "00E5FF", "FF4D6D", "00C853"]
 INVITE_EXPIRE_DAYS = 7
+DEFAULT_TIMEZONE = os.environ.get("DEFAULT_ORG_TIMEZONE", "Asia/Kolkata")
+DUPLICATE_ORG_MSG = "An organization with this name already exists."
+
+def normalize_org_name(name: str) -> str:
+    """Case-, accent-width- and whitespace-insensitive identity for org names (BUG-02):
+    ' Wellness  Garden ' and 'wellness garden' collide."""
+    return " ".join(unicodedata.normalize("NFKC", name or "").split()).casefold()
 
 def _split_name(name: str):
     name = (name or "").strip()
@@ -196,18 +232,28 @@ async def register(body: OrgRegisterReq):
     existing = await db.users.find_one({"email": body.email.lower()})
     if existing:
         raise HTTPException(400, "Email already registered")
-    org_name = body.org_name.strip()
+    org_name = " ".join(body.org_name.split())
     if not org_name:
         raise HTTPException(400, "Organization name is required")
+    normalized = normalize_org_name(org_name)
+    if await db.organizations.find_one({"name_normalized": normalized}, {"_id": 1}):
+        raise HTTPException(409, DUPLICATE_ORG_MSG)
     org_id = str(uuid.uuid4())
     org = {
         "id": org_id,
         "name": org_name,
+        "name_normalized": normalized,
         "support_email": body.email.lower(),
         "work_email_domain": body.email.lower().split("@")[-1],
+        "timezone": DEFAULT_TIMEZONE,
         "created_at": now_iso(),
     }
-    await db.organizations.insert_one(org)
+    try:
+        # The unique index on name_normalized closes the race between the check above
+        # and this insert when two registrations for the same name arrive together.
+        await db.organizations.insert_one(org)
+    except DuplicateKeyError:
+        raise HTTPException(409, DUPLICATE_ORG_MSG)
     user = _new_user_doc(org_id, body.name, body.email, body.password, role="admin")
     await db.users.insert_one(dict(user))
     user.pop("password", None)
@@ -302,7 +348,7 @@ def next_streak(user: dict, gc: dict) -> int:
 
 async def apply_activity_rewards(user: dict, pts: int) -> dict:
     """Persist points/level/wellness-score/streak progression for one logged activity."""
-    gc = await get_game_config()
+    gc = await get_game_config(user.get("org_id"))
     new_points = user.get("points", 0) + pts
     new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
     new_score = min(100, user.get("wellness_score", 50) + gc.get("wellness_score_increment", 2))
@@ -378,6 +424,7 @@ async def leaderboard(period: str = "all", user=Depends(get_current_user)):
 async def log_mood(body: MoodReq, user=Depends(get_current_user)):
     entry = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "emoji": body.emoji,
@@ -400,6 +447,7 @@ async def my_moods(user=Depends(get_current_user)):
 async def create_post(body: PostReq, user=Depends(get_current_user)):
     post = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "user_avatar": user.get("avatar", ""),
@@ -416,13 +464,13 @@ async def create_post(body: PostReq, user=Depends(get_current_user)):
     return post
 
 @api.get("/posts")
-async def list_posts():
-    items = await db.posts.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def list_posts(user=Depends(get_current_user)):
+    items = await db.posts.find(org_q(user), {"_id": 0}).sort("created_at", -1).to_list(100)
     return items
 
 @api.post("/posts/{post_id}/like")
 async def like_post(post_id: str, user=Depends(get_current_user)):
-    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    post = await db.posts.find_one(org_q(user, id=post_id), {"_id": 0})
     if not post:
         raise HTTPException(404, "Post not found")
     likes = post.get("likes", [])
@@ -435,7 +483,7 @@ async def like_post(post_id: str, user=Depends(get_current_user)):
 
 @api.post("/posts/{post_id}/comment")
 async def comment_post(post_id: str, body: CommentReq, user=Depends(get_current_user)):
-    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+    post = await db.posts.find_one(org_q(user, id=post_id), {"_id": 0})
     if not post:
         raise HTTPException(404, "Post not found")
     comment = {
@@ -484,12 +532,12 @@ async def log_wellness_notif(body: WellnessNotifReq, user=Depends(get_current_us
 @api.post("/notifications/birthday")
 async def log_birthday_notif(user=Depends(get_current_user)):
     """Frontend calls this on login when today has birthday/anniversary events."""
-    today_events = await db.events.find({}, {"_id": 0}).to_list(100)
+    today_events = await db.events.find(org_q(user), {"_id": 0}).to_list(100)
     today_md = datetime.now(timezone.utc).date().strftime("%m-%d")
     out = []
     for e in today_events:
         if e.get("date", "")[5:10] == today_md and e.get("user_id") != user["id"]:
-            u = await db.users.find_one({"id": e["user_id"]}, {"_id": 0, "name": 1})
+            u = await db.users.find_one(org_q(user, id=e["user_id"]), {"_id": 0, "name": 1})
             if u:
                 label = "🎂 Birthday" if e["type"] == "birthday" else "🎉 Anniversary"
                 await create_notification(
@@ -527,7 +575,7 @@ async def mark_notification_read(nid: str, user=Depends(get_current_user)):
     )
     if result.modified_count == 0:
         # might be an announcement
-        await db.announcements.update_one({"id": nid}, {"$addToSet": {"read_by": user["id"]}})
+        await db.announcements.update_one({"id": nid, "recipients": user["id"]}, {"$addToSet": {"read_by": user["id"]}})
     return {"ok": True}
 
 @api.post("/notifications/read-all")
@@ -610,20 +658,34 @@ DEFAULT_ORG_NAME = "Demo Organization"
 async def get_or_create_default_org() -> str:
     """Every user needs an org_id. Pre-existing/demo data lives in one idempotently-seeded
     'Demo Organization' so nothing already in the DB breaks when multi-org support is added."""
-    org = await db.organizations.find_one({"name": DEFAULT_ORG_NAME}, {"_id": 0, "id": 1})
+    # Identified by an explicit marker, not by name — a customer org can't claim it by
+    # registering the same name. Legacy demo orgs (pre-marker) are stamped on first lookup.
+    org = await db.organizations.find_one({"is_demo": True}, {"_id": 0, "id": 1})
     if org:
         return org["id"]
+    legacy = await db.organizations.find(
+        {"name": DEFAULT_ORG_NAME, "is_demo": {"$exists": False}}, {"_id": 0, "id": 1, "created_at": 1}
+    ).sort("created_at", 1).to_list(1)
+    if legacy:
+        await db.organizations.update_one({"id": legacy[0]["id"]}, {"$set": {"is_demo": True}})
+        return legacy[0]["id"]
     org_id = str(uuid.uuid4())
     await db.organizations.insert_one({
         "id": org_id,
         "name": DEFAULT_ORG_NAME,
+        "name_normalized": normalize_org_name(DEFAULT_ORG_NAME),
+        "is_demo": True,
         "support_email": "admin@demo.com",
         "work_email_domain": "demo.com",
+        "timezone": DEFAULT_TIMEZONE,
         "created_at": now_iso(),
     })
     return org_id
 
 @api.post("/seed")
+async def seed_route(admin=Depends(require_admin)):
+    return await seed_data()
+
 async def seed_data():
     # idempotent — only inserts missing demo users/posts
     existing_count = await db.users.count_documents({})
@@ -673,7 +735,7 @@ async def seed_data():
         })
 
     # Seed posts only if no posts yet
-    existing_posts = await db.posts.count_documents({})
+    existing_posts = await db.posts.count_documents({"org_id": default_org_id})
     if existing_posts > 0:
         return {"seeded": True, "users_inserted": "idempotent", "posts": 0}
 
@@ -683,7 +745,7 @@ async def seed_data():
         {"user_name": "Sam Hustle", "content": "Day 7 streak of NOT looking at screen during lunch ", "image": ""},
         {"user_name": "Casey Boss", "content": "Just learned the 20-20-20 rule. My eyes: ", "image": ""},
     ]
-    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(10)
+    users = await db.users.find({"org_id": default_org_id}, {"_id": 0, "password": 0}).to_list(10)
     user_map = {u["name"]: u for u in users}
     for p in demo_posts:
         u = user_map.get(p["user_name"])
@@ -691,6 +753,7 @@ async def seed_data():
             continue
         await db.posts.insert_one({
             "id": str(uuid.uuid4()),
+            "org_id": default_org_id,
             "user_id": u["id"],
             "user_name": u["name"],
             "user_avatar": u.get("avatar", ""),
@@ -703,21 +766,26 @@ async def seed_data():
 
     return {"seeded": True, "users": len(demo_users), "posts": len(demo_posts)}
 
-# ---------- Fun Wall emoji reactions ----------
+# ---------- Fun Wall / Kudos reactions ----------
 class ReactReq(BaseModel):
-    emoji: str  # one of    
+    emoji: str  # reaction key: laugh | heart | clap | fire
 
-ALLOWED_REACTIONS = ["", "", "", ""]
+# Plain-text keys: an emoji-stripping pass once turned the emoji keys into four identical
+# empty strings, so every reaction landed in one shared bucket (QA #10/#12).
+ALLOWED_REACTIONS = ["laugh", "heart", "clap", "fire"]
+
+def _clean_reactions(reactions: Optional[dict]) -> dict:
+    return {k: v for k, v in (reactions or {}).items() if k in ALLOWED_REACTIONS}
 
 @api.post("/posts/{post_id}/react")
 async def react_post(post_id: str, body: ReactReq, user=Depends(get_current_user)):
     if body.emoji not in ALLOWED_REACTIONS:
-        raise HTTPException(400, "Invalid emoji")
-    post = await db.posts.find_one({"id": post_id}, {"_id": 0})
+        raise HTTPException(400, "Invalid reaction")
+    post = await db.posts.find_one(org_q(user, id=post_id), {"_id": 0})
     if not post:
         raise HTTPException(404, "Post not found")
-    reactions = post.get("reactions", {})
-    # toggle
+    reactions = _clean_reactions(post.get("reactions"))
+    # one reaction per user per post: picking a new one moves it
     for e, users in list(reactions.items()):
         if user["id"] in users and e != body.emoji:
             reactions[e] = [u for u in users if u != user["id"]]
@@ -772,10 +840,14 @@ async def create_shoutout(body: ShoutoutReq, user=Depends(get_current_user)):
         raise HTTPException(400, "Invalid category")
     if not body.recipient_ids:
         raise HTTPException(400, "Pick at least one recipient")
-    # fetch recipient names
-    recipients = await db.users.find({"id": {"$in": body.recipient_ids}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1}).to_list(50)
+    if user["id"] in body.recipient_ids:
+        raise HTTPException(400, "You can't shout yourself out")
+    members = await require_org_users(user, body.recipient_ids)
+    recipients = [{"id": m["id"], "name": m["name"], "avatar": m.get("avatar", "")} for m in members]
+    recipient_ids = [r["id"] for r in recipients]
     shout = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "sender_id": user["id"],
         "sender_name": user["name"],
         "sender_avatar": user.get("avatar", ""),
@@ -789,7 +861,7 @@ async def create_shoutout(body: ShoutoutReq, user=Depends(get_current_user)):
     shout.pop("_id", None)
     # points + notifications for each recipient
     await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 5}})
-    for rid in body.recipient_ids:
+    for rid in recipient_ids:
         await db.users.update_one({"id": rid}, {"$inc": {"points": 10}})
         await create_notification(
             user_id=rid,
@@ -802,15 +874,20 @@ async def create_shoutout(body: ShoutoutReq, user=Depends(get_current_user)):
     return shout
 
 @api.get("/shoutouts")
-async def list_shoutouts():
-    items = await db.shoutouts.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def list_shoutouts(user=Depends(get_current_user)):
+    items = await db.shoutouts.find(org_q(user), {"_id": 0}).sort("created_at", -1).to_list(100)
+    for s in items:
+        s["reactions"] = _clean_reactions(s.get("reactions"))
     return items
 
+PUBLIC_USER_FIELDS = {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1, "job_title": 1,
+                      "points": 1, "streak": 1, "level": 1, "wellness_score": 1}
+
 @api.get("/shoutouts/digest")
-async def shoutouts_digest():
+async def shoutouts_digest(user=Depends(get_current_user)):
     # top 3 receivers this week
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    items = await db.shoutouts.find({"created_at": {"$gte": since}}, {"_id": 0}).to_list(500)
+    items = await db.shoutouts.find(org_q(user, created_at={"$gte": since}), {"_id": 0}).to_list(500)
     counts = {}
     for s in items:
         for r in s.get("recipients", []):
@@ -818,7 +895,7 @@ async def shoutouts_digest():
     top_ids = sorted(counts.keys(), key=lambda k: -counts[k])[:3]
     top = []
     for uid in top_ids:
-        u = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
+        u = await db.users.find_one(org_q(user, id=uid), PUBLIC_USER_FIELDS)
         if u:
             u["shoutouts_received"] = counts[uid]
             top.append(u)
@@ -827,11 +904,11 @@ async def shoutouts_digest():
 @api.post("/shoutouts/{sid}/react")
 async def react_shout(sid: str, body: ReactReq, user=Depends(get_current_user)):
     if body.emoji not in ALLOWED_REACTIONS:
-        raise HTTPException(400, "Invalid emoji")
-    s = await db.shoutouts.find_one({"id": sid}, {"_id": 0})
+        raise HTTPException(400, "Invalid reaction")
+    s = await db.shoutouts.find_one(org_q(user, id=sid), {"_id": 0})
     if not s:
         raise HTTPException(404, "Not found")
-    reactions = s.get("reactions", {})
+    reactions = _clean_reactions(s.get("reactions"))
     arr = reactions.get(body.emoji, [])
     if user["id"] in arr:
         arr.remove(user["id"])
@@ -856,6 +933,7 @@ async def create_help(body: HelpPostReq, user=Depends(get_current_user)):
         raise HTTPException(400, "Invalid category")
     post = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "user_avatar": user.get("avatar", ""),
@@ -872,8 +950,8 @@ async def create_help(body: HelpPostReq, user=Depends(get_current_user)):
     return post
 
 @api.get("/help")
-async def list_help(category: Optional[str] = None):
-    q = {}
+async def list_help(category: Optional[str] = None, user=Depends(get_current_user)):
+    q = org_q(user)
     if category and category != "All":
         q["category"] = category
     items = await db.help_posts.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
@@ -881,7 +959,7 @@ async def list_help(category: Optional[str] = None):
 
 @api.post("/help/{pid}/like")
 async def like_help(pid: str, user=Depends(get_current_user)):
-    p = await db.help_posts.find_one({"id": pid}, {"_id": 0})
+    p = await db.help_posts.find_one(org_q(user, id=pid), {"_id": 0})
     if not p:
         raise HTTPException(404, "Not found")
     likes = p.get("likes", [])
@@ -894,7 +972,7 @@ async def like_help(pid: str, user=Depends(get_current_user)):
 
 @api.post("/help/{pid}/comment")
 async def comment_help(pid: str, body: CommentReq, user=Depends(get_current_user)):
-    p = await db.help_posts.find_one({"id": pid}, {"_id": 0})
+    p = await db.help_posts.find_one(org_q(user, id=pid), {"_id": 0})
     if not p:
         raise HTTPException(404, "Not found")
     c = {
@@ -923,6 +1001,7 @@ async def create_feedback(body: FeedbackReq, user=Depends(get_current_user)):
         raise HTTPException(400, "Invalid category")
     fb = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": None if body.anonymous else user["id"],
         "user_name": "Anonymous" if body.anonymous else user["name"],
         "category": body.category,
@@ -937,7 +1016,7 @@ async def create_feedback(body: FeedbackReq, user=Depends(get_current_user)):
 
 @api.get("/feedback")
 async def list_feedback(admin=Depends(require_admin)):
-    items = await db.feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    items = await db.feedback.find(org_q(admin), {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
 # ---------- Team leaderboard (Journey — Teams mode, doc section 5) ----------
@@ -1103,6 +1182,21 @@ async def get_organization(admin=Depends(require_admin)):
 @api.put("/admin/organization")
 async def update_organization(body: OrganizationPatch, admin=Depends(require_admin)):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "name" in updates:
+        updates["name"] = " ".join(updates["name"].split())
+        if not updates["name"]:
+            raise HTTPException(400, "Organization name is required")
+        updates["name_normalized"] = normalize_org_name(updates["name"])
+        clash = await db.organizations.find_one(
+            {"name_normalized": updates["name_normalized"], "id": {"$ne": admin.get("org_id")}}, {"_id": 1}
+        )
+        if clash:
+            raise HTTPException(409, DUPLICATE_ORG_MSG)
+    if "timezone" in updates:
+        try:
+            ZoneInfo(updates["timezone"])
+        except Exception:
+            raise HTTPException(400, "Unknown timezone")
     if updates:
         await db.organizations.update_one({"id": admin.get("org_id")}, {"$set": updates})
     return await db.organizations.find_one({"id": admin.get("org_id")}, {"_id": 0})
@@ -1189,6 +1283,7 @@ class ChallengeCreate(BaseModel):
 async def admin_create_challenge(body: ChallengeCreate, admin=Depends(require_admin)):
     ch = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "title": body.title,
         "reward": body.reward,
         "target": body.target,
@@ -1202,12 +1297,14 @@ async def admin_create_challenge(body: ChallengeCreate, admin=Depends(require_ad
 
 @api.get("/admin/challenges")
 async def admin_list_challenges(admin=Depends(require_admin)):
-    items = await db.challenges_custom.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    items = await db.challenges_custom.find(org_q(admin), {"_id": 0}).sort("created_at", -1).to_list(100)
     return items
 
 @api.delete("/admin/challenges/{cid}")
 async def admin_del_challenge(cid: str, admin=Depends(require_admin)):
-    await db.challenges_custom.delete_one({"id": cid})
+    res = await db.challenges_custom.delete_one(org_q(admin, id=cid))
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Challenge not found")
     return {"deleted": True}
 
 class ReminderConfig(BaseModel):
@@ -1218,18 +1315,19 @@ class ReminderConfig(BaseModel):
 
 @api.get("/admin/reminders")
 async def get_reminder_config(admin=Depends(require_admin)):
-    cfg = await db.config.find_one({"key": "reminders"}, {"_id": 0})
+    key = f"reminders:{admin.get('org_id')}"
+    cfg = await db.config.find_one({"key": key}, {"_id": 0})
     if not cfg:
-        cfg = {"key": "reminders", **ReminderConfig().model_dump()}
-        await db.config.insert_one(cfg)
-        cfg.pop("_id", None)
+        cfg = {"key": key, "org_id": admin.get("org_id"), **ReminderConfig().model_dump()}
+        await db.config.insert_one(dict(cfg))
     return cfg
 
 @api.put("/admin/reminders")
 async def set_reminder_config(body: ReminderConfig, admin=Depends(require_admin)):
+    key = f"reminders:{admin.get('org_id')}"
     await db.config.update_one(
-        {"key": "reminders"},
-        {"$set": {"key": "reminders", **body.model_dump()}},
+        {"key": key},
+        {"$set": {"key": key, "org_id": admin.get("org_id"), **body.model_dump()}},
         upsert=True,
     )
     return body.model_dump()
@@ -1241,13 +1339,17 @@ async def admin_analytics(admin=Depends(require_admin)):
     week_iso = (now - timedelta(days=7)).isoformat()
     month_iso = (now - timedelta(days=30)).isoformat()
 
-    total_users = await db.users.count_documents({})
-    dau = len(await db.activities.distinct("user_id", {"created_at": {"$gte": today_iso}}))
-    wau = len(await db.activities.distinct("user_id", {"created_at": {"$gte": week_iso}}))
-    mau = len(await db.activities.distinct("user_id", {"created_at": {"$gte": month_iso}}))
+    # activities/moods are per-user rows; scope them through the org's member list
+    members = await org_member_ids(admin.get("org_id"))
+    in_org = {"user_id": {"$in": members}}
+
+    total_users = len(members)
+    dau = len(await db.activities.distinct("user_id", {**in_org, "created_at": {"$gte": today_iso}}))
+    wau = len(await db.activities.distinct("user_id", {**in_org, "created_at": {"$gte": week_iso}}))
+    mau = len(await db.activities.distinct("user_id", {**in_org, "created_at": {"$gte": month_iso}}))
 
     # mood heatmap this week
-    moods = await db.moods.find({"created_at": {"$gte": week_iso}}, {"_id": 0}).to_list(1000)
+    moods = await db.moods.find({**in_org, "created_at": {"$gte": week_iso}}, {"_id": 0}).to_list(1000)
     mood_counts = {}
     for m in moods:
         mood_counts[m["label"]] = mood_counts.get(m["label"], 0) + 1
@@ -1255,24 +1357,24 @@ async def admin_analytics(admin=Depends(require_admin)):
 
     # activities per type this week
     act_pipeline = [
-        {"$match": {"created_at": {"$gte": week_iso}}},
+        {"$match": {**in_org, "created_at": {"$gte": week_iso}}},
         {"$group": {"_id": "$type", "count": {"$sum": 1}}},
     ]
     acts = await db.activities.aggregate(act_pipeline).to_list(50)
     act_chart = [{"type": a["_id"], "count": a["count"]} for a in acts]
 
     # posts, shoutouts, feedback counts
-    posts = await db.posts.count_documents({})
-    shouts = await db.shoutouts.count_documents({})
-    fb = await db.feedback.count_documents({})
-    help_p = await db.help_posts.count_documents({})
+    posts = await db.posts.count_documents(org_q(admin))
+    shouts = await db.shoutouts.count_documents(org_q(admin))
+    fb = await db.feedback.count_documents(org_q(admin))
+    help_p = await db.help_posts.count_documents(org_q(admin))
 
     # 7-day activity trend
     trend = []
     for i in range(6, -1, -1):
         d = (now - timedelta(days=i)).date().isoformat()
         d_next = (now - timedelta(days=i - 1)).date().isoformat()
-        cnt = await db.activities.count_documents({"created_at": {"$gte": d, "$lt": d_next}})
+        cnt = await db.activities.count_documents({**in_org, "created_at": {"$gte": d, "$lt": d_next}})
         trend.append({"day": d[-5:], "count": cnt})
 
     return {
@@ -1336,6 +1438,7 @@ async def create_poll(body: PollCreate, user=Depends(get_current_user)):
         raise HTTPException(400, "Need 2-5 options")
     poll = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "question": body.question,
         "options": [{"text": o, "votes": []} for o in body.options],
         "creator_id": user["id"],
@@ -1348,27 +1451,31 @@ async def create_poll(body: PollCreate, user=Depends(get_current_user)):
     return poll
 
 @api.get("/polls")
-async def list_polls():
-    items = await db.polls.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def list_polls(user=Depends(get_current_user)):
+    items = await db.polls.find(org_q(user), {"_id": 0}).sort("created_at", -1).to_list(100)
     return items
 
 @api.post("/polls/{pid}/vote")
 async def vote_poll(pid: str, body: dict, user=Depends(get_current_user)):
     option_idx = body.get("option_idx")
-    if option_idx is None:
+    if not isinstance(option_idx, int):
         raise HTTPException(400, "option_idx required")
-    poll = await db.polls.find_one({"id": pid}, {"_id": 0})
+    poll = await db.polls.find_one(org_q(user, id=pid), {"_id": 0})
     if not poll:
         raise HTTPException(404, "Not found")
     options = poll.get("options", [])
+    if not 0 <= option_idx < len(options):
+        raise HTTPException(400, "Invalid option")
     # remove user's prior vote
+    had_voted = False
     for o in options:
         if user["id"] in o.get("votes", []):
             o["votes"].remove(user["id"])
-    if 0 <= option_idx < len(options):
-        options[option_idx].setdefault("votes", []).append(user["id"])
+            had_voted = True
+    options[option_idx].setdefault("votes", []).append(user["id"])
     await db.polls.update_one({"id": pid}, {"$set": {"options": options}})
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 2}})
+    if not had_voted:  # changing your vote doesn't earn the participation points again
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"points": 2}})
     return {"options": options}
 
 # ---------- Events (birthdays/anniversaries, doc section 7) ----------
@@ -1459,10 +1566,10 @@ FACTS_BANK = [
 ]
 
 @api.get("/facts/today")
-async def fact_today():
+async def fact_today(user=Depends(get_current_user)):
     idx = datetime.now(timezone.utc).timetuple().tm_yday % len(FACTS_BANK)
     f = FACTS_BANK[idx]
-    reactions = await db.fact_reactions.find_one({"fact_id": f["id"]}, {"_id": 0}) or {"fact_id": f["id"], "reactions": {}}
+    reactions = await db.fact_reactions.find_one(org_q(user, fact_id=f["id"]), {"_id": 0}) or {"reactions": {}}
     return {**f, "reactions": reactions.get("reactions", {})}
 
 class FactReact(BaseModel):
@@ -1475,7 +1582,9 @@ ALLOWED_FACT_REACTS = ["mind_blown", "knew_it", "hmm"]
 async def react_fact(body: FactReact, user=Depends(get_current_user)):
     if body.reaction not in ALLOWED_FACT_REACTS:
         raise HTTPException(400, "Invalid reaction")
-    doc = await db.fact_reactions.find_one({"fact_id": body.fact_id}, {"_id": 0}) or {"fact_id": body.fact_id, "reactions": {}}
+    if not any(f["id"] == body.fact_id for f in FACTS_BANK):
+        raise HTTPException(404, "Fact not found")
+    doc = await db.fact_reactions.find_one(org_q(user, fact_id=body.fact_id), {"_id": 0}) or {"reactions": {}}
     reactions = doc.get("reactions", {})
     # remove other reactions by this user
     for r, users in list(reactions.items()):
@@ -1486,7 +1595,11 @@ async def react_fact(body: FactReact, user=Depends(get_current_user)):
         arr.append(user["id"])
         # award +2 once per day per user (idempotent: check today's already)
     reactions[body.reaction] = arr
-    await db.fact_reactions.update_one({"fact_id": body.fact_id}, {"$set": {"fact_id": body.fact_id, "reactions": reactions}}, upsert=True)
+    await db.fact_reactions.update_one(
+        org_q(user, fact_id=body.fact_id),
+        {"$set": {"fact_id": body.fact_id, "org_id": user.get("org_id"), "reactions": reactions}},
+        upsert=True,
+    )
     return {"reactions": reactions}
 
 # ---------- Word of the Day ----------
@@ -1517,6 +1630,7 @@ class GameScore(BaseModel):
 async def submit_score(body: GameScore, user=Depends(get_current_user)):
     sc = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "user_avatar": user.get("avatar", ""),
@@ -1533,8 +1647,8 @@ async def submit_score(body: GameScore, user=Depends(get_current_user)):
     return {"score": sc, "points_awarded": pts}
 
 @api.get("/games/leaderboard")
-async def game_leaderboard(game: Optional[str] = None):
-    q = {}
+async def game_leaderboard(game: Optional[str] = None, user=Depends(get_current_user)):
+    q = org_q(user)
     if game:
         q["game"] = game
     pipeline = [
@@ -1603,7 +1717,7 @@ QUIZZES = {
 async def get_quiz(department: Optional[str] = None, user=Depends(get_current_user)):
     dept = department or user.get("department") or "General"
     # Check for custom quiz first
-    custom = await db.custom_quizzes.find_one({"department": dept}, {"_id": 0})
+    custom = await db.custom_quizzes.find_one(org_q(user, department=dept), {"_id": 0})
     if custom and custom.get("questions"):
         return {
             "department": dept,
@@ -1622,7 +1736,7 @@ class QuizSubmit(BaseModel):
 @api.post("/quizzes/submit")
 async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
     dept = body.department
-    custom = await db.custom_quizzes.find_one({"department": dept}, {"_id": 0})
+    custom = await db.custom_quizzes.find_one(org_q(user, department=dept), {"_id": 0})
     if custom and custom.get("questions"):
         questions = custom["questions"]
     else:
@@ -1641,6 +1755,7 @@ async def submit_quiz(body: QuizSubmit, user=Depends(get_current_user)):
     pts = correct * pc.get("quiz_per_correct", 3) + (pc.get("quiz_perfect_bonus", 15) if correct == len(questions) else 0)
     rec = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "department": dept,
@@ -1662,7 +1777,9 @@ async def my_buddy(user=Depends(get_current_user)):
     if not pair:
         return None
     other_id = pair["buddy_b"] if pair["buddy_a"] == user["id"] else pair["buddy_a"]
-    other = await db.users.find_one({"id": other_id}, {"_id": 0, "password": 0})
+    other = await db.users.find_one(org_q(user, id=other_id), PUBLIC_USER_FIELDS)
+    if not other:  # stale cross-org pairing from before tenant isolation — hide it
+        return None
     return {"pairing": pair, "buddy": other}
 
 @api.post("/buddy/pair")
@@ -1671,18 +1788,22 @@ async def pair_buddy(user=Depends(get_current_user)):
     existing = await db.buddies.find_one({"$or": [{"buddy_a": user["id"]}, {"buddy_b": user["id"]}]}, {"_id": 0})
     if existing:
         other_id = existing["buddy_b"] if existing["buddy_a"] == user["id"] else existing["buddy_a"]
-        other = await db.users.find_one({"id": other_id}, {"_id": 0, "password": 0})
-        return {"pairing": existing, "buddy": other}
-    # find someone same department or random
+        other = await db.users.find_one(org_q(user, id=other_id), PUBLIC_USER_FIELDS)
+        if other:
+            return {"pairing": existing, "buddy": other}
+        await db.buddies.delete_one({"id": existing["id"]})  # cross-org pairing: re-pair in-org
+    # find someone same department or random — always within the caller's org
     dept = user.get("department")
-    candidates = await db.users.find({"id": {"$ne": user["id"]}, "department": dept}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
+    fields = {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}
+    candidates = await db.users.find(org_q(user, id={"$ne": user["id"]}, department=dept), fields).to_list(50)
     if not candidates:
-        candidates = await db.users.find({"id": {"$ne": user["id"]}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
+        candidates = await db.users.find(org_q(user, id={"$ne": user["id"]}), fields).to_list(50)
     if not candidates:
         raise HTTPException(404, "No buddies available")
     other = random.choice(candidates)
     pairing = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "buddy_a": user["id"],
         "buddy_b": other["id"],
         "started_at": now_iso(),
@@ -1690,7 +1811,7 @@ async def pair_buddy(user=Depends(get_current_user)):
     }
     await db.buddies.insert_one(pairing)
     pairing.pop("_id", None)
-    full_other = await db.users.find_one({"id": other["id"]}, {"_id": 0, "password": 0})
+    full_other = await db.users.find_one(org_q(user, id=other["id"]), PUBLIC_USER_FIELDS)
     return {"pairing": pairing, "buddy": full_other}
 
 @api.post("/buddy/checkin")
@@ -1705,8 +1826,8 @@ async def buddy_checkin(user=Depends(get_current_user)):
 
 # ---------- Employee Spotlight (weekly rotation) ----------
 @api.get("/spotlight/current")
-async def spotlight_current():
-    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("created_at", 1).to_list(500)
+async def spotlight_current(user=Depends(get_current_user)):
+    users = await db.users.find(org_q(user, status={"$ne": "deactivated"}), {**PUBLIC_USER_FIELDS, "created_at": 1}).sort("created_at", 1).to_list(500)
     if not users:
         return None
     # week-of-year based rotation
@@ -1811,6 +1932,7 @@ async def plant_optin(user=Depends(get_current_user)):
         return existing
     p = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "user_avatar": user.get("avatar", ""),
@@ -1851,18 +1973,18 @@ async def plant_checkin(user=Depends(get_current_user)):
     return {"streak": streak, "checkins": len(checkins)}
 
 @api.get("/plants/leaderboard")
-async def plant_leaderboard():
-    items = await db.plants.find({}, {"_id": 0}).sort("streak", -1).to_list(50)
+async def plant_leaderboard(user=Depends(get_current_user)):
+    items = await db.plants.find(org_q(user), {"_id": 0}).sort("streak", -1).to_list(50)
     return items
 
 # ---------- Wellness Recap (Monday auto-post) ----------
 @api.post("/recap/post")
 async def post_recap(admin=Depends(require_admin)):
     # Build a Monday recap post auto-posting to Fun Wall
-    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     # top 3 by streak this week
-    top = await db.users.find({}, {"_id": 0, "password": 0}).sort("streak", -1).to_list(3)
+    top = await db.users.find(org_q(admin), PUBLIC_USER_FIELDS).sort("streak", -1).to_list(3)
     teams = await db.users.aggregate([
+        {"$match": org_q(admin)},
         {"$group": {"_id": "$department", "points": {"$sum": "$points"}}},
         {"$sort": {"points": -1}},
         {"$limit": 1},
@@ -1871,6 +1993,7 @@ async def post_recap(admin=Depends(require_admin)):
     msg = " WEEKLY RECAP! Top streakers: " + ", ".join([f"{u['name']} ({u['streak']}d )" for u in top]) + f".  Team of the week: {top_team}!"
     post = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "user_id": admin["id"],
         "user_name": "Brutal Bot",
         "user_avatar": "https://api.dicebear.com/7.x/bottts-neutral/svg?seed=BrutalBot&backgroundColor=000000",
@@ -1899,11 +2022,12 @@ class RewardReq(BaseModel):
 async def issue_reward(body: RewardReq, admin=Depends(require_admin)):
     if body.type not in REWARD_TYPES:
         raise HTTPException(400, "Invalid reward type")
-    target = await db.users.find_one({"id": body.user_id}, {"_id": 0, "name": 1, "id": 1})
+    target = await db.users.find_one(org_q(admin, id=body.user_id), {"_id": 0, "name": 1, "id": 1})
     if not target:
         raise HTTPException(404, "User not found")
     rew = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "user_id": body.user_id,
         "user_name": target["name"],
         "issued_by": admin["name"],
@@ -1931,7 +2055,7 @@ async def issue_reward(body: RewardReq, admin=Depends(require_admin)):
 
 @api.get("/admin/rewards")
 async def list_all_rewards(admin=Depends(require_admin)):
-    items = await db.rewards.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    items = await db.rewards.find(org_q(admin), {"_id": 0}).sort("created_at", -1).to_list(500)
     return items
 
 @api.get("/rewards/me")
@@ -1977,7 +2101,12 @@ async def get_points_config(org_id: Optional[str] = None):
         return DEFAULT_POINTS_CONFIG.copy()
     return {**DEFAULT_POINTS_CONFIG, **{k: v for k, v in cfg.items() if k != "key"}}
 
-async def get_game_config():
+async def get_game_config(org_id: Optional[str] = None):
+    """Level/streak rules are per organization, like the points config."""
+    if org_id:
+        cfg = await db.config.find_one({"key": f"game_config:{org_id}"}, {"_id": 0})
+        if cfg:
+            return {**DEFAULT_GAME_CONFIG, **{k: v for k, v in cfg.items() if k not in ("key", "org_id")}}
     cfg = await db.config.find_one({"key": "game_config"}, {"_id": 0})
     if not cfg:
         return DEFAULT_GAME_CONFIG.copy()
@@ -1997,13 +2126,15 @@ async def set_pc(body: dict, admin=Depends(require_admin)):
 
 @api.get("/admin/game-config")
 async def get_gc(admin=Depends(require_admin)):
-    return await get_game_config()
+    return await get_game_config(admin.get("org_id"))
 
 @api.put("/admin/game-config")
 async def set_gc(body: dict, admin=Depends(require_admin)):
     clean = {k: int(v) for k, v in body.items() if k in DEFAULT_GAME_CONFIG and isinstance(v, (int, float))}
-    await db.config.update_one({"key": "game_config"}, {"$set": {"key": "game_config", **clean}}, upsert=True)
-    return await get_game_config()
+    org_id = admin.get("org_id")
+    key = f"game_config:{org_id}"
+    await db.config.update_one({"key": key}, {"$set": {"key": key, "org_id": org_id, **clean}}, upsert=True)
+    return await get_game_config(org_id)
 
 # ---------- Manual Points Adjustment + Audit Log ----------
 class PointAward(BaseModel):
@@ -2016,8 +2147,13 @@ class PointAward(BaseModel):
 async def admin_award_points(body: PointAward, admin=Depends(require_admin)):
     if not body.user_id and not body.team_id:
         raise HTTPException(400, "Provide user_id or team_id")
+    if body.user_id:
+        await require_org_users(admin, [body.user_id])
+    if body.team_id and not await db.game_teams.find_one(org_q(admin, id=body.team_id), {"_id": 1}):
+        raise HTTPException(404, "Team not found")
     log = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "user_id": body.user_id,
         "team_id": body.team_id,
         "points": body.points,
@@ -2036,7 +2172,7 @@ async def admin_award_points(body: PointAward, admin=Depends(require_admin)):
 
 @api.get("/admin/points/log")
 async def points_log(admin=Depends(require_admin)):
-    items = await db.points_log.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    items = await db.points_log.find(org_q(admin), {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
 
 # ---------- Quiz CRUD (admin) ----------
@@ -2047,7 +2183,7 @@ class QuizPayload(BaseModel):
 
 @api.get("/admin/quizzes")
 async def admin_list_quizzes(admin=Depends(require_admin)):
-    items = await db.custom_quizzes.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    items = await db.custom_quizzes.find(org_q(admin), {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
 
 @api.post("/admin/quizzes")
@@ -2059,6 +2195,7 @@ async def admin_create_quiz(body: QuizPayload, admin=Depends(require_admin)):
             raise HTTPException(400, "answer must be valid index")
     quiz = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "department": body.department,
         "title": body.title or f"{body.department} Quiz",
         "questions": body.questions,
@@ -2075,20 +2212,24 @@ async def admin_update_quiz(qid: str, body: QuizPayload, admin=Depends(require_a
             raise HTTPException(400, "Each question needs 2+ options")
         if not isinstance(q.get("answer"), int) or q["answer"] < 0 or q["answer"] >= len(q["options"]):
             raise HTTPException(400, "answer must be a valid index")
-    await db.custom_quizzes.update_one(
-        {"id": qid},
+    res = await db.custom_quizzes.update_one(
+        org_q(admin, id=qid),
         {"$set": {
             "department": body.department,
             "title": body.title or f"{body.department} Quiz",
             "questions": body.questions,
         }},
     )
-    updated = await db.custom_quizzes.find_one({"id": qid}, {"_id": 0})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Quiz not found")
+    updated = await db.custom_quizzes.find_one(org_q(admin, id=qid), {"_id": 0})
     return updated
 
 @api.delete("/admin/quizzes/{qid}")
 async def admin_delete_quiz(qid: str, admin=Depends(require_admin)):
-    await db.custom_quizzes.delete_one({"id": qid})
+    res = await db.custom_quizzes.delete_one(org_q(admin, id=qid))
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Quiz not found")
     return {"deleted": True}
 
 # ---------- Announcements (push notifications) ----------
@@ -2102,12 +2243,12 @@ class AnnouncementReq(BaseModel):
 @api.post("/admin/announcements")
 async def create_announcement(body: AnnouncementReq, admin=Depends(require_admin)):
     if body.target == "all":
-        users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(1000)
-        recipient_ids = [u["id"] for u in users]
+        recipient_ids = await org_member_ids(admin.get("org_id"))
     else:
-        recipient_ids = body.target_user_ids or []
+        recipient_ids = [u["id"] for u in await require_org_users(admin, body.target_user_ids or [])]
     ann = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "title": body.title,
         "message": body.message,
         "kind": body.kind or "info",
@@ -2134,7 +2275,7 @@ async def create_announcement(body: AnnouncementReq, admin=Depends(require_admin
 
 @api.get("/admin/announcements")
 async def admin_list_announcements(admin=Depends(require_admin)):
-    items = await db.announcements.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    items = await db.announcements.find(org_q(admin), {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
 
 @api.get("/announcements/me")
@@ -2146,7 +2287,7 @@ async def my_announcements(user=Depends(get_current_user)):
 
 @api.post("/announcements/{aid}/read")
 async def mark_read(aid: str, user=Depends(get_current_user)):
-    await db.announcements.update_one({"id": aid}, {"$addToSet": {"read_by": user["id"]}})
+    await db.announcements.update_one({"id": aid, "recipients": user["id"]}, {"$addToSet": {"read_by": user["id"]}})
     return {"ok": True}
 
 # ---------- Game Teams ----------
@@ -2167,6 +2308,7 @@ class ShuffleReq(BaseModel):
 async def create_team(body: GameTeamReq, admin=Depends(require_admin)):
     t = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "name": body.name,
         "color": body.color or "yellow",
         "members": [],
@@ -2177,55 +2319,61 @@ async def create_team(body: GameTeamReq, admin=Depends(require_admin)):
     t.pop("_id", None)
     return t
 
-@api.get("/admin/game-teams")
-async def list_teams_admin(admin=Depends(require_admin)):
-    items = await db.game_teams.find({}, {"_id": 0}).sort("team_points", -1).to_list(50)
-    # resolve member info
+async def _teams_with_members(user: dict) -> List[dict]:
+    items = await db.game_teams.find(org_q(user), {"_id": 0}).sort("team_points", -1).to_list(50)
     for t in items:
-        members = await db.users.find({"id": {"$in": t.get("members", [])}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
-        t["member_details"] = members
+        t["member_details"] = await db.users.find(
+            org_q(user, id={"$in": t.get("members", [])}),
+            {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1},
+        ).to_list(50)
     return items
 
+@api.get("/admin/game-teams")
+async def list_teams_admin(admin=Depends(require_admin)):
+    return await _teams_with_members(admin)
+
 @api.get("/game-teams")
-async def list_teams_public():
-    items = await db.game_teams.find({}, {"_id": 0}).sort("team_points", -1).to_list(50)
-    for t in items:
-        members = await db.users.find({"id": {"$in": t.get("members", [])}}, {"_id": 0, "id": 1, "name": 1, "avatar": 1, "department": 1}).to_list(50)
-        t["member_details"] = members
-    return items
+async def list_teams_public(user=Depends(get_current_user)):
+    return await _teams_with_members(user)
 
 @api.patch("/admin/game-teams/{tid}")
 async def update_team(tid: str, body: GameTeamReq, admin=Depends(require_admin)):
-    await db.game_teams.update_one({"id": tid}, {"$set": {"name": body.name, "color": body.color}})
-    t = await db.game_teams.find_one({"id": tid}, {"_id": 0})
-    return t
+    res = await db.game_teams.update_one(org_q(admin, id=tid), {"$set": {"name": body.name, "color": body.color}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Team not found")
+    return await db.game_teams.find_one(org_q(admin, id=tid), {"_id": 0})
 
 @api.delete("/admin/game-teams/{tid}")
 async def delete_team(tid: str, admin=Depends(require_admin)):
-    await db.game_teams.delete_one({"id": tid})
+    res = await db.game_teams.delete_one(org_q(admin, id=tid))
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Team not found")
     return {"deleted": True}
 
 @api.put("/admin/game-teams/{tid}/members")
 async def set_team_members(tid: str, body: GameTeamMembers, admin=Depends(require_admin)):
-    # Remove these users from any other team first (one team per user)
+    if not await db.game_teams.find_one(org_q(admin, id=tid), {"_id": 1}):
+        raise HTTPException(404, "Team not found")
+    await require_org_users(admin, body.user_ids)
+    # Remove these users from any other team in this org first (one team per user)
     for uid in body.user_ids:
-        await db.game_teams.update_many({"id": {"$ne": tid}}, {"$pull": {"members": uid}})
-    await db.game_teams.update_one({"id": tid}, {"$set": {"members": body.user_ids}})
-    t = await db.game_teams.find_one({"id": tid}, {"_id": 0})
-    return t
+        await db.game_teams.update_many(org_q(admin, id={"$ne": tid}), {"$pull": {"members": uid}})
+    await db.game_teams.update_one(org_q(admin, id=tid), {"$set": {"members": body.user_ids}})
+    return await db.game_teams.find_one(org_q(admin, id=tid), {"_id": 0})
 
 @api.post("/admin/game-teams/shuffle")
 async def shuffle_teams(body: ShuffleReq, admin=Depends(require_admin)):
     n = max(2, min(8, body.num_teams or 4))
-    users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(1000)
+    users = await db.users.find(org_q(admin, status={"$ne": "deactivated"}), {"_id": 0, "id": 1}).to_list(1000)
     random.shuffle(users)
-    # delete existing auto-shuffled teams to avoid pile-up
-    await db.game_teams.delete_many({"auto_shuffled": True})
+    # delete this org's existing auto-shuffled teams to avoid pile-up
+    await db.game_teams.delete_many(org_q(admin, auto_shuffled=True))
     teams = []
     for i in range(n):
         color = GAME_TEAM_COLORS[i % len(GAME_TEAM_COLORS)]
         t = {
             "id": str(uuid.uuid4()),
+            "org_id": admin.get("org_id"),
             "name": f"{body.name_prefix or 'Squad'} {chr(65 + i)}",
             "color": color,
             "members": [],
@@ -2245,7 +2393,11 @@ async def shuffle_teams(body: ShuffleReq, admin=Depends(require_admin)):
 # ---------- Users lookup (for shoutout picker etc) ----------
 @api.get("/users")
 async def list_users(user=Depends(get_current_user)):
-    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("name", 1).to_list(500)
+    # Directory for pickers/mentions: same-org, active members, public profile fields only.
+    users = await db.users.find(
+        org_q(user, status={"$ne": "deactivated"}),
+        {**PUBLIC_USER_FIELDS, "first_name": 1, "last_name": 1, "nickname": 1},
+    ).sort("name", 1).to_list(500)
     return users
 
 # ---------- Music object storage (Emergent) ----------
@@ -2330,6 +2482,7 @@ async def music_upload(file: UploadFile = File(...), title: str = Form(None), ar
         raise HTTPException(500, f"Upload failed: {e}")
     song = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "title": title or file.filename.rsplit(".", 1)[0],
@@ -2349,7 +2502,7 @@ async def music_upload(file: UploadFile = File(...), title: str = Form(None), ar
 
 @api.get("/music/tracks")
 async def list_tracks(user=Depends(get_current_user)):
-    items = await db.songs.find({"is_deleted": False}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    items = await db.songs.find(org_q(user, is_deleted=False), {"_id": 0}).sort("created_at", -1).to_list(500)
     liked = await db.song_likes.find({"user_id": user["id"]}, {"_id": 0, "song_id": 1}).to_list(500)
     liked_ids = {l["song_id"] for l in liked}
     for s in items:
@@ -2366,10 +2519,13 @@ async def stream(song_id: str, auth: str = Query(None), authorization: Optional[
     if not token:
         raise HTTPException(401, "Auth required")
     try:
-        pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
     except Exception:
         raise HTTPException(401, "Bad token")
-    song = await db.songs.find_one({"id": song_id, "is_deleted": False}, {"_id": 0})
+    listener = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0, "org_id": 1})
+    if not listener:
+        raise HTTPException(401, "Bad token")
+    song = await db.songs.find_one(org_q(listener, id=song_id, is_deleted=False), {"_id": 0})
     if not song:
         raise HTTPException(404, "Not found")
     if song.get("source") != "upload" or not song.get("storage_path"):
@@ -2382,7 +2538,7 @@ async def stream(song_id: str, auth: str = Query(None), authorization: Optional[
 
 @api.delete("/music/tracks/{song_id}")
 async def delete_track(song_id: str, user=Depends(get_current_user)):
-    song = await db.songs.find_one({"id": song_id}, {"_id": 0})
+    song = await db.songs.find_one(org_q(user, id=song_id), {"_id": 0})
     if not song:
         raise HTTPException(404, "Not found")
     if song["user_id"] != user["id"] and user.get("role") != "admin":
@@ -2392,6 +2548,8 @@ async def delete_track(song_id: str, user=Depends(get_current_user)):
 
 @api.post("/music/like/{song_id}")
 async def toggle_like(song_id: str, user=Depends(get_current_user)):
+    if not await db.songs.find_one(org_q(user, id=song_id, is_deleted=False), {"_id": 1}):
+        raise HTTPException(404, "Track not found")
     existing = await db.song_likes.find_one({"song_id": song_id, "user_id": user["id"]})
     if existing:
         await db.song_likes.delete_one({"song_id": song_id, "user_id": user["id"]})
@@ -2403,14 +2561,19 @@ async def toggle_like(song_id: str, user=Depends(get_current_user)):
 async def liked_songs(user=Depends(get_current_user)):
     likes = await db.song_likes.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
     ids = [l["song_id"] for l in likes]
-    items = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(500)
+    items = await db.songs.find(org_q(user, id={"$in": ids}, is_deleted=False), {"_id": 0}).to_list(500)
     for s in items:
         s["liked"] = True
     return items
 
 @api.post("/music/history/{song_id}")
 async def log_play(song_id: str, user=Depends(get_current_user)):
-    await db.play_history.insert_one({"id": str(uuid.uuid4()), "user_id": user["id"], "song_id": song_id, "at": now_iso()})
+    if not await db.songs.find_one(org_q(user, id=song_id), {"_id": 1}):
+        raise HTTPException(404, "Track not found")
+    await db.play_history.insert_one({
+        "id": str(uuid.uuid4()), "org_id": user.get("org_id"),
+        "user_id": user["id"], "song_id": song_id, "at": now_iso(),
+    })
     return {"ok": True}
 
 @api.get("/music/history/me")
@@ -2422,7 +2585,7 @@ async def my_history(user=Depends(get_current_user)):
         if h["song_id"] not in ids_seen:
             ids_seen.add(h["song_id"])
             unique_ids.append(h["song_id"])
-    songs = await db.songs.find({"id": {"$in": unique_ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
+    songs = await db.songs.find(org_q(user, id={"$in": unique_ids}, is_deleted=False), {"_id": 0}).to_list(50)
     smap = {s["id"]: s for s in songs}
     return [smap[i] for i in unique_ids if i in smap][:30]
 
@@ -2486,6 +2649,7 @@ async def add_link(body: LinkAddIn, user=Depends(get_current_user)):
             pass
     song = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "user_id": user["id"],
         "user_name": user["name"],
         "title": title or "Untitled",
@@ -2511,7 +2675,7 @@ async def add_link(body: LinkAddIn, user=Depends(get_current_user)):
 async def trending(days: int = 7, limit: int = 8, user=Depends(get_current_user)):
     since = (datetime.now(timezone.utc) - timedelta(days=max(1, days))).isoformat()
     pipeline = [
-        {"$match": {"at": {"$gte": since}}},
+        {"$match": org_q(user, at={"$gte": since})},
         {"$group": {"_id": "$song_id", "plays": {"$sum": 1}}},
         {"$sort": {"plays": -1}},
         {"$limit": max(1, min(limit, 50))},
@@ -2520,7 +2684,7 @@ async def trending(days: int = 7, limit: int = 8, user=Depends(get_current_user)
     ids = [a["_id"] for a in agg]
     if not ids:
         return []
-    songs = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(50)
+    songs = await db.songs.find(org_q(user, id={"$in": ids}, is_deleted=False), {"_id": 0}).to_list(50)
     smap = {s["id"]: s for s in songs}
     liked = await db.song_likes.find({"user_id": user["id"], "song_id": {"$in": ids}}, {"_id": 0, "song_id": 1}).to_list(200)
     liked_ids = {l["song_id"] for l in liked}
@@ -2552,12 +2716,23 @@ class PlaylistReorder(BaseModel):
 class PlaylistTrackAdd(BaseModel):
     track_id: str
 
-def _pl_access_filter(user_id: str):
-    return {"$or": [
-        {"owner_id": user_id},
+def _pl_access_filter(user: dict):
+    # "public" means public within the org, not across tenants
+    return org_q(user, **{"$or": [
+        {"owner_id": user["id"]},
         {"visibility": "public"},
-        {"visibility": "shared", "shared_with": user_id},
-    ]}
+        {"visibility": "shared", "shared_with": user["id"]},
+    ]})
+
+async def _org_playlist(pid: str, user: dict) -> dict:
+    pl = await db.playlists.find_one(org_q(user, id=pid), {"_id": 0})
+    if not pl:
+        raise HTTPException(404, "Not found")
+    return pl
+
+async def _clean_shared_with(user: dict, ids) -> List[str]:
+    ids = list(dict.fromkeys(ids or []))
+    return [u["id"] for u in await require_org_users(user, ids)] if ids else []
 
 def _pl_can_view(pl, user):
     if pl["owner_id"] == user["id"]: return True
@@ -2577,12 +2752,13 @@ async def create_playlist(body: PlaylistCreate, user=Depends(get_current_user)):
     vis = body.visibility if body.visibility in ("private", "shared", "public") else "private"
     pl = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "owner_id": user["id"],
         "owner_name": user["name"],
         "name": (body.name or "New Playlist").strip()[:80],
         "description": (body.description or "").strip()[:280],
         "visibility": vis,
-        "shared_with": list(dict.fromkeys(body.shared_with or [])),
+        "shared_with": await _clean_shared_with(user, body.shared_with),
         "track_ids": [],
         "cover_color": _color_for(body.name or ""),
         "created_at": now_iso(),
@@ -2594,7 +2770,7 @@ async def create_playlist(body: PlaylistCreate, user=Depends(get_current_user)):
 
 @api.get("/playlists")
 async def list_playlists(user=Depends(get_current_user)):
-    items = await db.playlists.find(_pl_access_filter(user["id"]), {"_id": 0}).sort("updated_at", -1).to_list(200)
+    items = await db.playlists.find(_pl_access_filter(user), {"_id": 0}).sort("updated_at", -1).to_list(200)
     for p in items:
         p["track_count"] = len(p.get("track_ids") or [])
         p["can_edit"] = _pl_can_edit(p, user)
@@ -2605,7 +2781,7 @@ async def _hydrate_playlist(pl, user):
     if not ids:
         pl["tracks"] = []
         return pl
-    songs = await db.songs.find({"id": {"$in": ids}, "is_deleted": False}, {"_id": 0}).to_list(500)
+    songs = await db.songs.find(org_q(user, id={"$in": ids}, is_deleted=False), {"_id": 0}).to_list(500)
     smap = {s["id"]: s for s in songs}
     liked = await db.song_likes.find({"user_id": user["id"], "song_id": {"$in": ids}}, {"_id": 0, "song_id": 1}).to_list(500)
     liked_ids = {l["song_id"] for l in liked}
@@ -2620,22 +2796,20 @@ async def _hydrate_playlist(pl, user):
 
 @api.get("/playlists/{pid}")
 async def get_playlist(pid: str, user=Depends(get_current_user)):
-    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
-    if not pl: raise HTTPException(404, "Not found")
+    pl = await _org_playlist(pid, user)
     if not _pl_can_view(pl, user): raise HTTPException(403, "No access")
     pl["can_edit"] = _pl_can_edit(pl, user)
     return await _hydrate_playlist(pl, user)
 
 @api.patch("/playlists/{pid}")
 async def update_playlist(pid: str, body: PlaylistUpdate, user=Depends(get_current_user)):
-    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
-    if not pl: raise HTTPException(404, "Not found")
+    pl = await _org_playlist(pid, user)
     if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
     upd = {}
     if body.name is not None: upd["name"] = body.name.strip()[:80]; upd["cover_color"] = _color_for(body.name)
     if body.description is not None: upd["description"] = body.description.strip()[:280]
     if body.visibility is not None and body.visibility in ("private","shared","public"): upd["visibility"] = body.visibility
-    if body.shared_with is not None: upd["shared_with"] = list(dict.fromkeys(body.shared_with))
+    if body.shared_with is not None: upd["shared_with"] = await _clean_shared_with(user, body.shared_with)
     upd["updated_at"] = now_iso()
     await db.playlists.update_one({"id": pid}, {"$set": upd})
     pl.update(upd)
@@ -2643,18 +2817,16 @@ async def update_playlist(pid: str, body: PlaylistUpdate, user=Depends(get_curre
 
 @api.delete("/playlists/{pid}")
 async def delete_playlist(pid: str, user=Depends(get_current_user)):
-    pl = await db.playlists.find_one({"id": pid})
-    if not pl: raise HTTPException(404, "Not found")
+    pl = await _org_playlist(pid, user)
     if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
     await db.playlists.delete_one({"id": pid})
     return {"deleted": True}
 
 @api.post("/playlists/{pid}/tracks")
 async def add_track_to_playlist(pid: str, body: PlaylistTrackAdd, user=Depends(get_current_user)):
-    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
-    if not pl: raise HTTPException(404, "Not found")
+    pl = await _org_playlist(pid, user)
     if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
-    song = await db.songs.find_one({"id": body.track_id, "is_deleted": False}, {"_id": 0})
+    song = await db.songs.find_one(org_q(user, id=body.track_id, is_deleted=False), {"_id": 0})
     if not song: raise HTTPException(404, "Track not found")
     ids = pl.get("track_ids") or []
     if body.track_id in ids:
@@ -2665,8 +2837,7 @@ async def add_track_to_playlist(pid: str, body: PlaylistTrackAdd, user=Depends(g
 
 @api.delete("/playlists/{pid}/tracks/{track_id}")
 async def remove_track_from_playlist(pid: str, track_id: str, user=Depends(get_current_user)):
-    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
-    if not pl: raise HTTPException(404, "Not found")
+    pl = await _org_playlist(pid, user)
     if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
     ids = [t for t in (pl.get("track_ids") or []) if t != track_id]
     await db.playlists.update_one({"id": pid}, {"$set": {"track_ids": ids, "updated_at": now_iso()}})
@@ -2674,8 +2845,7 @@ async def remove_track_from_playlist(pid: str, track_id: str, user=Depends(get_c
 
 @api.put("/playlists/{pid}/reorder")
 async def reorder_playlist(pid: str, body: PlaylistReorder, user=Depends(get_current_user)):
-    pl = await db.playlists.find_one({"id": pid}, {"_id": 0})
-    if not pl: raise HTTPException(404, "Not found")
+    pl = await _org_playlist(pid, user)
     if not _pl_can_edit(pl, user): raise HTTPException(403, "Not yours")
     existing = set(pl.get("track_ids") or [])
     new_ids = [t for t in body.track_ids if t in existing]
@@ -2891,15 +3061,15 @@ async def award_reward(user_id: str, source: str, xp: int, coins: int = 0,
         if existing:
             return {"awarded": False, "already_claimed": True, "transaction": existing}
 
-    gc = await get_game_config()
     updated = await db.users.find_one_and_update(
         {"id": user_id},
         {"$inc": {"points": int(xp), "coins": int(coins)}},
-        projection={"_id": 0, "points": 1, "coins": 1, "level": 1},
+        projection={"_id": 0, "points": 1, "coins": 1, "level": 1, "org_id": 1},
         return_document=ReturnDocument.AFTER,
     )
     if not updated:
         raise HTTPException(404, "User not found")
+    gc = await get_game_config(updated.get("org_id"))
 
     new_points = updated.get("points", 0)
     new_level = 1 + new_points // max(1, gc.get("level_threshold", 200))
@@ -3474,7 +3644,7 @@ async def current_totals(user_id: str) -> dict:
 @api.get("/rewards")
 async def rewards_summary(user=Depends(get_current_user)):
     """Current XP / level / coins plus progress toward the next level (doc section 7)."""
-    gc = await get_game_config()
+    gc = await get_game_config(user.get("org_id"))
     totals = await current_totals(user["id"])
     threshold = max(1, gc.get("level_threshold", 200))
     into_level = totals["xp"] % threshold
@@ -3541,11 +3711,14 @@ async def rewards_claim(body: RewardClaimReq, user=Depends(get_current_user)):
 async def activity_feed(limit: int = 30, scope: str = "me", user=Depends(get_current_user)):
     """Live activity feed. scope=me (default) or scope=all for the whole team."""
     limit = max(1, min(100, limit))
-    q = {} if scope == "all" else {"user_id": user["id"]}
+    if scope == "all":
+        q = {"user_id": {"$in": await org_member_ids(user.get("org_id"))}}
+    else:
+        q = {"user_id": user["id"]}
     items = await db.activities.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
     if scope == "all":
         uids = list({i["user_id"] for i in items})
-        users = await db.users.find({"id": {"$in": uids}},
+        users = await db.users.find(org_q(user, id={"$in": uids}),
                                     {"_id": 0, "id": 1, "name": 1, "avatar": 1}).to_list(len(uids) or 1)
         by_id = {u["id"]: u for u in users}
         for i in items:
@@ -3875,11 +4048,12 @@ async def deliver_push(device: dict, title: str, message: str, data: dict = None
         logger.warning("Push delivery failed for device %s: %s", device.get("id"), exc)
         return "failed"
 
-async def dispatch_due_reminders(window_minutes: int = 5) -> dict:
+async def dispatch_due_reminders(window_minutes: int = 5, org_id: Optional[str] = None) -> dict:
     """Find reminders due in the current window and record/send them once each.
 
     Idempotent per (user, type, time, day) via the `notification_dispatch` guard
-    collection, so it is safe to call from a cron/worker every minute.
+    collection, so it is safe to call from a cron/worker every minute. `org_id`
+    limits the run to one tenant (the admin HTTP trigger); None = all tenants (cron).
     """
     now = datetime.now(timezone.utc)
     day = now.date().isoformat()
@@ -3889,7 +4063,8 @@ async def dispatch_due_reminders(window_minutes: int = 5) -> dict:
     sent, skipped = 0, 0
     # Only users who have saved settings are in scope: storing settings is the
     # opt-in signal, so nobody gets reminders they never configured.
-    settings_docs = await db.user_settings.find({}, {"_id": 0}).to_list(2000)
+    q = {"user_id": {"$in": await org_member_ids(org_id)}} if org_id else {}
+    settings_docs = await db.user_settings.find(q, {"_id": 0}).to_list(2000)
     user_ids = [s["user_id"] for s in settings_docs if s.get("user_id")]
     for uid in user_ids:
         settings = await get_user_settings(uid)
@@ -3932,8 +4107,8 @@ async def dispatch_due_reminders(window_minutes: int = 5) -> dict:
 
 @api.post("/notifications/dispatch")
 async def run_dispatch(window_minutes: int = 5, admin=Depends(require_admin)):
-    """Entry point for a cron/worker to fire the reminders that are due now."""
-    return await dispatch_due_reminders(window_minutes)
+    """Fire the reminders that are due now for the caller's organization."""
+    return await dispatch_due_reminders(window_minutes, org_id=admin.get("org_id"))
 
 
 # =========================================================================
@@ -3966,10 +4141,11 @@ class OccasionShuffleReq(BaseModel):
     name_prefix: Optional[str] = None
 
 
-async def ensure_default_bounties():
-    if await db.game_bounties.count_documents({}) == 0:
+async def ensure_default_bounties(org_id: Optional[str]):
+    if await db.game_bounties.count_documents({"org_id": org_id}) == 0:
         await db.game_bounties.insert_many([{
             "id": str(uuid.uuid4()),
+            "org_id": org_id,
             "title": b["title"],
             "reward": b["reward"],
             "status": "OPEN",
@@ -3984,8 +4160,8 @@ async def team_of(user_id: str) -> Optional[dict]:
 
 @api.get("/game-teams/bounties")
 async def list_bounties(user=Depends(get_current_user)):
-    await ensure_default_bounties()
-    return await db.game_bounties.find({}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    await ensure_default_bounties(user.get("org_id"))
+    return await db.game_bounties.find(org_q(user), {"_id": 0}).sort("created_at", 1).to_list(100)
 
 @api.post("/admin/game-teams/bounties")
 async def create_bounty(body: BountyCreate, admin=Depends(require_admin)):
@@ -3996,6 +4172,7 @@ async def create_bounty(body: BountyCreate, admin=Depends(require_admin)):
         raise HTTPException(400, "reward must be between 1 and 1000")
     bounty = {
         "id": str(uuid.uuid4()),
+        "org_id": admin.get("org_id"),
         "title": title[:120],
         "reward": body.reward,
         "status": "OPEN",
@@ -4009,13 +4186,13 @@ async def create_bounty(body: BountyCreate, admin=Depends(require_admin)):
 
 @api.post("/game-teams/bounties/{bounty_id}/claim")
 async def claim_bounty(bounty_id: str, body: BountyClaim, user=Depends(get_current_user)):
-    bounty = await db.game_bounties.find_one({"id": bounty_id}, {"_id": 0})
+    bounty = await db.game_bounties.find_one(org_q(user, id=bounty_id), {"_id": 0})
     if not bounty:
         raise HTTPException(404, "Bounty not found")
     if bounty.get("status") == "CLAIMED":
         raise HTTPException(409, "Bounty has already been claimed")
 
-    team = await db.game_teams.find_one({"id": body.team_id}, {"_id": 0})
+    team = await db.game_teams.find_one(org_q(user, id=body.team_id), {"_id": 0})
     if not team:
         raise HTTPException(404, "Team not found")
     if user["id"] not in (team.get("members") or []):
@@ -4045,7 +4222,7 @@ async def claim_bounty(bounty_id: str, body: BountyClaim, user=Depends(get_curre
 
 @api.get("/game-teams/challenges")
 async def list_challenges_teams(user=Depends(get_current_user)):
-    return await db.game_challenges.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return await db.game_challenges.find(org_q(user), {"_id": 0}).sort("created_at", -1).to_list(100)
 
 @api.post("/game-teams/challenge")
 async def challenge_team(body: TeamChallengeReq, user=Depends(get_current_user)):
@@ -4054,8 +4231,8 @@ async def challenge_team(body: TeamChallengeReq, user=Depends(get_current_user))
     if body.wager < 10 or body.wager > 500:
         raise HTTPException(400, "wager must be between 10 and 500 points")
 
-    challenger = await db.game_teams.find_one({"id": body.challenger_team_id}, {"_id": 0})
-    target = await db.game_teams.find_one({"id": body.target_team_id}, {"_id": 0})
+    challenger = await db.game_teams.find_one(org_q(user, id=body.challenger_team_id), {"_id": 0})
+    target = await db.game_teams.find_one(org_q(user, id=body.target_team_id), {"_id": 0})
     if not challenger or not target:
         raise HTTPException(404, "Team not found")
     if user["id"] not in (challenger.get("members") or []):
@@ -4071,6 +4248,7 @@ async def challenge_team(body: TeamChallengeReq, user=Depends(get_current_user))
 
     challenge = {
         "id": str(uuid.uuid4()),
+        "org_id": user.get("org_id"),
         "challenger_team_id": challenger["id"],
         "challenger_team_name": challenger["name"],
         "target_team_id": target["id"],
@@ -4098,7 +4276,7 @@ class ChallengeResolve(BaseModel):
 
 @api.post("/admin/game-teams/challenges/{challenge_id}/resolve")
 async def resolve_challenge(challenge_id: str, body: ChallengeResolve, admin=Depends(require_admin)):
-    ch = await db.game_challenges.find_one({"id": challenge_id}, {"_id": 0})
+    ch = await db.game_challenges.find_one(org_q(admin, id=challenge_id), {"_id": 0})
     if not ch:
         raise HTTPException(404, "Challenge not found")
     if ch["status"] != "PENDING":
@@ -4124,13 +4302,12 @@ async def occasion_shuffle(body: OccasionShuffleReq, admin=Depends(require_admin
     prefix = (body.name_prefix or theme or "Squad").strip()[:40] or "Squad"
     teams = await shuffle_teams(ShuffleReq(num_teams=body.num_teams, name_prefix=prefix), admin)
     if theme:
-        await db.game_teams.update_many({"auto_shuffled": True}, {"$set": {"theme": theme}})
+        await db.game_teams.update_many(org_q(admin, auto_shuffled=True), {"$set": {"theme": theme}})
         for t in teams:
             t["theme"] = theme
-        users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(1000)
-        for u in users:
+        for uid in await org_member_ids(admin.get("org_id")):
             await create_notification(
-                user_id=u["id"],
+                user_id=uid,
                 kind="announcement",
                 title=f"🎲 Teams reshuffled: {theme}",
                 message="Head to Game Teams to meet your new battalion.",
@@ -4194,8 +4371,40 @@ async def ensure_indexes():
     await db.game_bounties.create_index("status")
     await db.game_challenges.create_index([("status", 1), ("created_at", -1)])
     await db.organizations.create_index("name")
+    await db.organizations.create_index("name_normalized", unique=True)
     await db.invitations.create_index("token", unique=True)
     await db.invitations.create_index([("org_id", 1), ("email", 1)])
+    for coll in TENANT_COLLECTIONS:
+        await coll.create_index([("org_id", 1), ("created_at", -1)])
+
+# Every collection whose rows belong to one organization (BUG-03). Rows that predate
+# tenant isolation are backfilled into the Demo Organization on startup.
+TENANT_COLLECTIONS = [
+    db.posts, db.shoutouts, db.help_posts, db.polls, db.feedback, db.challenges_custom,
+    db.custom_quizzes, db.quiz_results, db.announcements, db.game_teams, db.game_bounties,
+    db.game_challenges, db.songs, db.playlists, db.play_history, db.moods, db.buddies,
+    db.plants, db.game_scores, db.rewards, db.points_log, db.fact_reactions,
+]
+
+async def backfill_org_names():
+    """Give every org a normalized name for the uniqueness index. Orgs that were already
+    duplicated before BUG-02 was fixed keep their data and display name; only the oldest
+    keeps the plain key, the rest get a suffixed key (and a warning in the log)."""
+    orgs = await db.organizations.find(
+        {"name_normalized": {"$exists": False}}, {"_id": 0, "id": 1, "name": 1}
+    ).to_list(10000)
+    for o in orgs:
+        await db.organizations.update_one({"id": o["id"]}, {"$set": {"name_normalized": normalize_org_name(o["name"])}})
+    dupes = await db.organizations.aggregate([
+        {"$group": {"_id": "$name_normalized", "ids": {"$push": {"id": "$id", "at": "$created_at", "demo": "$is_demo"}}, "n": {"$sum": 1}}},
+        {"$match": {"n": {"$gt": 1}}},
+    ]).to_list(1000)
+    for d in dupes:
+        keep = sorted(d["ids"], key=lambda x: (not x.get("demo"), x.get("at") or ""))[0]["id"]
+        for o in d["ids"]:
+            if o["id"] != keep:
+                await db.organizations.update_one({"id": o["id"]}, {"$set": {"name_normalized": f"{d['_id']}#{o['id']}"}})
+                logger.warning("Organization %s duplicates the name of %s (pre-existing); kept, but renamed key", o["id"], keep)
 
 @app.on_event("startup")
 async def on_startup():
@@ -4204,13 +4413,20 @@ async def on_startup():
         await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "employee", "dnd": False}})
         await db.users.update_many({"coins": {"$exists": False}}, {"$set": {"coins": 0}})
         await db.users.update_many({"status": {"$exists": False}}, {"$set": {"status": "active"}})
-        # Backfill org_id on any pre-existing users/events into a shared "Demo Organization"
-        if await db.users.count_documents({"org_id": {"$exists": False}}) > 0 \
-                or await db.events.count_documents({"org_id": {"$exists": False}}) > 0:
-            default_org_id = await get_or_create_default_org()
-            await db.users.update_many({"org_id": {"$exists": False}}, {"$set": {"org_id": default_org_id}})
-            await db.events.update_many({"org_id": {"$exists": False}}, {"$set": {"org_id": default_org_id}})
-            logger.info("Backfilled org_id on pre-existing users/events into the Demo Organization")
+        # Backfill org_id on anything that predates tenant isolation into the Demo Organization
+        default_org_id = await get_or_create_default_org()
+        for coll in [db.users, db.events, *TENANT_COLLECTIONS]:
+            res = await coll.update_many({"org_id": {"$exists": False}}, {"$set": {"org_id": default_org_id}})
+            if res.modified_count:
+                logger.info("Backfilled org_id on %d %s rows into the Demo Organization", res.modified_count, coll.name)
+        # Reactions stored under the emoji-stripped "" key can't be attributed to a reaction type
+        for coll in (db.posts, db.shoutouts):
+            async for doc in coll.find({"reactions": {"$exists": True}}, {"_id": 0, "id": 1, "reactions": 1}):
+                clean = _clean_reactions(doc.get("reactions"))
+                if clean != doc.get("reactions"):
+                    await coll.update_one({"id": doc["id"]}, {"$set": {"reactions": clean}})
+        await db.organizations.update_many({"timezone": {"$exists": False}}, {"$set": {"timezone": DEFAULT_TIMEZONE}})
+        await backfill_org_names()
         # Backfill work_anniversary from created_at, and split name into first/last, where unset
         async for u in db.users.find(
             {"$or": [{"work_anniversary": {"$exists": False}}, {"first_name": {"$exists": False}}]},

@@ -37,12 +37,12 @@ class TestAuth:
         # (doc section 1) — employees join only via /auth/accept-invite.
         email = f"TEST_{uuid.uuid4().hex[:8]}@test.com"
         r = session.post(f"{API}/auth/register", json={
-            "org_name": "QA Test Org", "name": "TEST User", "email": email, "password": "test1234"
+            "org_name": f"QA Test Org {uuid.uuid4().hex[:8]}", "name": "TEST User", "email": email, "password": "test1234"
         })
         assert r.status_code == 200, r.text
         data = r.json()
         assert "token" in data and "user" in data
-        assert data["user"]["email"] == email
+        assert data["user"]["email"] == email.lower()  # emails are stored case-insensitively
         assert data["user"]["role"] == "admin"
         assert data["user"]["org_id"]
         assert data["user"]["points"] == 0
@@ -132,7 +132,7 @@ class TestPosts:
         r = session.post(f"{API}/posts", json={"content": "TEST post brutal"}, headers=auth_headers)
         assert r.status_code == 200
         post_id = r.json()["id"]
-        r2 = session.get(f"{API}/posts")
+        r2 = session.get(f"{API}/posts", headers=auth_headers)
         assert r2.status_code == 200
         ids = [p["id"] for p in r2.json()]
         assert post_id in ids

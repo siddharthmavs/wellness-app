@@ -221,21 +221,21 @@ class TestShoutouts:
             assert umap[rid]["points"] >= 10  # at least 10 awarded since session start
 
         # in list
-        rl = session.get(f"{API}/shoutouts")
+        rl = session.get(f"{API}/shoutouts", headers=emp_headers)
         assert rl.status_code == 200
         assert any(s["id"] == sid for s in rl.json())
 
         # react with valid emoji
-        rr = session.post(f"{API}/shoutouts/{sid}/react", json={"emoji": "🔥"}, headers=emp_headers)
+        rr = session.post(f"{API}/shoutouts/{sid}/react", json={"emoji": "fire"}, headers=emp_headers)
         assert rr.status_code == 200
-        assert "🔥" in rr.json()["reactions"]
+        assert "fire" in rr.json()["reactions"]
         # toggle off
-        rr2 = session.post(f"{API}/shoutouts/{sid}/react", json={"emoji": "🔥"}, headers=emp_headers)
-        assert emp_data["user"]["id"] not in rr2.json()["reactions"]["🔥"]
+        rr2 = session.post(f"{API}/shoutouts/{sid}/react", json={"emoji": "fire"}, headers=emp_headers)
+        assert emp_data["user"]["id"] not in rr2.json()["reactions"]["fire"]
 
     def test_invalid_emoji(self, session, emp_headers):
         # need a shoutout id - just hit any
-        rl = session.get(f"{API}/shoutouts").json()
+        rl = session.get(f"{API}/shoutouts", headers=emp_headers).json()
         if not rl:
             pytest.skip("no shoutouts")
         sid = rl[0]["id"]
@@ -254,8 +254,8 @@ class TestShoutouts:
         }, headers=emp_headers)
         assert r.status_code == 400
 
-    def test_digest(self, session):
-        r = session.get(f"{API}/shoutouts/digest")
+    def test_digest(self, session, emp_headers):
+        r = session.get(f"{API}/shoutouts/digest", headers=emp_headers)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
         assert len(r.json()) <= 3
@@ -271,7 +271,7 @@ class TestHelpBoard:
         pid = r.json()["id"]
         assert r.json()["category"] == "Housing"
 
-        rl = session.get(f"{API}/help", params={"category": "Housing"})
+        rl = session.get(f"{API}/help", params={"category": "Housing"}, headers=emp_headers)
         assert rl.status_code == 200
         assert any(p["id"] == pid for p in rl.json())
 
@@ -293,8 +293,8 @@ class TestHelpBoard:
         }, headers=emp_headers)
         assert r.status_code == 400
 
-    def test_list_all(self, session):
-        r = session.get(f"{API}/help")
+    def test_list_all(self, session, emp_headers):
+        r = session.get(f"{API}/help", headers=emp_headers)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
@@ -340,17 +340,19 @@ class TestPostReactions:
         # create a post
         r = session.post(f"{API}/posts", json={"content": "TEST reaction post"}, headers=emp_headers)
         pid = r.json()["id"]
-        rr = session.post(f"{API}/posts/{pid}/react", json={"emoji": "❤️"}, headers=emp_headers)
+        rr = session.post(f"{API}/posts/{pid}/react", json={"emoji": "heart"}, headers=emp_headers)
         assert rr.status_code == 200
-        assert "❤️" in rr.json()["reactions"]
-        assert emp_data["user"]["id"] in rr.json()["reactions"]["❤️"]
-        # switch to 😂 (should remove ❤️ from this user)
-        rr2 = session.post(f"{API}/posts/{pid}/react", json={"emoji": "😂"}, headers=emp_headers)
-        assert "😂" in rr2.json()["reactions"]
-        assert emp_data["user"]["id"] not in rr2.json()["reactions"].get("❤️", [])
+        assert "heart" in rr.json()["reactions"]
+        assert emp_data["user"]["id"] in rr.json()["reactions"]["heart"]
+        # switch to laugh (should remove heart from this user)
+        rr2 = session.post(f"{API}/posts/{pid}/react", json={"emoji": "laugh"}, headers=emp_headers)
+        assert "laugh" in rr2.json()["reactions"]
+        assert emp_data["user"]["id"] not in rr2.json()["reactions"].get("heart", [])
+        # QA #10: reacting must only count under the chosen reaction
+        assert all(emp_data["user"]["id"] not in v for k, v in rr2.json()["reactions"].items() if k != "laugh")
 
     def test_invalid_emoji(self, session, emp_headers):
-        r = session.get(f"{API}/posts").json()
+        r = session.get(f"{API}/posts", headers=emp_headers).json()
         if not r:
             pytest.skip("no posts")
         pid = r[0]["id"]

@@ -383,15 +383,18 @@ class TestGameTeamBattles:
         teams = user_session.get(f"{API}/game-teams", timeout=20).json()
         assert any(user_session.user["id"] in (t.get("members") or []) for t in teams)
 
-    def test_bounty_claim(self, user_session):
+    def test_bounty_claim(self, user_session, admin_session):
         teams = user_session.get(f"{API}/game-teams", timeout=20).json()
         mine = next(t for t in teams if user_session.user["id"] in (t.get("members") or []))
         other = next(t for t in teams if t["id"] != mine["id"])
 
+        # Earlier runs claim the seeded bounties in this persistent DB; bring our own.
+        created = admin_session.post(f"{API}/admin/game-teams/bounties",
+                                     json={"title": f"TEST bounty {uuid.uuid4().hex[:6]}", "reward": 40}, timeout=20)
+        assert created.status_code == 200, created.text
         bounties = user_session.get(f"{API}/game-teams/bounties", timeout=20).json()
-        open_bounties = [b for b in bounties if b["status"] == "OPEN"]
-        assert open_bounties, "expected seeded open bounties"
-        bounty = open_bounties[0]
+        bounty = next(b for b in bounties if b["id"] == created.json()["id"])
+        assert bounty["status"] == "OPEN"
 
         claimed = user_session.post(f"{API}/game-teams/bounties/{bounty['id']}/claim",
                                     json={"team_id": mine["id"]}, timeout=20)
@@ -401,9 +404,10 @@ class TestGameTeamBattles:
         # already claimed, and you cannot claim for a team you are not on
         assert user_session.post(f"{API}/game-teams/bounties/{bounty['id']}/claim",
                                  json={"team_id": mine["id"]}, timeout=20).status_code == 409
-        if len(open_bounties) > 1:
-            assert user_session.post(f"{API}/game-teams/bounties/{open_bounties[1]['id']}/claim",
-                                     json={"team_id": other["id"]}, timeout=20).status_code == 403
+        second = admin_session.post(f"{API}/admin/game-teams/bounties",
+                                    json={"title": f"TEST bounty {uuid.uuid4().hex[:6]}", "reward": 10}, timeout=20).json()
+        assert user_session.post(f"{API}/game-teams/bounties/{second['id']}/claim",
+                                 json={"team_id": other["id"]}, timeout=20).status_code == 403
 
         after = user_session.get(f"{API}/game-teams", timeout=20).json()
         mine_after = next(t for t in after if t["id"] == mine["id"])

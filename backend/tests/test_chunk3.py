@@ -55,22 +55,22 @@ class TestMusic:
 
 # -------- Facts --------
 class TestFacts:
-    def test_fact_today(self):
-        r = requests.get(f"{API}/facts/today", timeout=15)
+    def test_fact_today(self, alex_auth):
+        r = requests.get(f"{API}/facts/today", headers=alex_auth["headers"], timeout=15)
         assert r.status_code == 200
         d = r.json()
         assert "id" in d and "fact" in d and "category" in d
 
     def test_fact_react(self, alex_auth):
         # get today's fact id
-        f = requests.get(f"{API}/facts/today", timeout=15).json()
+        f = requests.get(f"{API}/facts/today", headers=alex_auth["headers"], timeout=15).json()
         r = requests.post(f"{API}/facts/react", json={"fact_id": f["id"], "reaction": "mind_blown"}, headers=alex_auth["headers"], timeout=15)
         assert r.status_code == 200, r.text
         d = r.json()
         assert "reactions" in d
 
     def test_fact_react_invalid(self, alex_auth):
-        f = requests.get(f"{API}/facts/today", timeout=15).json()
+        f = requests.get(f"{API}/facts/today", headers=alex_auth["headers"], timeout=15).json()
         r = requests.post(f"{API}/facts/react", json={"fact_id": f["id"], "reaction": "bogus"}, headers=alex_auth["headers"], timeout=15)
         assert r.status_code in (400, 422)
 
@@ -120,7 +120,7 @@ class TestPolls:
         pid = cr.json()["id"]
 
         # list
-        lst = requests.get(f"{API}/polls", timeout=15)
+        lst = requests.get(f"{API}/polls", headers=alex_auth["headers"], timeout=15)
         assert lst.status_code == 200
         assert any(p["id"] == pid for p in lst.json())
 
@@ -135,10 +135,9 @@ class TestPolls:
         v2 = requests.post(f"{API}/polls/{pid}/vote", json={"option_idx": 2}, headers=alex_auth["headers"], timeout=15)
         assert v2.status_code == 200
 
-        # invalid idx: server silently ignores (doesn't add vote) but still returns 200.
-        # This is a minor input-validation gap — logging, not asserting 4xx.
+        # invalid idx is rejected instead of silently ignored
         v3 = requests.post(f"{API}/polls/{pid}/vote", json={"option_idx": 99}, headers=alex_auth["headers"])
-        assert v3.status_code == 200  # permissive behavior today
+        assert v3.status_code == 400
 
 
 # -------- Events --------
@@ -186,7 +185,7 @@ class TestGames:
         d = r.json()
         assert "points_awarded" in d or "score" in d
 
-        lb = requests.get(f"{API}/games/leaderboard", timeout=15)
+        lb = requests.get(f"{API}/games/leaderboard", headers=alex_auth["headers"], timeout=15)
         assert lb.status_code == 200
         assert isinstance(lb.json(), list)
 
@@ -250,8 +249,8 @@ class TestBuddy:
 
 # -------- Spotlight --------
 class TestSpotlight:
-    def test_current(self):
-        r = requests.get(f"{API}/spotlight/current", timeout=15)
+    def test_current(self, alex_auth):
+        r = requests.get(f"{API}/spotlight/current", headers=alex_auth["headers"], timeout=15)
         assert r.status_code == 200
         d = r.json()
         assert "fun_facts" in d or "quote" in d
@@ -289,7 +288,7 @@ class TestPlants:
         c = requests.post(f"{API}/plants/checkin", headers=jamie_auth["headers"], timeout=15)
         assert c.status_code == 200
 
-        lb = requests.get(f"{API}/plants/leaderboard", timeout=15)
+        lb = requests.get(f"{API}/plants/leaderboard", headers=jamie_auth["headers"], timeout=15)
         assert lb.status_code == 200
         assert isinstance(lb.json(), list)
 
